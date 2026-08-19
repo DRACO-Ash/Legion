@@ -1,0 +1,58 @@
+# Changelog
+
+All notable changes to this project are documented here. Format follows
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
+[Semantic Versioning](https://semver.org/). Pre-1.0: minor bumps may include
+breaking changes, since nothing has shipped to the App Store yet.
+
+## [0.3.1] - 2026-08-19
+
+### Fixed
+- `requirements.txt` and `requirements-runtime.txt` had the App Store test/
+  runtime contract backwards - the platform's TEST stage only ever runs
+  `pip install -r requirements.txt` then `pytest`, so test tooling
+  (pytest, pytest-cov, respx, pip-audit) has to live in `requirements.txt`,
+  not the other file. Swapped; `requirements-runtime.txt` is now the lean,
+  test-tooling-free file the Dockerfile installs into the image. Verified
+  by installing each file into a clean venv and running the platform's
+  exact TEST-stage command.
+- Bumped pytest 8.3.3 → 9.0.3 and pytest-cov 5.0.0 → 7.1.0 (CVE on the old
+  pytest pin).
+
+## [0.3.0] - 2026-08-14
+
+### Added
+- Persistent tracked-systems catalogue: atomic JSON store (`src/store.py`)
+  on the App Store file-storage add-on, schema-versioned, forward-migrating,
+  backed up (pruned to the last 10) before every archive.
+- Seed data: the 49 systems from `Red_ASAT_Systems.xlsx`, mirrored verbatim
+  from `tactics_wiki.html`'s DATA array into `src/seed_data.py`.
+- CRUD API (`/api/systems`, `/api/systems/{id}`): list/filter is public;
+  create/update/archive gated by the team token. Updates are anti-shrink
+  merges. Archive, not delete - a retired record stays auditable.
+- Admin UI (`GET /`, `src/static/index.html`): browse, filter, add, edit,
+  archive systems from the browser, with a session-scoped team-token field
+  for write access.
+
+## [0.2.0] - 2026-08-14
+
+### Changed
+- Rewrote the UDL client against CONTEXT-001's verified LEARNED register
+  instead of an invented `/udl/onorbit` endpoint: `/udl/notification`
+  (the JCO HRR high-interest feed PSIRENS already pulls) for search/lookup,
+  and `/udl/elset` for orbital elements.
+- Added `GET /api/udl/clash-check`: resolves the COSMOS-2612/2613/2614
+  NORAD 68762 collision flagged in the Tactics Wiki against live UDL data.
+
+## [0.1.0] - 2026-08-14
+
+### Added
+- Initial FastAPI service scaffold: app factory, config (env vars first,
+  `~/.config/phase_offset/credentials.ini` fallback for local dev), two-tier
+  rate limiting, constant-time bearer token auth, CORS with fail-closed
+  wildcard-origin guard.
+- Health/readiness endpoints (`/healthz`, `/readyz`).
+- Hardened multi-stage Dockerfile (non-root uid 10001, correctly ordered
+  setuid/setgid sweep, platform `PORT` contract).
+- Full test suite from day one (pytest, respx for HTTP mocking, coverage
+  gate).
