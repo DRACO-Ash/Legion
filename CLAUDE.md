@@ -67,15 +67,31 @@ Genuinely verified (re-run and confirmed, not just written):
   gating, anti-shrink PATCH, archive-not-delete, persistence across a
   restart.
 
-**Not verified, flagged honestly in `READINESS.md`:**
-- **The container build.** The Dockerfile was restructured to a
-  `FROM scratch` + single `COPY --from=prep / /` final stage (flattens the
-  image to one layer, so the Anchore scan can't find a setuid/setgid bit in
-  layer history even after the existing `chmod` sweep). This was never
-  built — the environment that produced it had no Docker daemon. **If you
-  have Docker/Podman available, building this for real and confirming it
-  runs is the single highest-value thing to check first.**
-- The GitLab pipeline itself, obviously, per the blocker above.
+**Container build: now verified (20 August 2026).** It builds, it runs, it
+serves. Zero setuid/setgid entries in the final image, no base-image layer
+history survives the scratch stage, injected `PORT` honoured, 49 seeded
+records served, token-gated writes and persistence across a restart all
+confirmed live. One correction: the final stage produces two layers, not
+one, because the trailing `WORKDIR /app` adds a metadata layer after the
+flatten. The scan property still holds. Full method, the single sandbox-only
+deviation, and what remains untested are in `READINESS.md`.
+
+That build turned up two real runtime findings, both open:
+● **The audit line never reaches the log.** Nothing in `src/` configures
+  logging, so `udl_tactics_app.audit` has no handler and sits at WARNING.
+  Every `audit_logger.info(...)` is discarded. Needs a logging config in
+  `build_app`. `READINESS.md` dimension 13 is now a Fail, not a Pass.
+● **No `STORAGE_MOUNT_PATH` means no service.** The fallback is
+  `Path.cwd() / "data"`, so `/app/data`, and `/app` is root-owned while the
+  process runs as 10001. Every read returns 500 and `/readyz` reports 503.
+  Fine if the file-storage add-on is always present and writable by the
+  runtime uid; a first-deploy failure if not. Decide which, and record it.
+
+**Still not verified:**
+● The GitLab pipeline itself, per the blocker above.
+● The `prep` stage's OS patch layer. `apt-get update` was blocked by the
+  build environment's egress policy and the `|| true` swallowed it, so the
+  upgrade applied nothing in that build.
 
 ## Architecture, briefly
 

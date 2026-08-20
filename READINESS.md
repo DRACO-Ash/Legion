@@ -1,7 +1,8 @@
 # READINESS.md — UDL Tactics App (`legion`)
 
 **Generated:** 20 August 2026
-**Version at time of report:** 0.3.3 (`src/VERSION`)
+**Updated:** 20 August 2026, after the first real container build (see "Container build verification" below)
+**Version at time of report:** 0.3.3 (`src/VERSION`); container verification run against 0.4.1
 **Scope:** pre-flight estimate per `app-store-readiness`. Not the platform's binding decision.
 
 ## Band: Not yet
@@ -19,14 +20,14 @@ One blocker, and it is not something local work can close: **the GitLab pipeline
 | 3 | No secret in source/history | **Pass** | blocker | Grepped for credential-shaped strings; `.env.example` placeholder-only; fresh git history, one commit chain |
 | 4 | Server contract: PORT/0.0.0.0/health/non-root/no ENV PORT | **Pass** | blocker | Confirmed live (smoke-tested as a running process, not just TestClient) |
 | 5 | Container package flat at root | **Pass** | blocker | Verified in the actual zip: `Dockerfile`, `.gitlab-ci.yml`, requirements files all at root |
-| 6 | Runtime hardened AND flattened (no setuid/setgid in layer history) | **Fixed, build unverified** | blocker | Restructured to a `FROM scratch` + single `COPY --from=prep / /` final stage. Cannot build-test - no Docker daemon in this environment. Needs a real `docker build`/`podman build` before trusting this fully |
+| 6 | Runtime hardened AND flattened (no setuid/setgid in layer history) | **Pass** | blocker | Built for real on 20 Aug 2026 (Docker 29.3.1, BuildKit). Image builds clean, 58 MB, runs as 10001:10001. Final filesystem carries zero setuid/setgid entries (`find / -xdev -perm /6000` returns 0) and no base-image history survives the scratch stage. One correction to the earlier claim: the final stage yields **two** layers, not one, because the trailing `WORKDIR /app` adds a 4.1 kB metadata layer after the single `COPY --from=prep / /`. That layer holds one directory and no setuid/setgid bit, so the scan property still holds |
 | 7 | Coverage report at the gate's exact path | **Pass** | heavy | `coverage.xml` at root, matches `sonar-project.properties` and `.gitlab-ci.yml`'s `SONAR_SCANNER_OPTS` |
 | 8 | Reproducible install, committed lockfile, no unaddressed CVE | **Pass** | heavy | Hash-locked via `pip-compile --generate-hashes`; verified clean install + full test run from a genuinely fresh venv on both `requirements.txt` and `requirements-runtime.txt`; `pip-audit` clean |
-| 9 | Container: upload is a testable source tree, pipeline simulation green, emits coverage | **Likely** | blocker (container) | Simulated the platform's exact `pip install -r requirements.txt` + `pytest --cov --cov-report=xml:coverage.xml` sequence from a clean venv against the real package contents. Never run through the actual GitLab runner/podman - that's the pending blocker |
+| 9 | Container: upload is a testable source tree, pipeline simulation green, emits coverage | **Likely (build now confirmed)** | blocker (container) | The container half is no longer theoretical: the image builds and serves live traffic (`/healthz` 200, `/readyz` 200 with a writable mount, 49 seeded records over `/api/systems`, token-gated writes, persistence across a restart). Simulated the platform's exact `pip install -r requirements.txt` + `pytest --cov --cov-report=xml:coverage.xml` sequence from a clean venv against the real package contents. Never run through the actual GitLab runner/podman - that's the pending blocker |
 | 10 | Per-commit static analysis keeps violations at zero | **Likely** | heavy | `ruff check`, `ruff format --check`, `mypy --ignore-missing-imports`, `bandit` all clean. Not the exact SonarQube ruleset (no `sonar-scanner` access from this environment - CONTEXT-001 already documents this as a standing gap); this is the closest local approximation |
 | 11 | Negative assertions classified per environment | **Pass** | blocker | One test (`readyz` 503-on-unwritable-storage) only holds under a non-root runner; explicitly `skipif(os.geteuid() == 0, ...)` with a reason, not silently deleted or left falsely passing |
 | 12 | CI mirrors local loop, latest run green | **Fail (blocker)** | blocker | Zero of three upload attempts have cleared even Secret Detection. Root cause identified (stale `udl-tactics-app/` paths in `.gitlab-ci.yml`, confirmed byte-for-byte against two separate pastes of the file); fix handed to Koen, not yet landed |
-| 13 | Version stamp + structured audit line, no secret in logs | **Pass** | medium | `src/VERSION` read at import time, `/version` endpoint; `create`/`update`/`archive` each emit one sanitised, length-capped JSON audit line |
+| 13 | Version stamp + structured audit line, no secret in logs | **Fail** | medium | Version stamp verified live in the container (`/version` returns 0.4.1). The audit line does not reach the log: nothing in `src/` configures logging, so `udl_tactics_app.audit` has no handler and an effective level of WARNING, and every `audit_logger.info(...)` is dropped. Confirmed twice, by a real token-authorised PATCH through the running container producing no audit output, and by probing the logger inside the image (handlers `[]`, effective level 30). The record is built correctly and sanitised; it is simply discarded. Needs a logging configuration in `build_app` |
 | 14 | Accessibility to WCAG AA | **Pass** | medium | Fixed: label/`for` associations on every form control (were unassociated), `<main>` landmark, skip link, `aria-live` on the status message, `role="status"` on filter-result count. Computed contrast ratios for every text/background pair in use — one real failure found and fixed (`--text-faint` was 2.81:1, now 4.61:1). Structural/computed checks only; no live screen-reader pass run |
 | 15 | Surgical structure, no dead code | **Pass** | medium | `ruff` clean, one unused import removed, one blind `except Exception` (masking real errors as 429s) fixed to catch the specific exception |
 | 16 | House voice in user-facing copy | **N/A** | light | Internal analyst tool, not customer-facing copy |
@@ -34,13 +35,43 @@ One blocker, and it is not something local work can close: **the GitLab pipeline
 ## Blockers (must clear before "Ready")
 
 1. **The GitLab pipeline has never run successfully.** Owner: `ci-cd`, `appstore-gate-compliance`. Fix: land the three-line `.gitlab-ci.yml` correction (already handed to Koen) and get one clean upload through Secret Detection onward. Nothing else in this report can substitute for a real green run.
-2. **Container flattening is unverified.** Owner: `packaging`, `app-store-deployment`, `deploy-recipes`. Fix: `docker build .` (or `podman build`) needs to actually succeed against the new three-stage Dockerfile before relying on it - this environment has no Docker daemon to prove that locally.
+2. ~~**Container flattening is unverified.**~~ **Closed, 20 August 2026.** The three-stage Dockerfile builds and the image runs. Detail below.
 
 ## What would raise the band
 
-- Blocker 1 clearing (a real green pipeline run) moves this to **Likely after fixes**.
-- Blocker 2 confirmed (a successful local or CI container build off the flattened Dockerfile) closes the second gap.
+● Blocker 1 clearing (a real green pipeline run) moves this to **Likely after fixes**.
+● Blocker 2 is now closed: the flattened Dockerfile builds and the image serves traffic.
+● Dimension 13 returning to a pass, once the dropped audit line is fixed.
 - Once both clear, re-run this check: if dimensions 9 and 10 are confirmed against the real runner (not just simulated), the band moves to **Ready**.
+
+## Container build verification, 20 August 2026
+
+The one thing the previous pass could not do. Recorded here so it does not have to be rediscovered.
+
+**Environment:** Docker 29.3.1 with BuildKit, daemon started inside the Claude Code session container. Base image `python:3.12-slim`, digest `sha256:2c941e860699f878900b0edc2403613c234d4b32eda3cc9fa7036991a2a63c4a`, pulled through `mirror.gcr.io` because this sandbox's egress policy denies Docker Hub's blob CDN (`production.cloudfront.docker.com`, 403 on CONNECT) while allowing the manifest host. The mirror serves Docker Hub content at identical digests, so the base image is the real one.
+
+**One deviation from the committed Dockerfile, and why it cannot affect the result.** This sandbox re-terminates TLS, so `pip install` inside the build failed certificate verification. The build was run from a generated variant that adds three lines to the `build` stage only: copy the proxy CA, `update-ca-certificates`, and `PIP_CERT`. Nothing but `/opt/venv` leaves that stage, so no added instruction can reach the final image. The committed `Dockerfile` is unchanged and every other stage, including the `prep` sweep and the `scratch` flatten, was built exactly as committed. On a runner with normal PyPI access the committed file needs no such change.
+
+**What passed.**
+
+● Build succeeds end to end, 34 seconds cold, image 58 MB.
+● Final image: `USER 10001:10001`, `WORKDIR /app`, no `ENV PORT`, `EXPOSE 8080`.
+● Zero setuid/setgid entries anywhere in the final filesystem.
+● `docker history` shows only the scratch stage's own instructions. No base-image layer history survives.
+● Starts under gunicorn with the uvicorn worker, binds `0.0.0.0`.
+● Honours an injected `PORT`: with `PORT=9090` it listened on 9090, confirming the platform contract.
+● `GET /healthz` 200, `GET /version` 200 reporting 0.4.1, `GET /` serves the 17.9 kB admin UI.
+● With a writable mount at `STORAGE_MOUNT_PATH`: `/readyz` 200 with `storage_writable: true`, and `/api/systems` returns all 49 seeded records.
+● Writes gated as designed: PATCH with no token 401, with a wrong token 401, with the right token 200.
+● Persistence proven across a container restart: the patched note survived.
+
+**Two findings, both real, neither caused by the sandbox.**
+
+1. **The audit line is silently dropped.** Dimension 13, above. Nothing configures logging, so the audit logger has no handler and sits at WARNING, and every `audit_logger.info(...)` is discarded. A real authorised PATCH through the container produced no audit output. This would have looked fine in any test that asserts on the returned record rather than on the log.
+
+2. **The container is non-functional without the file-storage add-on.** `_resolve_data_dir()` falls back to `Path.cwd() / "data"`, which is `/app/data`, and `/app` is root-owned 0755 in the image while the process runs as 10001. With no `STORAGE_MOUNT_PATH` set, every read path returns 500 and `/readyz` correctly reports 503 with `PermissionError: /app/data`. If the add-on is guaranteed present and its mount is writable by the runtime uid, this is by design and worth stating as such. If not, the app fails closed on first deploy. Two options if it needs closing: `mkdir` and `chown 10001` an `/app/data` in the `prep` stage, or refuse to start when `STORAGE_MOUNT_PATH` is unset, which fails loudly rather than per-request.
+
+**What still could not be verified here.** The `prep` stage's `apt-get update && apt-get -y upgrade` failed with 403 Forbidden on `deb.debian.org`, again this sandbox's egress policy, and the `|| true` swallowed it by design. So the OS patch layer applied nothing in this build and remains untested. It should work on the real runner, but treat it as unverified until a build with mirror access confirms it.
 
 ## Skills consulted for this pass
 
