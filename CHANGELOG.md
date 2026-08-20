@@ -5,6 +5,11 @@ All notable changes to this project are documented here. Format follows
 [Semantic Versioning](https://semver.org/). Pre-1.0: minor bumps may include
 breaking changes, since nothing has shipped to the App Store yet.
 
+## [0.4.2] - 2026-08-20
+
+Fix the audit trail never reaching the log: configure_logging() attaches a stdout handler in build_app, audit lines emit as bare JSON and are never silenced by LOG_LEVEL.
+
+
 ## [0.4.1] - 2026-08-20
 
 Add CLAUDE.md and HANDOFF.md ahead of moving primary development to Claude Code / GitHub. No code changes.
