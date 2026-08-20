@@ -10,8 +10,13 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Request, status
 
-from src.models import TrackedSystem, TrackedSystemCreate, TrackedSystemList, TrackedSystemUpdate
-from src.security import enforce_rate_limit, enforce_team_token
+from src.models import (
+    TrackedSystem,
+    TrackedSystemCreate,
+    TrackedSystemList,
+    TrackedSystemUpdate,
+)
+from src.security import client_key, enforce_rate_limit, enforce_team_token
 
 router = APIRouter(prefix="/api/systems")
 
@@ -33,7 +38,11 @@ async def list_systems(
 ):
     store = request.app.state.systems_store
     records = store.list(
-        nation=nation, regime=regime, status=status_filter, q=q, include_archived=include_archived
+        nation=nation,
+        regime=regime,
+        status=status_filter,
+        q=q,
+        include_archived=include_archived,
     )
     return TrackedSystemList(count=len(records), systems=records)
 
@@ -43,7 +52,9 @@ async def get_system(request: Request, system_id: str):
     store = request.app.state.systems_store
     record = store.get(system_id)
     if record is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No system with that id")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="No system with that id"
+        )
     return record
 
 
@@ -51,16 +62,20 @@ async def get_system(request: Request, system_id: str):
 async def create_system(request: Request, payload: TrackedSystemCreate):
     _gate_write(request)
     store = request.app.state.systems_store
-    return store.create(payload.model_dump())
+    return store.create(payload.model_dump(), actor=client_key(request))
 
 
 @router.patch("/{system_id}", response_model=TrackedSystem)
 async def update_system(request: Request, system_id: str, payload: TrackedSystemUpdate):
     _gate_write(request)
     store = request.app.state.systems_store
-    updated = store.update(system_id, payload.model_dump(exclude_unset=True))
+    updated = store.update(
+        system_id, payload.model_dump(exclude_unset=True), actor=client_key(request)
+    )
     if updated is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No system with that id")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="No system with that id"
+        )
     return updated
 
 
@@ -70,7 +85,9 @@ async def archive_system(request: Request, system_id: str):
     record stays auditable instead of vanishing."""
     _gate_write(request)
     store = request.app.state.systems_store
-    archived = store.archive(system_id)
+    archived = store.archive(system_id, actor=client_key(request))
     if archived is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No system with that id")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="No system with that id"
+        )
     return archived

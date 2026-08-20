@@ -42,7 +42,9 @@ def _load_credentials_ini(section: str = "udl") -> tuple[str, str] | None:
         username = parser.get(section, "username", fallback="").strip()
         password = parser.get(section, "password", fallback="")
         if username and password:
-            logger.info("UDL credentials loaded from credentials.ini (section [%s])", section)
+            logger.info(
+                "UDL credentials loaded from credentials.ini (section [%s])", section
+            )
             return username, password
         logger.warning("credentials.ini section [%s] present but incomplete", section)
     return None

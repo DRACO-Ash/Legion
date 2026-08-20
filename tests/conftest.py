@@ -11,7 +11,13 @@ from src.udl_client import UDLNotConfigured
 class FakeUDLClient:
     """In-process double for UDLClient. No network call ever happens in tests."""
 
-    def __init__(self, *, configured: bool = True, satellites: list[dict] | None = None, raise_error: Exception | None = None):
+    def __init__(
+        self,
+        *,
+        configured: bool = True,
+        satellites: list[dict] | None = None,
+        raise_error: Exception | None = None,
+    ):
         self._configured = configured
         self._satellites = satellites if satellites is not None else []
         self._raise_error = raise_error
@@ -36,7 +42,13 @@ class FakeUDLClient:
         return list(self._satellites)
 
     async def find_by_common_name(self, common_name: str, *, window_hours: int = 24):
-        self.calls.append({"op": "find_by_common_name", "common_name": common_name, "window_hours": window_hours})
+        self.calls.append(
+            {
+                "op": "find_by_common_name",
+                "common_name": common_name,
+                "window_hours": window_hours,
+            }
+        )
         self._check()
         target = common_name.strip().casefold()
         for entry in self._satellites:
@@ -45,10 +57,20 @@ class FakeUDLClient:
         return None
 
     async def search_by_common_name(self, query: str, *, window_hours: int = 24):
-        self.calls.append({"op": "search_by_common_name", "query": query, "window_hours": window_hours})
+        self.calls.append(
+            {
+                "op": "search_by_common_name",
+                "query": query,
+                "window_hours": window_hours,
+            }
+        )
         self._check()
         needle = query.strip().casefold()
-        return [e for e in self._satellites if needle in str(e.get("commonName", "")).strip().casefold()]
+        return [
+            e
+            for e in self._satellites
+            if needle in str(e.get("commonName", "")).strip().casefold()
+        ]
 
     async def get_elset(self, sat_no: str):
         self.calls.append({"op": "get_elset", "sat_no": sat_no})
@@ -60,16 +82,16 @@ class FakeUDLClient:
 
 
 def make_settings(**overrides) -> Settings:
-    base = dict(
-        port=8080,
-        allowed_origin="http://localhost:3000",
-        team_token="test-token",
-        udl_base_url="https://unifieddatalibrary.com",
-        udl_username="user",
-        udl_password="pass",
-        udl_timeout_seconds=5.0,
-        udl_jco_hrr_window_hours=24,
-    )
+    base = {
+        "port": 8080,
+        "allowed_origin": "http://localhost:3000",
+        "team_token": "test-token",
+        "udl_base_url": "https://unifieddatalibrary.com",
+        "udl_username": "user",
+        "udl_password": "pass",
+        "udl_timeout_seconds": 5.0,
+        "udl_jco_hrr_window_hours": 24,
+    }
     base.update(overrides)
     return Settings(**base)
 
@@ -78,15 +100,36 @@ def make_settings(**overrides) -> Settings:
 def fake_udl():
     return FakeUDLClient(
         satellites=[
-            {"commonName": "COSMOS-2612", "country": "RUSSIA", "satNo": "68762", "rank": 2, "orbitRegime": "LEO"},
-            {"commonName": "COSMOS-2613", "country": "RUSSIA", "satNo": "68763", "rank": 2, "orbitRegime": "LEO"},
-            {"commonName": "COSMOS-2614", "country": "RUSSIA", "satNo": "68764", "rank": 2, "orbitRegime": "LEO"},
+            {
+                "commonName": "COSMOS-2612",
+                "country": "RUSSIA",
+                "satNo": "68762",
+                "rank": 2,
+                "orbitRegime": "LEO",
+            },
+            {
+                "commonName": "COSMOS-2613",
+                "country": "RUSSIA",
+                "satNo": "68763",
+                "rank": 2,
+                "orbitRegime": "LEO",
+            },
+            {
+                "commonName": "COSMOS-2614",
+                "country": "RUSSIA",
+                "satNo": "68764",
+                "rank": 2,
+                "orbitRegime": "LEO",
+            },
         ]
     )
 
 
 @pytest.fixture
-def client(fake_udl):
+def client(fake_udl, tmp_path, monkeypatch):
+    # readyz now probes real storage writability - isolate every test's
+    # store to a throwaway tmp_path rather than the pytest cwd.
+    monkeypatch.setenv("STORAGE_MOUNT_PATH", str(tmp_path))
     app = build_app(settings=make_settings(), udl_client=fake_udl)
     with TestClient(app) as test_client:
         yield test_client

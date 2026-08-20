@@ -67,7 +67,9 @@ def client_key(request: Request) -> str:
 
 def enforce_rate_limit(limiter: RateLimiter, request: Request) -> None:
     if not limiter.allow(client_key(request)):
-        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Rate limit exceeded")
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Rate limit exceeded"
+        )
 
 
 def enforce_team_token(request: Request, team_token: str | None) -> None:
@@ -76,4 +78,6 @@ def enforce_team_token(request: Request, team_token: str | None) -> None:
         return
     given = extract_bearer_token(request)
     if not token_matches(given, team_token):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or missing token")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or missing token"
+        )

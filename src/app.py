@@ -10,18 +10,18 @@ from __future__ import annotations
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
+from src._version import __version__
 from src.config import Settings, load_settings
 from src.routes import health, systems, udl, ui
-from src.security import RateLimiter, client_key, enforce_rate_limit
+from src.security import RateLimiter, enforce_rate_limit
 from src.seed_data import SEED_RECORDS
 from src.store import TrackedSystemsStore
 from src.udl_client import UDLClient
-from src._version import __version__
 
 logger = logging.getLogger("udl_tactics_app")
 
@@ -40,8 +40,10 @@ class GlobalRateLimitMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         try:
             enforce_rate_limit(self._limiter, request)
-        except Exception:
-            return JSONResponse(status_code=429, content={"detail": "Rate limit exceeded"})
+        except HTTPException as exc:
+            return JSONResponse(
+                status_code=exc.status_code, content={"detail": exc.detail}
+            )
         return await call_next(request)
 
 
@@ -74,9 +76,13 @@ def build_app(
         password=settings.udl_password,
         timeout_seconds=settings.udl_timeout_seconds,
     )
-    app.state.strict_limiter = RateLimiter(limit=STRICT_LIMIT_PER_MINUTE, window_seconds=60.0)
+    app.state.strict_limiter = RateLimiter(
+        limit=STRICT_LIMIT_PER_MINUTE, window_seconds=60.0
+    )
     global_limiter = RateLimiter(limit=GLOBAL_LIMIT_PER_MINUTE, window_seconds=60.0)
-    app.state.systems_store = systems_store or TrackedSystemsStore(seed_records=SEED_RECORDS)
+    app.state.systems_store = systems_store or TrackedSystemsStore(
+        seed_records=SEED_RECORDS
+    )
 
     allowed_origins = [settings.allowed_origin] if settings.allowed_origin else []
     app.add_middleware(

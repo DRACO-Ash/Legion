@@ -10,13 +10,17 @@ def test_udl_route_401_without_token(client):
 
 
 def test_udl_route_200_with_valid_token(client, auth_headers):
-    response = client.get("/api/udl/jco-hrr", params={"common_name": "COSMOS-2612"}, headers=auth_headers)
+    response = client.get(
+        "/api/udl/jco-hrr", params={"common_name": "COSMOS-2612"}, headers=auth_headers
+    )
     assert response.status_code == 200
 
 
 def test_udl_route_401_with_wrong_token(client):
     response = client.get(
-        "/api/udl/jco-hrr", params={"common_name": "COSMOS-2612"}, headers={"Authorization": "Bearer wrong"}
+        "/api/udl/jco-hrr",
+        params={"common_name": "COSMOS-2612"},
+        headers={"Authorization": "Bearer wrong"},
     )
     assert response.status_code == 401
 
@@ -32,7 +36,11 @@ def test_strict_rate_limit_returns_429_after_threshold(fake_udl):
     with TestClient(app) as test_client:
         headers = {"Authorization": "Bearer test-token"}
         statuses = [
-            test_client.get("/api/udl/jco-hrr", params={"common_name": "COSMOS-2612"}, headers=headers).status_code
+            test_client.get(
+                "/api/udl/jco-hrr",
+                params={"common_name": "COSMOS-2612"},
+                headers=headers,
+            ).status_code
             for _ in range(25)
         ]
     assert 429 in statuses

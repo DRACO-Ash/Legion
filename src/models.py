@@ -12,10 +12,17 @@ class TrackedSystemCreate(BaseModel):
     analyst can set on creation; required fields are the minimum needed to
     place a record meaningfully on the timeline and in a family group."""
 
-    family_id: str = Field(min_length=1, description="Slug grouping this with related objects, e.g. 'rus-2027-cluster'")
+    family_id: str = Field(
+        min_length=1,
+        description="Slug grouping this with related objects, e.g. 'rus-2027-cluster'",
+    )
     family_title: str = Field(min_length=1)
     family_sub: str = Field(min_length=1)
-    nation: str = Field(min_length=1, max_length=4, description="Free-text nation code, e.g. RU, CN, IR, KP")
+    nation: str = Field(
+        min_length=1,
+        max_length=4,
+        description="Free-text nation code, e.g. RU, CN, IR, KP",
+    )
     designator: str | None = None
     catalogue_name: str = Field(min_length=1)
     launch_year: int = Field(ge=1957, le=2100)
@@ -75,7 +82,7 @@ class JCOHRRRecord(BaseModel):
     raw: dict
 
     @classmethod
-    def from_udl(cls, record: dict) -> "JCOHRRRecord":
+    def from_udl(cls, record: dict) -> JCOHRRRecord:
         return cls(
             common_name=record.get("commonName"),
             country=record.get("country"),
@@ -101,7 +108,7 @@ class ElsetRecord(BaseModel):
     raw: dict
 
     @classmethod
-    def from_udl(cls, record: dict) -> "ElsetRecord":
+    def from_udl(cls, record: dict) -> ElsetRecord:
         return cls(
             sat_no=str(record["satNo"]) if record.get("satNo") is not None else None,
             epoch=record.get("epoch"),

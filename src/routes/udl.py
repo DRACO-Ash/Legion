@@ -4,7 +4,13 @@ import logging
 
 from fastapi import APIRouter, HTTPException, Request, status
 
-from src.models import ClashCandidate, ClashCheckResponse, ElsetRecord, JCOHRRRecord, SearchResponse
+from src.models import (
+    ClashCandidate,
+    ClashCheckResponse,
+    ElsetRecord,
+    JCOHRRRecord,
+    SearchResponse,
+)
 from src.security import enforce_rate_limit, enforce_team_token
 from src.udl_client import UDLError, UDLNotConfigured
 
@@ -29,11 +35,18 @@ def _gate(request: Request) -> None:
 
 def _to_generic_error(exc: Exception) -> HTTPException:
     if isinstance(exc, UDLNotConfigured):
-        return HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="UDL is not configured")
+        return HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="UDL is not configured",
+        )
     if isinstance(exc, UDLError):
-        return HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="UDL request failed")
+        return HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY, detail="UDL request failed"
+        )
     logger.exception("Unexpected error handling UDL route")
-    return HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Internal error")
+    return HTTPException(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Internal error"
+    )
 
 
 @router.get("/jco-hrr", response_model=SearchResponse)
@@ -45,12 +58,20 @@ async def search_jco_hrr(
     """Search the JCO HRR high-interest feed by commonName substring."""
     _gate(request)
     if not common_name:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Provide common_name")
-    window_hours = window_hours if window_hours is not None else request.app.state.settings.udl_jco_hrr_window_hours
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Provide common_name"
+        )
+    window_hours = (
+        window_hours
+        if window_hours is not None
+        else request.app.state.settings.udl_jco_hrr_window_hours
+    )
 
     client = request.app.state.udl_client
     try:
-        raw_results = await client.search_by_common_name(common_name, window_hours=window_hours)
+        raw_results = await client.search_by_common_name(
+            common_name, window_hours=window_hours
+        )
     except (UDLError, UDLNotConfigured) as exc:
         raise _to_generic_error(exc) from exc
 
@@ -63,9 +84,15 @@ async def search_jco_hrr(
 
 
 @router.get("/jco-hrr/{sat_no}", response_model=JCOHRRRecord)
-async def get_jco_hrr_by_sat_no(request: Request, sat_no: str, window_hours: int | None = None):
+async def get_jco_hrr_by_sat_no(
+    request: Request, sat_no: str, window_hours: int | None = None
+):
     _gate(request)
-    window_hours = window_hours if window_hours is not None else request.app.state.settings.udl_jco_hrr_window_hours
+    window_hours = (
+        window_hours
+        if window_hours is not None
+        else request.app.state.settings.udl_jco_hrr_window_hours
+    )
     client = request.app.state.udl_client
     try:
         satellites = await client.fetch_jco_hrr(window_hours=window_hours)
@@ -75,7 +102,9 @@ async def get_jco_hrr_by_sat_no(request: Request, sat_no: str, window_hours: int
     for entry in satellites:
         if str(entry.get("satNo")) == str(sat_no):
             return JCOHRRRecord.from_udl(entry)
-    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No JCO HRR record for that satNo")
+    raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND, detail="No JCO HRR record for that satNo"
+    )
 
 
 @router.get("/elset/{sat_no}", response_model=ElsetRecord)
@@ -88,7 +117,10 @@ async def get_elset(request: Request, sat_no: str):
         raise _to_generic_error(exc) from exc
 
     if raw is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No element set for that satNo")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No element set for that satNo",
+        )
     return ElsetRecord.from_udl(raw)
 
 
@@ -98,7 +130,11 @@ async def clash_check(request: Request, window_hours: int | None = None):
     COSMOS-2612/2613/2614, or does the source spreadsheet's 68762 collision
     reflect a real upstream ambiguity rather than a transcription error?"""
     _gate(request)
-    window_hours = window_hours if window_hours is not None else request.app.state.settings.udl_jco_hrr_window_hours
+    window_hours = (
+        window_hours
+        if window_hours is not None
+        else request.app.state.settings.udl_jco_hrr_window_hours
+    )
     client = request.app.state.udl_client
 
     candidates: list[ClashCandidate] = []
@@ -128,7 +164,9 @@ async def clash_check(request: Request, window_hours: int | None = None):
                 source_norad_id=CLASH_SOURCE_NORAD_ID,
                 udl_sat_no=parsed.sat_no,
                 matches_source=matches,
-                note="Matches source spreadsheet" if matches else "Differs from source spreadsheet - source likely a transcription error",
+                note="Matches source spreadsheet"
+                if matches
+                else "Differs from source spreadsheet - source likely a transcription error",
             )
         )
 
@@ -141,6 +179,10 @@ async def clash_check(request: Request, window_hours: int | None = None):
     elif len(distinct_ids) <= 1 and found_count == len(CLASH_CANDIDATES):
         summary = "UDL also reports a shared satNo across these objects; this may be a genuine upstream ambiguity, not just a spreadsheet error."
     else:
-        summary = "Mixed or incomplete results from UDL; review each candidate individually."
+        summary = (
+            "Mixed or incomplete results from UDL; review each candidate individually."
+        )
 
-    return ClashCheckResponse(summary=summary, window_hours=window_hours, candidates=candidates)
+    return ClashCheckResponse(
+        summary=summary, window_hours=window_hours, candidates=candidates
+    )

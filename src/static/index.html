@@ -12,11 +12,17 @@
   --china:#C0574A; --china-bright:#DD7264;
   --surface:#0f1a30; --surface-2:#152238; --surface-3:#1c2c48;
   --line:#27406e; --line-soft:#1f3358;
-  --text:#e6ecf6; --text-dim:#9fb2cf; --text-faint:#5b6b8d;
+  --text:#e6ecf6; --text-dim:#9fb2cf; --text-faint:#7d8fb3;
   --radius:3px; --motion:150ms;
 }
 @media (prefers-reduced-motion: reduce){ *{ transition-duration:.001ms !important; } }
 *{ box-sizing:border-box; }
+
+.skip-link{ position:absolute; left:-9999px; top:0; background:var(--blue-1); color:#fff;
+  padding:10px 16px; z-index:100; border-radius:0 0 var(--radius) 0; }
+.skip-link:focus{ left:0; }
+.visually-hidden{ position:absolute; width:1px; height:1px; padding:0; margin:-1px;
+  overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
 html,body{ margin:0; background:var(--navy); color:var(--text); font-family:"Segoe UI",-apple-system,Arial,sans-serif; }
 .wrap{ max-width:1180px; margin:0 auto; padding:24px 20px 70px; }
 header{ display:flex; justify-content:space-between; align-items:flex-end; gap:16px; flex-wrap:wrap;
@@ -84,6 +90,7 @@ form textarea{ min-height:56px; resize:vertical; }
 </style>
 </head>
 <body>
+<a href="#main-content" class="skip-link">Skip to main content</a>
 <div class="wrap">
   <header>
     <div>
@@ -91,21 +98,25 @@ form textarea{ min-height:56px; resize:vertical; }
       <h1>Tracked Systems</h1>
     </div>
     <div class="token-bar">
-      <span>Team token</span>
+      <label for="tokenInput">Team token</label>
       <input type="password" id="tokenInput" placeholder="paste to enable add/edit/archive">
       <button id="tokenSave">Save</button>
-      <span class="token-status" id="tokenStatus">not set — read only</span>
+      <span class="token-status" id="tokenStatus" role="status">not set — read only</span>
     </div>
   </header>
 
-  <div class="layout">
+  <main id="main-content" class="layout">
     <div class="panel">
       <h2>Catalogue</h2>
       <div class="filters">
+        <label class="visually-hidden" for="fSearch">Search catalogue</label>
         <input type="text" id="fSearch" placeholder="Search name, notes, NORAD ID…">
-        <select id="fNation"><option value="">All nations</option></select>
-        <select id="fRegime"><option value="">All regimes</option></select>
-        <select id="fStatus">
+        <label class="visually-hidden" for="fNation">Filter by nation</label>
+        <select id="fNation" aria-label="Filter by nation"><option value="">All nations</option></select>
+        <label class="visually-hidden" for="fRegime">Filter by regime</label>
+        <select id="fRegime" aria-label="Filter by regime"><option value="">All regimes</option></select>
+        <label class="visually-hidden" for="fStatus">Filter by status</label>
+        <select id="fStatus" aria-label="Filter by status">
           <option value="">All statuses</option>
           <option value="onorbit">On-orbit</option>
           <option value="decaying">Decaying</option>
@@ -114,27 +125,27 @@ form textarea{ min-height:56px; resize:vertical; }
         </select>
         <label><input type="checkbox" id="fArchived"> Include archived</label>
       </div>
-      <div class="count" id="resultCount"></div>
+      <div class="count" id="resultCount" role="status"></div>
       <div id="tableWrap"></div>
     </div>
 
     <div class="panel">
       <h2 id="formTitle">New system</h2>
       <form id="systemForm">
-        <div class="field"><label>Catalogue name *</label><input type="text" id="f_catalogue_name" required></div>
+        <div class="field"><label for="f_catalogue_name">Catalogue name *</label><input type="text" id="f_catalogue_name" required></div>
         <div class="field-row">
-          <div class="field"><label>Designator</label><input type="text" id="f_designator"></div>
-          <div class="field"><label>NORAD ID</label><input type="text" id="f_norad_id"></div>
+          <div class="field"><label for="f_designator">Designator</label><input type="text" id="f_designator"></div>
+          <div class="field"><label for="f_norad_id">NORAD ID</label><input type="text" id="f_norad_id"></div>
         </div>
         <div class="field-row">
-          <div class="field"><label>Nation *</label><input type="text" id="f_nation" maxlength="4" required></div>
-          <div class="field"><label>Regime *</label><input type="text" id="f_regime" required placeholder="LEO / GEO / HEO"></div>
+          <div class="field"><label for="f_nation">Nation *</label><input type="text" id="f_nation" maxlength="4" required></div>
+          <div class="field"><label for="f_regime">Regime *</label><input type="text" id="f_regime" required placeholder="LEO / GEO / HEO"></div>
         </div>
         <div class="field-row">
-          <div class="field"><label>Launch year *</label><input type="number" id="f_launch_year" required min="1957" max="2100"></div>
-          <div class="field"><label>Launch site</label><input type="text" id="f_launch_site"></div>
+          <div class="field"><label for="f_launch_year">Launch year *</label><input type="number" id="f_launch_year" required min="1957" max="2100"></div>
+          <div class="field"><label for="f_launch_site">Launch site</label><input type="text" id="f_launch_site"></div>
         </div>
-        <div class="field"><label>Status</label>
+        <div class="field"><label for="f_status">Status</label>
           <select id="f_status">
             <option value="unknown">Unconfirmed</option>
             <option value="onorbit">On-orbit</option>
@@ -143,25 +154,26 @@ form textarea{ min-height:56px; resize:vertical; }
           </select>
         </div>
         <div class="field-row">
-          <div class="field"><label>Operational life</label><input type="text" id="f_life"></div>
-          <div class="field"><label>Coplanar</label><input type="text" id="f_coplanar"></div>
+          <div class="field"><label for="f_life">Operational life</label><input type="text" id="f_life"></div>
+          <div class="field"><label for="f_coplanar">Coplanar</label><input type="text" id="f_coplanar"></div>
         </div>
-        <div class="field"><label>Observed ΔV / manoeuvres</label><input type="text" id="f_delta_v"></div>
-        <div class="field"><label>Flag</label><input type="text" id="f_flag" placeholder="e.g. NORAD ID clash — cross-check UDL"></div>
-        <div class="field"><label>Notes</label><textarea id="f_notes"></textarea></div>
-        <div class="field"><label>Family ID *</label><input type="text" id="f_family_id" required placeholder="e.g. rus-2027-cluster"></div>
-        <div class="field"><label>Family title *</label><input type="text" id="f_family_title" required></div>
-        <div class="field"><label>Family sub *</label><input type="text" id="f_family_sub" required></div>
+        <div class="field"><label for="f_delta_v">Observed ΔV / manoeuvres</label><input type="text" id="f_delta_v"></div>
+        <div class="field"><label for="f_flag">Flag</label><input type="text" id="f_flag" placeholder="e.g. NORAD ID clash — cross-check UDL"></div>
+        <div class="field"><label for="f_notes">Notes</label><textarea id="f_notes"></textarea></div>
+        <div class="field"><label for="f_family_id">Family ID *</label><input type="text" id="f_family_id" required placeholder="e.g. rus-2027-cluster"></div>
+        <div class="field"><label for="f_family_title">Family title *</label><input type="text" id="f_family_title" required></div>
+        <div class="field"><label for="f_family_sub">Family sub *</label><input type="text" id="f_family_sub" required></div>
         <div class="form-actions">
           <button type="submit" class="btn btn-primary" id="submitBtn">Add system</button>
           <button type="button" class="btn btn-ghost" id="clearBtn">Clear</button>
           <button type="button" class="btn btn-danger" id="archiveBtn" style="display:none">Archive</button>
         </div>
-        <div class="msg" id="formMsg"></div>
+        <div class="msg" id="formMsg" role="status" aria-live="polite"></div>
       </form>
     </div>
-  </div>
+  </main>
 </div>
+
 
 <script>
 const STATUS_LABEL = {onorbit:"On-orbit", decayed:"Decayed/Deorbited", decaying:"Decaying", unknown:"Unconfirmed"};

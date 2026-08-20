@@ -11,7 +11,9 @@ def test_search_requires_common_name(client, auth_headers):
 
 
 def test_search_by_common_name_returns_normalised_record(client, auth_headers):
-    response = client.get("/api/udl/jco-hrr", params={"common_name": "COSMOS-2612"}, headers=auth_headers)
+    response = client.get(
+        "/api/udl/jco-hrr", params={"common_name": "COSMOS-2612"}, headers=auth_headers
+    )
     assert response.status_code == 200
     body = response.json()
     assert body["count"] == 1
@@ -19,7 +21,11 @@ def test_search_by_common_name_returns_normalised_record(client, auth_headers):
 
 
 def test_search_no_match_returns_empty_list(client, auth_headers):
-    response = client.get("/api/udl/jco-hrr", params={"common_name": "NOT-A-REAL-OBJECT"}, headers=auth_headers)
+    response = client.get(
+        "/api/udl/jco-hrr",
+        params={"common_name": "NOT-A-REAL-OBJECT"},
+        headers=auth_headers,
+    )
     assert response.status_code == 200
     assert response.json()["count"] == 0
 
@@ -76,14 +82,31 @@ def test_clash_check_reports_three_distinct_ids(client, auth_headers):
 def test_clash_check_flags_genuine_upstream_clash():
     fake = FakeUDLClient(
         satellites=[
-            {"commonName": "COSMOS-2612", "satNo": "68762", "rank": 2, "orbitRegime": "LEO"},
-            {"commonName": "COSMOS-2613", "satNo": "68762", "rank": 2, "orbitRegime": "LEO"},
-            {"commonName": "COSMOS-2614", "satNo": "68762", "rank": 2, "orbitRegime": "LEO"},
+            {
+                "commonName": "COSMOS-2612",
+                "satNo": "68762",
+                "rank": 2,
+                "orbitRegime": "LEO",
+            },
+            {
+                "commonName": "COSMOS-2613",
+                "satNo": "68762",
+                "rank": 2,
+                "orbitRegime": "LEO",
+            },
+            {
+                "commonName": "COSMOS-2614",
+                "satNo": "68762",
+                "rank": 2,
+                "orbitRegime": "LEO",
+            },
         ]
     )
     app = build_app(settings=make_settings(), udl_client=fake)
     with TestClient(app) as test_client:
-        response = test_client.get("/api/udl/clash-check", headers={"Authorization": "Bearer test-token"})
+        response = test_client.get(
+            "/api/udl/clash-check", headers={"Authorization": "Bearer test-token"}
+        )
     assert response.status_code == 200
     assert "genuine upstream ambiguity" in response.json()["summary"]
 
@@ -92,7 +115,9 @@ def test_clash_check_no_matches_says_so():
     fake = FakeUDLClient(satellites=[])
     app = build_app(settings=make_settings(), udl_client=fake)
     with TestClient(app) as test_client:
-        response = test_client.get("/api/udl/clash-check", headers={"Authorization": "Bearer test-token"})
+        response = test_client.get(
+            "/api/udl/clash-check", headers={"Authorization": "Bearer test-token"}
+        )
     assert response.status_code == 200
     assert "no JCO HRR entries" in response.json()["summary"]
 
@@ -102,7 +127,9 @@ def test_udl_upstream_error_returns_502(auth_headers):
     app = build_app(settings=make_settings(), udl_client=fake)
     with TestClient(app) as test_client:
         response = test_client.get(
-            "/api/udl/jco-hrr", params={"common_name": "COSMOS-2612"}, headers=auth_headers
+            "/api/udl/jco-hrr",
+            params={"common_name": "COSMOS-2612"},
+            headers=auth_headers,
         )
     assert response.status_code == 502
     # Never leak the raw upstream error message
@@ -114,6 +141,8 @@ def test_udl_not_configured_returns_503(auth_headers):
     app = build_app(settings=make_settings(), udl_client=fake)
     with TestClient(app) as test_client:
         response = test_client.get(
-            "/api/udl/jco-hrr", params={"common_name": "COSMOS-2612"}, headers=auth_headers
+            "/api/udl/jco-hrr",
+            params={"common_name": "COSMOS-2612"},
+            headers=auth_headers,
         )
     assert response.status_code == 503

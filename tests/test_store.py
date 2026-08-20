@@ -1,5 +1,4 @@
 import json
-import os
 
 import pytest
 
@@ -9,26 +8,28 @@ from src.store import TrackedSystemsStore
 @pytest.fixture
 def store(tmp_path, monkeypatch):
     monkeypatch.setenv("STORAGE_MOUNT_PATH", str(tmp_path))
-    return TrackedSystemsStore(seed_records=[
-        {
-            "family_id": "test-fam",
-            "family_title": "Test Family",
-            "family_sub": "Test sub",
-            "nation": "RU",
-            "designator": "Test-1",
-            "catalogue_name": "TESTSAT-1",
-            "launch_year": 2020,
-            "launch_site": None,
-            "norad_id": "10001",
-            "regime": "LEO",
-            "delta_v": None,
-            "status": "onorbit",
-            "life": None,
-            "coplanar": None,
-            "notes": "Seed record",
-            "flag": None,
-        }
-    ])
+    return TrackedSystemsStore(
+        seed_records=[
+            {
+                "family_id": "test-fam",
+                "family_title": "Test Family",
+                "family_sub": "Test sub",
+                "nation": "RU",
+                "designator": "Test-1",
+                "catalogue_name": "TESTSAT-1",
+                "launch_year": 2020,
+                "launch_site": None,
+                "norad_id": "10001",
+                "regime": "LEO",
+                "delta_v": None,
+                "status": "onorbit",
+                "life": None,
+                "coplanar": None,
+                "notes": "Seed record",
+                "flag": None,
+            }
+        ]
+    )
 
 
 def test_seed_creates_store_file(store, tmp_path):
@@ -49,13 +50,26 @@ def test_seed_is_idempotent_on_second_read(store, tmp_path):
 
 
 def test_create_adds_a_record(store):
-    created = store.create({
-        "family_id": "new-fam", "family_title": "New", "family_sub": "sub",
-        "nation": "CN", "designator": None, "catalogue_name": "NEWSAT",
-        "launch_year": 2026, "launch_site": None, "norad_id": "99999",
-        "regime": "GEO", "delta_v": None, "status": "unknown", "life": None,
-        "coplanar": None, "notes": None, "flag": None,
-    })
+    created = store.create(
+        {
+            "family_id": "new-fam",
+            "family_title": "New",
+            "family_sub": "sub",
+            "nation": "CN",
+            "designator": None,
+            "catalogue_name": "NEWSAT",
+            "launch_year": 2026,
+            "launch_site": None,
+            "norad_id": "99999",
+            "regime": "GEO",
+            "delta_v": None,
+            "status": "unknown",
+            "life": None,
+            "coplanar": None,
+            "notes": None,
+            "flag": None,
+        }
+    )
     assert created["id"]
     assert created["archived"] is False
     records = store.list()
@@ -96,13 +110,26 @@ def test_archive_writes_a_backup(store, tmp_path):
 
 
 def test_filters_by_nation_regime_status_and_query(store):
-    store.create({
-        "family_id": "f2", "family_title": "F2", "family_sub": "s",
-        "nation": "CN", "designator": None, "catalogue_name": "OTHERSAT",
-        "launch_year": 2021, "launch_site": None, "norad_id": "20002",
-        "regime": "GEO", "delta_v": None, "status": "decayed", "life": None,
-        "coplanar": None, "notes": None, "flag": None,
-    })
+    store.create(
+        {
+            "family_id": "f2",
+            "family_title": "F2",
+            "family_sub": "s",
+            "nation": "CN",
+            "designator": None,
+            "catalogue_name": "OTHERSAT",
+            "launch_year": 2021,
+            "launch_site": None,
+            "norad_id": "20002",
+            "regime": "GEO",
+            "delta_v": None,
+            "status": "decayed",
+            "life": None,
+            "coplanar": None,
+            "notes": None,
+            "flag": None,
+        }
+    )
     assert len(store.list(nation="RU")) == 1
     assert len(store.list(regime="GEO")) == 1
     assert len(store.list(status="decayed")) == 1
@@ -111,25 +138,51 @@ def test_filters_by_nation_regime_status_and_query(store):
 
 
 def test_list_sorted_by_launch_year(store):
-    store.create({
-        "family_id": "f2", "family_title": "F2", "family_sub": "s",
-        "nation": "CN", "designator": None, "catalogue_name": "EARLYSAT",
-        "launch_year": 1999, "launch_site": None, "norad_id": "1",
-        "regime": "LEO", "delta_v": None, "status": "decayed", "life": None,
-        "coplanar": None, "notes": None, "flag": None,
-    })
+    store.create(
+        {
+            "family_id": "f2",
+            "family_title": "F2",
+            "family_sub": "s",
+            "nation": "CN",
+            "designator": None,
+            "catalogue_name": "EARLYSAT",
+            "launch_year": 1999,
+            "launch_site": None,
+            "norad_id": "1",
+            "regime": "LEO",
+            "delta_v": None,
+            "status": "decayed",
+            "life": None,
+            "coplanar": None,
+            "notes": None,
+            "flag": None,
+        }
+    )
     records = store.list()
     assert records[0]["catalogue_name"] == "EARLYSAT"
 
 
 def test_store_file_is_valid_json_after_write(store, tmp_path):
-    store.create({
-        "family_id": "f3", "family_title": "F3", "family_sub": "s",
-        "nation": "IR", "designator": None, "catalogue_name": "IRSAT",
-        "launch_year": 2024, "launch_site": None, "norad_id": "30003",
-        "regime": "LEO", "delta_v": None, "status": "unknown", "life": None,
-        "coplanar": None, "notes": None, "flag": None,
-    })
+    store.create(
+        {
+            "family_id": "f3",
+            "family_title": "F3",
+            "family_sub": "s",
+            "nation": "IR",
+            "designator": None,
+            "catalogue_name": "IRSAT",
+            "launch_year": 2024,
+            "launch_site": None,
+            "norad_id": "30003",
+            "regime": "LEO",
+            "delta_v": None,
+            "status": "unknown",
+            "life": None,
+            "coplanar": None,
+            "notes": None,
+            "flag": None,
+        }
+    )
     path = tmp_path / "tracked_systems.json"
     with open(path) as fh:
         data = json.load(fh)
@@ -137,14 +190,116 @@ def test_store_file_is_valid_json_after_write(store, tmp_path):
     assert len(data["systems"]) == 2
 
 
+def test_probe_writable_true_on_a_real_writable_dir(store):
+    writable, error = store.probe_writable()
+    assert writable is True
+    assert error == ""
+
+
+def test_probe_writable_false_and_returns_errno_on_failure(tmp_path, monkeypatch):
+    bad_dir = tmp_path / "nested" / "does-not-exist-and-parent-is-a-file"
+    (tmp_path / "nested").write_text("this is a file, not a directory")
+    monkeypatch.setenv("STORAGE_MOUNT_PATH", str(bad_dir))
+    broken_store = TrackedSystemsStore(seed_records=[])
+    writable, error = broken_store.probe_writable()
+    assert writable is False
+    assert error != ""
+
+
+def test_create_emits_one_structured_audit_line(store, caplog):
+    import json
+    import logging
+
+    with caplog.at_level(logging.INFO, logger="udl_tactics_app.audit"):
+        store.create(
+            {
+                "family_id": "f4",
+                "family_title": "F4",
+                "family_sub": "s",
+                "nation": "RU",
+                "designator": None,
+                "catalogue_name": "AUDITSAT",
+                "launch_year": 2026,
+                "launch_site": None,
+                "norad_id": None,
+                "regime": "LEO",
+                "delta_v": None,
+                "status": "unknown",
+                "life": None,
+                "coplanar": None,
+                "notes": None,
+                "flag": None,
+            },
+            actor="203.0.113.5",
+        )
+    audit_lines = [r for r in caplog.records if r.name == "udl_tactics_app.audit"]
+    assert len(audit_lines) == 1
+    record = json.loads(audit_lines[0].message)
+    assert record["event"] == "system_created"
+    assert record["actor"] == "203.0.113.5"
+    assert record["catalogue_name"] == "AUDITSAT"
+    assert "record_id" in record
+
+
+def test_update_emits_audit_line_with_changed_fields(store, caplog):
+    import json
+    import logging
+
+    seeded = store.list()[0]
+    with caplog.at_level(logging.INFO, logger="udl_tactics_app.audit"):
+        store.update(seeded["id"], {"status": "decayed"}, actor="10.0.0.1")
+    audit_lines = [r for r in caplog.records if r.name == "udl_tactics_app.audit"]
+    assert len(audit_lines) == 1
+    record = json.loads(audit_lines[0].message)
+    assert record["event"] == "system_updated"
+    assert record["fields_changed"] == ["status"]
+
+
+def test_archive_emits_audit_line(store, caplog):
+    import json
+    import logging
+
+    seeded = store.list()[0]
+    with caplog.at_level(logging.INFO, logger="udl_tactics_app.audit"):
+        store.archive(seeded["id"], actor="10.0.0.2")
+    audit_lines = [r for r in caplog.records if r.name == "udl_tactics_app.audit"]
+    assert len(audit_lines) == 1
+    record = json.loads(audit_lines[0].message)
+    assert record["event"] == "system_archived"
+
+
+def test_audit_actor_is_sanitised_and_capped():
+    from src.store import _sanitize_actor
+
+    assert _sanitize_actor("normal-actor") == "normal-actor"
+    assert "\n" not in _sanitize_actor("evil\nINJECTED LOG LINE")
+    assert len(_sanitize_actor("x" * 200)) == 64
+
+
 def test_corrupt_store_file_falls_back_to_reseed(tmp_path, monkeypatch):
     monkeypatch.setenv("STORAGE_MOUNT_PATH", str(tmp_path))
     (tmp_path / "tracked_systems.json").write_text("not valid json{{{")
-    store = TrackedSystemsStore(seed_records=[{
-        "family_id": "f", "family_title": "F", "family_sub": "s", "nation": "RU",
-        "designator": None, "catalogue_name": "X", "launch_year": 2020,
-        "launch_site": None, "norad_id": None, "regime": "LEO", "delta_v": None,
-        "status": "unknown", "life": None, "coplanar": None, "notes": None, "flag": None,
-    }])
+    store = TrackedSystemsStore(
+        seed_records=[
+            {
+                "family_id": "f",
+                "family_title": "F",
+                "family_sub": "s",
+                "nation": "RU",
+                "designator": None,
+                "catalogue_name": "X",
+                "launch_year": 2020,
+                "launch_site": None,
+                "norad_id": None,
+                "regime": "LEO",
+                "delta_v": None,
+                "status": "unknown",
+                "life": None,
+                "coplanar": None,
+                "notes": None,
+                "flag": None,
+            }
+        ]
+    )
     records = store.list()
     assert len(records) == 1

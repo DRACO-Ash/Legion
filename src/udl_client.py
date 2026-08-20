@@ -61,16 +61,24 @@ class UDLNotConfigured(UDLError):
 
 
 class UDLClient:
-    def __init__(self, base_url: str, username: str | None, password: str | None, timeout_seconds: float):
+    def __init__(
+        self,
+        base_url: str,
+        username: str | None,
+        password: str | None,
+        timeout_seconds: float,
+    ):
         self._base_url = base_url
         self._configured = bool(username and password)
         self._timeout = timeout_seconds
-        auth = httpx.BasicAuth(username, password) if self._configured else None
+        auth = httpx.BasicAuth(username, password) if username and password else None
         # httpx's default Accept header is "*/*", which satisfies the one
         # verified header rule (eoobservation/history requires Accept: */*).
         # That rule is confirmed only for that endpoint; generalising it to
         # notification/elset is inference, but the default is harmless either way.
-        self._http = httpx.AsyncClient(base_url=base_url, auth=auth, timeout=timeout_seconds)
+        self._http = httpx.AsyncClient(
+            base_url=base_url, auth=auth, timeout=timeout_seconds
+        )
 
     @property
     def configured(self) -> bool:
@@ -91,8 +99,12 @@ class UDLClient:
             logger.warning("UDL request timed out after %.1fs: %s", self._timeout, exc)
             raise UDLError("UDL request timed out") from exc
         except httpx.HTTPStatusError as exc:
-            logger.warning("UDL returned HTTP %s for %s", exc.response.status_code, path)
-            raise UDLError(f"UDL upstream error (HTTP {exc.response.status_code})") from exc
+            logger.warning(
+                "UDL returned HTTP %s for %s", exc.response.status_code, path
+            )
+            raise UDLError(
+                f"UDL upstream error (HTTP {exc.response.status_code})"
+            ) from exc
         except httpx.HTTPError as exc:
             logger.warning("UDL request failed: %s", exc)
             raise UDLError("UDL request failed") from exc
@@ -123,17 +135,24 @@ class UDLClient:
         payload = await self._get_json(ENDPOINT_NOTIFICATION, params)
 
         if not isinstance(payload, list):
-            logger.warning("UDL notification endpoint returned an unexpected shape: %s", type(payload).__name__)
+            logger.warning(
+                "UDL notification endpoint returned an unexpected shape: %s",
+                type(payload).__name__,
+            )
             raise UDLError("UDL returned an unexpected response shape")
 
         satellites: list[dict[str, Any]] = []
         for record in payload:
             msg_body = record.get("msgBody") if isinstance(record, dict) else None
             if isinstance(msg_body, list):
-                satellites.extend(entry for entry in msg_body if isinstance(entry, dict))
+                satellites.extend(
+                    entry for entry in msg_body if isinstance(entry, dict)
+                )
         return satellites
 
-    async def find_by_common_name(self, common_name: str, *, window_hours: int = 24) -> dict[str, Any] | None:
+    async def find_by_common_name(
+        self, common_name: str, *, window_hours: int = 24
+    ) -> dict[str, Any] | None:
         """Case-insensitive exact match on commonName within the JCO HRR feed."""
         satellites = await self.fetch_jco_hrr(window_hours=window_hours)
         target = common_name.strip().casefold()
@@ -142,11 +161,17 @@ class UDLClient:
                 return entry
         return None
 
-    async def search_by_common_name(self, query: str, *, window_hours: int = 24) -> list[dict[str, Any]]:
+    async def search_by_common_name(
+        self, query: str, *, window_hours: int = 24
+    ) -> list[dict[str, Any]]:
         """Case-insensitive substring match on commonName within the JCO HRR feed."""
         satellites = await self.fetch_jco_hrr(window_hours=window_hours)
         needle = query.strip().casefold()
-        return [e for e in satellites if needle in str(e.get("commonName", "")).strip().casefold()]
+        return [
+            e
+            for e in satellites
+            if needle in str(e.get("commonName", "")).strip().casefold()
+        ]
 
     async def get_elset(self, sat_no: str) -> dict[str, Any] | None:
         """Look up the latest element set for a NORAD/satNo.
@@ -162,5 +187,8 @@ class UDLClient:
             return payload[0] if payload else None
         if isinstance(payload, dict):
             return payload
-        logger.warning("UDL elset endpoint returned an unexpected shape: %s", type(payload).__name__)
+        logger.warning(
+            "UDL elset endpoint returned an unexpected shape: %s",
+            type(payload).__name__,
+        )
         raise UDLError("UDL returned an unexpected response shape")

@@ -28,6 +28,7 @@ from pathlib import Path
 from typing import Any
 
 logger = logging.getLogger("udl_tactics_app.store")
+audit_logger = logging.getLogger("udl_tactics_app.audit")
 
 SCHEMA_VERSION = 1
 STORE_FILENAME = "tracked_systems.json"
@@ -46,6 +47,27 @@ def _resolve_data_dir() -> Path:
     base = Path(mount) if mount else Path.cwd() / "data"
     base.mkdir(parents=True, exist_ok=True)
     return base
+
+
+def _sanitize_actor(actor: str, max_len: int = 64) -> str:
+    """Strip non-printable characters (defends against log injection via a
+    forged newline/control sequence) and bound the length."""
+    cleaned = "".join(ch for ch in actor if ch.isprintable())
+    return cleaned[:max_len]
+
+
+def _emit_audit(event: str, actor: str, **fields: Any) -> None:
+    """One structured JSON line per privileged action: actor, timestamp, and
+    whatever before/after detail the caller has. Never includes a secret -
+    callers only ever pass catalogue-level fields (ids, names, which fields
+    changed), never credentials."""
+    record = {
+        "event": event,
+        "actor": _sanitize_actor(actor),
+        "timestamp": _now_iso(),
+        **fields,
+    }
+    audit_logger.info(json.dumps(record, default=str))
 
 
 class StoreValidationError(Exception):
@@ -122,6 +144,25 @@ class TrackedSystemsStore:
         for stale in backups[:-MAX_BACKUPS]:
             stale.unlink(missing_ok=True)
 
+    def probe_writable(self) -> tuple[bool, str]:
+        """Prove the data directory is actually writable with a real write,
+        never an existence check - `mkdir` on an existing directory succeeds
+        without write permission, so a root-owned or read-only mount would
+        pass an existence check and only fail on the first real write (the
+        App Store's non-root container against a root-owned volume add-on
+        returns EACCES until securityContext.fsGroup is set - see
+        appstore-gate-compliance's failure catalogue). Returns (True, "") on
+        success or (False, "<errno/message>") on failure; the caller decides
+        what to do with that detail."""
+        try:
+            data_dir = _resolve_data_dir()
+            probe_path = data_dir / ".readyz-probe"
+            probe_path.write_text("ok", encoding="utf-8")
+            probe_path.unlink()
+            return True, ""
+        except OSError as exc:
+            return False, f"{type(exc).__name__}: {exc}"
+
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
@@ -141,35 +182,57 @@ class TrackedSystemsStore:
         if not include_archived:
             records = [r for r in records if not r.get("archived")]
         if nation:
-            records = [r for r in records if r.get("nation", "").casefold() == nation.casefold()]
+            records = [
+                r
+                for r in records
+                if r.get("nation", "").casefold() == nation.casefold()
+            ]
         if regime:
-            records = [r for r in records if r.get("regime", "").casefold() == regime.casefold()]
+            records = [
+                r
+                for r in records
+                if r.get("regime", "").casefold() == regime.casefold()
+            ]
         if status:
             records = [r for r in records if r.get("status") == status]
         if q:
             needle = q.strip().casefold()
             records = [
-                r
-                for r in records
-                if needle in json.dumps(r, default=str).casefold()
+                r for r in records if needle in json.dumps(r, default=str).casefold()
             ]
-        records.sort(key=lambda r: (r.get("launch_year") or 0, r.get("catalogue_name") or ""))
+        records.sort(
+            key=lambda r: (r.get("launch_year") or 0, r.get("catalogue_name") or "")
+        )
         return records
 
     def get(self, record_id: str) -> dict[str, Any] | None:
         data = self._read_raw()
         return data["systems"].get(record_id)
 
-    def create(self, record: dict[str, Any]) -> dict[str, Any]:
+    def create(self, record: dict[str, Any], actor: str = "unknown") -> dict[str, Any]:
         data = self._read_raw()
         record_id = str(uuid.uuid4())
         now = _now_iso()
-        stored = {**record, "id": record_id, "archived": False, "created_at": now, "updated_at": now}
+        stored = {
+            **record,
+            "id": record_id,
+            "archived": False,
+            "created_at": now,
+            "updated_at": now,
+        }
         data["systems"][record_id] = stored
         self._write_atomic(data)
+        _emit_audit(
+            "system_created",
+            actor,
+            record_id=record_id,
+            catalogue_name=stored.get("catalogue_name"),
+        )
         return stored
 
-    def update(self, record_id: str, patch: dict[str, Any]) -> dict[str, Any] | None:
+    def update(
+        self, record_id: str, patch: dict[str, Any], actor: str = "unknown"
+    ) -> dict[str, Any] | None:
         """Anti-shrink merge: only overwrite keys present in `patch`; every
         field the caller didn't send survives untouched."""
         data = self._read_raw()
@@ -181,9 +244,15 @@ class TrackedSystemsStore:
         merged["updated_at"] = _now_iso()
         data["systems"][record_id] = merged
         self._write_atomic(data)
+        _emit_audit(
+            "system_updated",
+            actor,
+            record_id=record_id,
+            fields_changed=sorted(patch.keys()),
+        )
         return merged
 
-    def archive(self, record_id: str) -> dict[str, Any] | None:
+    def archive(self, record_id: str, actor: str = "unknown") -> dict[str, Any] | None:
         data = self._read_raw()
         existing = data["systems"].get(record_id)
         if existing is None:
@@ -193,4 +262,10 @@ class TrackedSystemsStore:
         existing["updated_at"] = _now_iso()
         data["systems"][record_id] = existing
         self._write_atomic(data)
+        _emit_audit(
+            "system_archived",
+            actor,
+            record_id=record_id,
+            catalogue_name=existing.get("catalogue_name"),
+        )
         return existing
