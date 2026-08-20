@@ -5,6 +5,11 @@ All notable changes to this project are documented here. Format follows
 [Semantic Versioning](https://semver.org/). Pre-1.0: minor bumps may include
 breaking changes, since nothing has shipped to the App Store yet.
 
+## [0.4.1] - 2026-08-20
+
+Add CLAUDE.md and HANDOFF.md ahead of moving primary development to Claude Code / GitHub. No code changes.
+
+
 ## [0.4.0] - 2026-08-20
 
 app-store-readiness run properly for the first time: hash-locked dependencies, flattened container (unverified build - no Docker daemon available), structured audit logging, real storage-writability probe, accessibility fixes (label associations, contrast, landmark, live region), lint/type-check clean. READINESS.md added: band is Not yet, blocked on the pending .gitlab-ci.yml path fix and an unverified container build - not something local work can close alone.
