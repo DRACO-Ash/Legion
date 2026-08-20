@@ -5,6 +5,11 @@ All notable changes to this project are documented here. Format follows
 [Semantic Versioning](https://semver.org/). Pre-1.0: minor bumps may include
 breaking changes, since nothing has shipped to the App Store yet.
 
+## [0.3.2] - 2026-08-20
+
+Add .gitlab-ci.yml with corrected build/scan paths (dockerfile, base-dir, podman build context) - the CI file baked into the repo at onboarding still referenced the stale udl-tactics-app/ subdirectory from the original nested-zip upload.
+
+
 ## [0.3.1] - 2026-08-19
 
 ### Fixed
