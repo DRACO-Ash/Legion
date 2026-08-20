@@ -1,0 +1,141 @@
+variables:
+  GIT_DEPTH: "20"
+
+default:
+  interruptible: true
+  tags:
+    - general
+
+workflow:
+  auto_cancel:
+    on_new_commit: interruptible
+
+stages:
+  - setup
+  - check
+  - build
+  - test
+  - scan
+  - package
+  - containerize
+  - container-scan
+  - deploy
+
+include:
+  # SAST
+  - template: Jobs/SAST.gitlab-ci.yml
+
+  # Secret detection
+  - component: $CI_SERVER_FQDN/devsecops/Jobs/secret-detection/secret-detection@2.2.0
+    inputs:
+      stage: check
+
+  # Dependency Scanning
+  - template: Security/Dependency-Scanning.gitlab-ci.yml
+
+  # Anchore container scan
+  - component: $CI_SERVER_FQDN/devsecops/Jobs/anchore/base@2.0
+    inputs:
+      stage: container-scan
+      dockerfile: Dockerfile
+      docker-image: $CI_REGISTRY_IMAGE/$CI_COMMIT_SHORT_SHA
+      scan-job-name: anchore-scan
+      scan-needs: ["podman-build"]
+      check-job-name: anchore-scan-check
+      check-needs: [{"job": "anchore-scan", "artifacts": true}]
+      report-job-name: anchore-scan-report
+      report-needs: [{"job": "anchore-scan", "artifacts": true}]
+      link-job-name: anchore-scan-link
+      link-needs: [{"job": "anchore-scan", "artifacts": true}]
+
+  # SonarQube scan + report
+  - component: $CI_SERVER_FQDN/devsecops/Jobs/sonarqube/base@1.5.1
+    inputs:
+      sonar-project-key: legion
+      base-dir: .
+      scan-job-name: sonar-scan
+      scan-needs: ["python-test"]
+      report-job-name: sonar-report
+      report-needs: ["sonar-scan"]
+
+
+# ── Service: udl-tactics-app ──
+
+pip-install:
+  stage: setup
+  image: harbor.bluestaq.com/docker/library/python:3.12-slim
+  script:
+    - pip install -r requirements.txt
+  cache:
+    key: ${CI_COMMIT_REF_SLUG}-pip
+    paths:
+      - .cache/pip/
+
+python-test:
+  stage: test
+  image: harbor.bluestaq.com/docker/library/python:3.12-slim
+  needs: ["pip-install"]
+  script:
+    - pip install -r requirements.txt
+    - pytest --cov --cov-report=xml:coverage.xml
+  artifacts:
+    paths:
+      - coverage.xml
+
+podman-build:
+  stage: containerize
+  image: harbor.bluestaq.com/quay/podman/stable:latest
+  variables:
+    STORAGE_DRIVER: vfs
+  needs: []
+  script:
+    - printf '[[registry]]\nprefix = "docker.io"\nlocation = "harbor.bluestaq.com/docker"\n' > /etc/containers/registries.conf.d/001-harbor-docker-mirror.conf
+    - podman login harbor.bluestaq.com --username $HARBOR_USERNAME --password $HARBOR_PASSWORD
+    - podman login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+    - podman build -t $CI_REGISTRY_IMAGE/$CI_COMMIT_SHORT_SHA -f Dockerfile .
+    - podman push $CI_REGISTRY_IMAGE/$CI_COMMIT_SHORT_SHA
+
+anchore-scan:
+  tags: [memory]
+
+podman-harbor-push:
+  stage: deploy
+  image: harbor.bluestaq.com/quay/podman/stable:latest
+  interruptible: false
+  resource_group: deploy
+  variables:
+    STORAGE_DRIVER: vfs
+  needs: ["podman-build", "anchore-scan-check", "sonar-report"]
+  before_script:
+    - podman login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+    - podman login harbor.bluestaq.com --username $HARBOR_USERNAME --password $HARBOR_PASSWORD
+    - podman pull $CI_REGISTRY_IMAGE/$CI_COMMIT_SHORT_SHA
+  script:
+    - podman push $CI_REGISTRY_IMAGE/$CI_COMMIT_SHORT_SHA harbor.bluestaq.com/vanguard/app-store-apps/legion:$CI_COMMIT_SHORT_SHA
+
+sonar-scan:
+  variables:
+    SONAR_SCANNER_OPTS: >-
+      -Dsonar.python.coverage.reportPaths=coverage.xml
+  rules:
+    - when: on_success
+
+deploy-argocd:
+  stage: deploy
+  image: harbor.bluestaq.com/docker/library/alpine:3.20
+  needs: ["podman-harbor-push"]
+  interruptible: false
+  before_script:
+    - apk add --no-cache git yq
+  script:
+    - git clone --depth 1 "https://x-access-token:${DEPLOY_REPO_TOKEN_NEW}@${CI_SERVER_HOST}/${GITOPS_REPO}.git" gitops-repo
+    - cd gitops-repo
+    - APP_DIR="application/appstore-legion"
+    - VALUES_FILE="${APP_DIR}/helm-values.yaml"
+    - yq eval ".services[].image.tag = \"$CI_COMMIT_SHORT_SHA\"" -i "$VALUES_FILE"
+    - git config user.name "App Store CI"
+    - git config user.email "appstore-ci@bluestaq.com"
+    - git add .
+    - 'git diff --cached --quiet || (git commit -m "deploy: legion image $CI_COMMIT_SHORT_SHA" && git push origin HEAD:main)'
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"

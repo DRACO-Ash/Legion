@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tracked Systems — UDL Tactics App</title>
+<style>
+:root{
+  --navy:#162646; --blue-1:#385FAF; --blue-2:#739BCF;
+  --green:#27AE60; --green-bright:#3FCB7C;
+  --amber:#E8A33D; --amber-bright:#F5B95A;
+  --china:#C0574A; --china-bright:#DD7264;
+  --surface:#0f1a30; --surface-2:#152238; --surface-3:#1c2c48;
+  --line:#27406e; --line-soft:#1f3358;
+  --text:#e6ecf6; --text-dim:#9fb2cf; --text-faint:#7d8fb3;
+  --radius:3px; --motion:150ms;
+}
+@media (prefers-reduced-motion: reduce){ *{ transition-duration:.001ms !important; } }
+*{ box-sizing:border-box; }
+
+.skip-link{ position:absolute; left:-9999px; top:0; background:var(--blue-1); color:#fff;
+  padding:10px 16px; z-index:100; border-radius:0 0 var(--radius) 0; }
+.skip-link:focus{ left:0; }
+.visually-hidden{ position:absolute; width:1px; height:1px; padding:0; margin:-1px;
+  overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
+html,body{ margin:0; background:var(--navy); color:var(--text); font-family:"Segoe UI",-apple-system,Arial,sans-serif; }
+.wrap{ max-width:1180px; margin:0 auto; padding:24px 20px 70px; }
+header{ display:flex; justify-content:space-between; align-items:flex-end; gap:16px; flex-wrap:wrap;
+  border-bottom:1px solid var(--line); padding-bottom:16px; margin-bottom:18px; }
+.eyebrow{ font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--blue-2); font-weight:600; }
+h1{ font-size:24px; margin:4px 0 0; }
+.token-bar{ display:flex; gap:8px; align-items:center; background:var(--surface-2); border:1px solid var(--line);
+  border-radius:var(--radius); padding:8px 12px; font-size:12.5px; }
+.token-bar input{ background:var(--surface-3); border:1px solid var(--line); color:var(--text); padding:6px 8px;
+  border-radius:var(--radius); font-family:inherit; font-size:12.5px; width:220px; }
+.token-bar button{ background:var(--blue-1); border:none; color:#fff; padding:6px 12px; border-radius:var(--radius);
+  cursor:pointer; font-family:inherit; font-size:12.5px; }
+.token-status{ font-size:11px; color:var(--text-faint); }
+.token-status.set{ color:var(--green-bright); }
+
+.layout{ display:grid; grid-template-columns:1fr 380px; gap:20px; align-items:start; }
+@media (max-width:900px){ .layout{ grid-template-columns:1fr; } }
+
+.panel{ background:var(--surface-2); border:1px solid var(--line); border-radius:var(--radius); padding:16px; }
+.panel h2{ font-size:12px; text-transform:uppercase; letter-spacing:.08em; color:var(--text-dim); margin:0 0 12px; }
+
+.filters{ display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px; }
+.filters input, .filters select{ background:var(--surface-3); border:1px solid var(--line); color:var(--text);
+  padding:7px 9px; border-radius:var(--radius); font-family:inherit; font-size:12.5px; }
+.filters input[type=text]{ flex:1; min-width:160px; }
+.filters label{ display:flex; align-items:center; gap:5px; font-size:12px; color:var(--text-dim); }
+
+table{ width:100%; border-collapse:collapse; font-size:12.5px; }
+th{ text-align:left; font-size:10px; text-transform:uppercase; color:var(--text-faint); padding:6px 8px;
+  border-bottom:1px solid var(--line-soft); }
+td{ padding:8px; border-bottom:1px solid var(--line-soft); color:var(--text-dim); vertical-align:top; }
+tr.row{ cursor:pointer; }
+tr.row:hover td{ background:var(--surface-3); }
+tr.selected td{ background:rgba(56,95,175,.18); }
+.badge{ font-size:10px; padding:2px 7px; border-radius:10px; border:1px solid; }
+.badge.rus{ color:var(--blue-2); border-color:var(--blue-2); }
+.badge.chn{ color:var(--china-bright); border-color:var(--china); }
+.badge.other{ color:var(--text-dim); border-color:var(--line); }
+.pill{ font-size:10.5px; padding:2px 8px; border-radius:10px; border:1px solid; white-space:nowrap; }
+.pill.onorbit{ color:var(--amber-bright); border-color:var(--amber); }
+.pill.decayed{ color:var(--green-bright); border-color:var(--green); }
+.pill.decaying{ color:var(--amber-bright); border-color:var(--amber); opacity:.75; }
+.pill.unknown{ color:var(--text-faint); border-color:var(--line); }
+.count{ font-size:11.5px; color:var(--text-faint); margin-bottom:8px; }
+
+form .field{ margin-bottom:10px; }
+form label{ display:block; font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:var(--text-faint);
+  margin-bottom:4px; }
+form input, form select, form textarea{ width:100%; background:var(--surface-3); border:1px solid var(--line);
+  color:var(--text); padding:7px 9px; border-radius:var(--radius); font-family:inherit; font-size:12.5px; }
+form textarea{ min-height:56px; resize:vertical; }
+.field-row{ display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+.form-actions{ display:flex; gap:8px; margin-top:14px; }
+.btn{ font-family:inherit; font-size:12.5px; padding:8px 14px; border-radius:var(--radius); cursor:pointer; border:1px solid; }
+.btn-primary{ background:var(--blue-1); border-color:var(--blue-1); color:#fff; }
+.btn-primary:hover{ background:#4571c7; }
+.btn-ghost{ background:none; border-color:var(--line); color:var(--text-dim); }
+.btn-ghost:hover{ color:var(--text); border-color:var(--blue-2); }
+.btn-danger{ background:none; border-color:var(--china); color:var(--china-bright); }
+.btn-danger:hover{ background:rgba(192,87,74,.12); }
+.msg{ font-size:12px; margin-top:8px; min-height:16px; }
+.msg.error{ color:var(--china-bright); }
+.msg.ok{ color:var(--green-bright); }
+.empty{ text-align:center; padding:30px; color:var(--text-faint); font-size:13px; }
+</style>
+</head>
+<body>
+<a href="#main-content" class="skip-link">Skip to main content</a>
+<div class="wrap">
+  <header>
+    <div>
+      <div class="eyebrow">Bluestaq Limited · JCO Reference</div>
+      <h1>Tracked Systems</h1>
+    </div>
+    <div class="token-bar">
+      <label for="tokenInput">Team token</label>
+      <input type="password" id="tokenInput" placeholder="paste to enable add/edit/archive">
+      <button id="tokenSave">Save</button>
+      <span class="token-status" id="tokenStatus" role="status">not set — read only</span>
+    </div>
+  </header>
+
+  <main id="main-content" class="layout">
+    <div class="panel">
+      <h2>Catalogue</h2>
+      <div class="filters">
+        <label class="visually-hidden" for="fSearch">Search catalogue</label>
+        <input type="text" id="fSearch" placeholder="Search name, notes, NORAD ID…">
+        <label class="visually-hidden" for="fNation">Filter by nation</label>
+        <select id="fNation" aria-label="Filter by nation"><option value="">All nations</option></select>
+        <label class="visually-hidden" for="fRegime">Filter by regime</label>
+        <select id="fRegime" aria-label="Filter by regime"><option value="">All regimes</option></select>
+        <label class="visually-hidden" for="fStatus">Filter by status</label>
+        <select id="fStatus" aria-label="Filter by status">
+          <option value="">All statuses</option>
+          <option value="onorbit">On-orbit</option>
+          <option value="decaying">Decaying</option>
+          <option value="decayed">Decayed/Deorbited</option>
+          <option value="unknown">Unconfirmed</option>
+        </select>
+        <label><input type="checkbox" id="fArchived"> Include archived</label>
+      </div>
+      <div class="count" id="resultCount" role="status"></div>
+      <div id="tableWrap"></div>
+    </div>
+
+    <div class="panel">
+      <h2 id="formTitle">New system</h2>
+      <form id="systemForm">
+        <div class="field"><label for="f_catalogue_name">Catalogue name *</label><input type="text" id="f_catalogue_name" required></div>
+        <div class="field-row">
+          <div class="field"><label for="f_designator">Designator</label><input type="text" id="f_designator"></div>
+          <div class="field"><label for="f_norad_id">NORAD ID</label><input type="text" id="f_norad_id"></div>
+        </div>
+        <div class="field-row">
+          <div class="field"><label for="f_nation">Nation *</label><input type="text" id="f_nation" maxlength="4" required></div>
+          <div class="field"><label for="f_regime">Regime *</label><input type="text" id="f_regime" required placeholder="LEO / GEO / HEO"></div>
+        </div>
+        <div class="field-row">
+          <div class="field"><label for="f_launch_year">Launch year *</label><input type="number" id="f_launch_year" required min="1957" max="2100"></div>
+          <div class="field"><label for="f_launch_site">Launch site</label><input type="text" id="f_launch_site"></div>
+        </div>
+        <div class="field"><label for="f_status">Status</label>
+          <select id="f_status">
+            <option value="unknown">Unconfirmed</option>
+            <option value="onorbit">On-orbit</option>
+            <option value="decaying">Decaying</option>
+            <option value="decayed">Decayed / Deorbited</option>
+          </select>
+        </div>
+        <div class="field-row">
+          <div class="field"><label for="f_life">Operational life</label><input type="text" id="f_life"></div>
+          <div class="field"><label for="f_coplanar">Coplanar</label><input type="text" id="f_coplanar"></div>
+        </div>
+        <div class="field"><label for="f_delta_v">Observed ΔV / manoeuvres</label><input type="text" id="f_delta_v"></div>
+        <div class="field"><label for="f_flag">Flag</label><input type="text" id="f_flag" placeholder="e.g. NORAD ID clash — cross-check UDL"></div>
+        <div class="field"><label for="f_notes">Notes</label><textarea id="f_notes"></textarea></div>
+        <div class="field"><label for="f_family_id">Family ID *</label><input type="text" id="f_family_id" required placeholder="e.g. rus-2027-cluster"></div>
+        <div class="field"><label for="f_family_title">Family title *</label><input type="text" id="f_family_title" required></div>
+        <div class="field"><label for="f_family_sub">Family sub *</label><input type="text" id="f_family_sub" required></div>
+        <div class="form-actions">
+          <button type="submit" class="btn btn-primary" id="submitBtn">Add system</button>
+          <button type="button" class="btn btn-ghost" id="clearBtn">Clear</button>
+          <button type="button" class="btn btn-danger" id="archiveBtn" style="display:none">Archive</button>
+        </div>
+        <div class="msg" id="formMsg" role="status" aria-live="polite"></div>
+      </form>
+    </div>
+  </main>
+</div>
+
+
+<script>
+const STATUS_LABEL = {onorbit:"On-orbit", decayed:"Decayed/Deorbited", decaying:"Decaying", unknown:"Unconfirmed"};
+let selectedId = null;
+let currentList = [];
+
+function token(){ return sessionStorage.getItem("teamToken") || ""; }
+function authHeaders(){
+  const t = token();
+  return t ? {"Authorization": "Bearer " + t} : {};
+}
+function refreshTokenStatus(){
+  const el = document.getElementById("tokenStatus");
+  if(token()){ el.textContent = "set — writes enabled"; el.classList.add("set"); }
+  else { el.textContent = "not set — read only"; el.classList.remove("set"); }
+}
+document.getElementById("tokenSave").addEventListener("click", () => {
+  const v = document.getElementById("tokenInput").value.trim();
+  if(v) sessionStorage.setItem("teamToken", v);
+  else sessionStorage.removeItem("teamToken");
+  document.getElementById("tokenInput").value = "";
+  refreshTokenStatus();
+});
+
+function qs(params){
+  const p = new URLSearchParams();
+  Object.entries(params).forEach(([k,v]) => { if(v !== "" && v !== null && v !== undefined) p.set(k, v); });
+  return p.toString();
+}
+
+async function loadSystems(){
+  const params = {
+    q: document.getElementById("fSearch").value,
+    nation: document.getElementById("fNation").value,
+    regime: document.getElementById("fRegime").value,
+    status_filter: document.getElementById("fStatus").value,
+    include_archived: document.getElementById("fArchived").checked,
+  };
+  const res = await fetch("/api/systems?" + qs(params));
+  const body = await res.json();
+  currentList = body.systems;
+  renderNationRegimeOptions(currentList);
+  renderTable(currentList);
+  document.getElementById("resultCount").textContent = `${body.count} system${body.count === 1 ? "" : "s"}`;
+}
+
+function renderNationRegimeOptions(list){
+  const nationSel = document.getElementById("fNation");
+  const regimeSel = document.getElementById("fRegime");
+  const keepNation = nationSel.value, keepRegime = regimeSel.value;
+  const nations = [...new Set(list.map(s => s.nation).filter(Boolean))].sort();
+  const regimes = [...new Set(list.map(s => s.regime).filter(Boolean))].sort();
+  nationSel.innerHTML = '<option value="">All nations</option>' + nations.map(n => `<option value="${n}">${n}</option>`).join("");
+  regimeSel.innerHTML = '<option value="">All regimes</option>' + regimes.map(r => `<option value="${r}">${r}</option>`).join("");
+  nationSel.value = keepNation; regimeSel.value = keepRegime;
+}
+
+function renderTable(list){
+  const wrap = document.getElementById("tableWrap");
+  if(list.length === 0){
+    wrap.innerHTML = '<div class="empty">No systems match the current filters.</div>';
+    return;
+  }
+  wrap.innerHTML = `<table>
+    <thead><tr><th>Name</th><th>Nation</th><th>Regime</th><th>Launch</th><th>Status</th><th>NORAD ID</th></tr></thead>
+    <tbody>${list.map(s => `
+      <tr class="row ${s.id === selectedId ? "selected" : ""}" data-id="${s.id}">
+        <td>${s.catalogue_name}${s.archived ? " <em>(archived)</em>" : ""}</td>
+        <td><span class="badge ${s.nation === "RU" ? "rus" : s.nation === "CN" ? "chn" : "other"}">${s.nation}</span></td>
+        <td>${s.regime}</td>
+        <td>${s.launch_year}</td>
+        <td><span class="pill ${s.status}">${STATUS_LABEL[s.status] || s.status}</span></td>
+        <td>${s.norad_id || "—"}</td>
+      </tr>`).join("")}
+    </tbody>
+  </table>`;
+  wrap.querySelectorAll("tr.row").forEach(tr => {
+    tr.addEventListener("click", () => selectSystem(tr.getAttribute("data-id")));
+  });
+}
+
+function selectSystem(id){
+  selectedId = id;
+  const record = currentList.find(s => s.id === id);
+  if(!record) return;
+  document.getElementById("formTitle").textContent = "Edit system";
+  document.getElementById("submitBtn").textContent = "Save changes";
+  document.getElementById("archiveBtn").style.display = record.archived ? "none" : "inline-block";
+  for(const key of ["catalogue_name","designator","norad_id","nation","regime","launch_year","launch_site",
+                    "status","life","coplanar","delta_v","flag","notes","family_id","family_title","family_sub"]){
+    const el = document.getElementById("f_" + key);
+    if(el) el.value = record[key] ?? "";
+  }
+  renderTable(currentList);
+  document.getElementById("formMsg").textContent = "";
+}
+
+document.getElementById("clearBtn").addEventListener("click", () => {
+  selectedId = null;
+  document.getElementById("systemForm").reset();
+  document.getElementById("formTitle").textContent = "New system";
+  document.getElementById("submitBtn").textContent = "Add system";
+  document.getElementById("archiveBtn").style.display = "none";
+  document.getElementById("formMsg").textContent = "";
+  renderTable(currentList);
+});
+
+function collectPayload(){
+  const get = id => document.getElementById("f_" + id).value.trim();
+  return {
+    catalogue_name: get("catalogue_name"),
+    designator: get("designator") || null,
+    norad_id: get("norad_id") || null,
+    nation: get("nation").toUpperCase(),
+    regime: get("regime").toUpperCase(),
+    launch_year: parseInt(get("launch_year"), 10),
+    launch_site: get("launch_site") || null,
+    status: get("status"),
+    life: get("life") || null,
+    coplanar: get("coplanar") || null,
+    delta_v: get("delta_v") || null,
+    flag: get("flag") || null,
+    notes: get("notes") || null,
+    family_id: get("family_id"),
+    family_title: get("family_title"),
+    family_sub: get("family_sub"),
+  };
+}
+
+document.getElementById("systemForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const msg = document.getElementById("formMsg");
+  if(!token()){
+    msg.textContent = "Set a team token above before adding or editing.";
+    msg.className = "msg error";
+    return;
+  }
+  const payload = collectPayload();
+  const headers = {"Content-Type": "application/json", ...authHeaders()};
+  let res;
+  if(selectedId){
+    res = await fetch(`/api/systems/${selectedId}`, {method:"PATCH", headers, body: JSON.stringify(payload)});
+  } else {
+    res = await fetch("/api/systems", {method:"POST", headers, body: JSON.stringify(payload)});
+  }
+  if(res.ok){
+    msg.textContent = selectedId ? "Saved." : "Added.";
+    msg.className = "msg ok";
+    await loadSystems();
+  } else {
+    const body = await res.json().catch(() => ({}));
+    msg.textContent = "Error: " + (body.detail || res.status);
+    msg.className = "msg error";
+  }
+});
+
+document.getElementById("archiveBtn").addEventListener("click", async () => {
+  if(!selectedId) return;
+  if(!token()){
+    document.getElementById("formMsg").textContent = "Set a team token above first.";
+    document.getElementById("formMsg").className = "msg error";
+    return;
+  }
+  if(!confirm("Archive this system? It stays in the store but is hidden by default.")) return;
+  const res = await fetch(`/api/systems/${selectedId}`, {method:"DELETE", headers: authHeaders()});
+  const msg = document.getElementById("formMsg");
+  if(res.ok){
+    msg.textContent = "Archived.";
+    msg.className = "msg ok";
+    document.getElementById("clearBtn").click();
+    await loadSystems();
+  } else {
+    msg.textContent = "Error archiving.";
+    msg.className = "msg error";
+  }
+});
+
+["fSearch","fNation","fRegime","fStatus","fArchived"].forEach(id => {
+  document.getElementById(id).addEventListener("input", loadSystems);
+  document.getElementById(id).addEventListener("change", loadSystems);
+});
+
+refreshTokenStatus();
+loadSystems();
+</script>
+</body>
+</html>
