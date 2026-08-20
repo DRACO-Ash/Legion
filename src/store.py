@@ -27,8 +27,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-logger = logging.getLogger("udl_tactics_app.store")
-audit_logger = logging.getLogger("udl_tactics_app.audit")
+APP_LOGGER_NAME = "udl_tactics_app"
+AUDIT_LOGGER_NAME = f"{APP_LOGGER_NAME}.audit"
+
+logger = logging.getLogger(f"{APP_LOGGER_NAME}.store")
+audit_logger = logging.getLogger(AUDIT_LOGGER_NAME)
 
 SCHEMA_VERSION = 1
 STORE_FILENAME = "tracked_systems.json"

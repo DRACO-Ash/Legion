@@ -8,6 +8,8 @@ testable in-process with a fake UDL client (testing-standards).
 from __future__ import annotations
 
 import logging
+import os
+import sys
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Request
@@ -20,10 +22,69 @@ from src.config import Settings, load_settings
 from src.routes import health, systems, udl, ui
 from src.security import RateLimiter, enforce_rate_limit
 from src.seed_data import SEED_RECORDS
-from src.store import TrackedSystemsStore
+from src.store import (
+    APP_LOGGER_NAME,
+    AUDIT_LOGGER_NAME,
+    TrackedSystemsStore,
+)
 from src.udl_client import UDLClient
 
-logger = logging.getLogger("udl_tactics_app")
+logger = logging.getLogger(APP_LOGGER_NAME)
+
+_STDOUT_HANDLER_NAME = "udl-tactics-app-stdout"
+
+
+class _AuditAwareFormatter(logging.Formatter):
+    """Emits an audit record as the bare JSON line it already is, so a log
+    pipeline can parse it without stripping a prefix first. Everything else
+    gets the usual human-readable prefix."""
+
+    def format(self, record: logging.LogRecord) -> str:
+        if record.name == AUDIT_LOGGER_NAME:
+            return record.getMessage()
+        return super().format(record)
+
+
+def configure_logging(level: str | None = None) -> None:
+    """Attach one stdout handler to the application logger.
+
+    Without this, nothing in the process configures logging: the audit
+    logger has no handler and inherits the root logger's WARNING, so every
+    `audit_logger.info(...)` is discarded and the audit trail never reaches
+    the container log. Verified against a real running container, not
+    assumed (observability-and-audit: one structured line per privileged
+    action).
+
+    Three deliberate choices:
+
+    - The handler sits on the parent `udl_tactics_app` logger, not on the
+      audit logger, so an audit record is written exactly once. A handler on
+      both would emit it twice, once per format.
+    - Propagation is left on. Root has no handler under gunicorn or uvicorn,
+      so propagating costs nothing, and pytest's `caplog` needs it.
+    - The audit logger is pinned to INFO regardless of `LOG_LEVEL`. The
+      audit trail is a compliance record, not diagnostic noise, so raising
+      the level must never silence it.
+
+    Idempotent: safe to call per worker, per test, or twice in one process.
+    """
+    app_logger = logging.getLogger(APP_LOGGER_NAME)
+    if not any(h.name == _STDOUT_HANDLER_NAME for h in app_logger.handlers):
+        handler = logging.StreamHandler(sys.stdout)
+        handler.set_name(_STDOUT_HANDLER_NAME)
+        handler.setFormatter(
+            _AuditAwareFormatter(
+                fmt="%(asctime)s %(levelname)s %(name)s %(message)s",
+                datefmt="%Y-%m-%dT%H:%M:%S%z",
+            )
+        )
+        app_logger.addHandler(handler)
+
+    requested = (level or os.environ.get("LOG_LEVEL") or "INFO").strip().upper()
+    resolved = logging.getLevelNamesMapping().get(requested, logging.INFO)
+    app_logger.setLevel(resolved)
+    logging.getLogger(AUDIT_LOGGER_NAME).setLevel(logging.INFO)
+
 
 # Two-tier rate limiting: a coarse global limit protects the process; the
 # finer per-route limit (applied inside routes/udl.py's _gate) protects the
@@ -52,6 +113,7 @@ def build_app(
     udl_client: UDLClient | None = None,
     systems_store: TrackedSystemsStore | None = None,
 ) -> FastAPI:
+    configure_logging()
     settings = settings or load_settings()
 
     # Fail closed: a wildcard origin with a team token configured refuses to start,
