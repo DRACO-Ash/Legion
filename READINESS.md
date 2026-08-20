@@ -2,14 +2,14 @@
 
 **Generated:** 20 August 2026
 **Updated:** 20 August 2026, after the first real container build (see "Container build verification" below)
-**Version at time of report:** 0.3.3 (`src/VERSION`); container verification run against 0.4.1
+**Version at time of report:** 0.3.3 (`src/VERSION`); container verification run against 0.4.1, audit fix re-verified in-container at 0.4.2
 **Scope:** pre-flight estimate per `app-store-readiness`. Not the platform's binding decision.
 
 ## Band: Not yet
 
 One blocker, and it is not something local work can close: **the GitLab pipeline has never once run a stage successfully.** Every dimension below that *can* be verified locally now passes; the ones that require the actual platform runner remain unconfirmed until the `.gitlab-ci.yml` path fix (flagged to Koen, three lines: `dockerfile:`, `base-dir:`, and the `podman build -f` line, all still pointing at a `udl-tactics-app/` subdirectory that no longer exists) lands on `main` and a version upload actually clears Secret Detection.
 
-**Score:** 14 of 16 applicable dimensions pass locally. The band is capped at "Not yet" regardless of that score, because a red/never-run required pipeline is a blocker by the skill's own rule — this report does not soften that.
+**Score:** 14 of the 15 applicable dimensions pass locally (16 is N/A). Dimension 12, the pipeline, is the single outstanding fail. The band is capped at "Not yet" regardless of that score, because a red/never-run required pipeline is a blocker by the skill's own rule, and this report does not soften that.
 
 ## Per-dimension table
 
@@ -27,7 +27,7 @@ One blocker, and it is not something local work can close: **the GitLab pipeline
 | 10 | Per-commit static analysis keeps violations at zero | **Likely** | heavy | `ruff check`, `ruff format --check`, `mypy --ignore-missing-imports`, `bandit` all clean. Not the exact SonarQube ruleset (no `sonar-scanner` access from this environment - CONTEXT-001 already documents this as a standing gap); this is the closest local approximation |
 | 11 | Negative assertions classified per environment | **Pass** | blocker | One test (`readyz` 503-on-unwritable-storage) only holds under a non-root runner; explicitly `skipif(os.geteuid() == 0, ...)` with a reason, not silently deleted or left falsely passing |
 | 12 | CI mirrors local loop, latest run green | **Fail (blocker)** | blocker | Zero of three upload attempts have cleared even Secret Detection. Root cause identified (stale `udl-tactics-app/` paths in `.gitlab-ci.yml`, confirmed byte-for-byte against two separate pastes of the file); fix handed to Koen, not yet landed |
-| 13 | Version stamp + structured audit line, no secret in logs | **Fail** | medium | Version stamp verified live in the container (`/version` returns 0.4.1). The audit line does not reach the log: nothing in `src/` configures logging, so `udl_tactics_app.audit` has no handler and an effective level of WARNING, and every `audit_logger.info(...)` is dropped. Confirmed twice, by a real token-authorised PATCH through the running container producing no audit output, and by probing the logger inside the image (handlers `[]`, effective level 30). The record is built correctly and sanitised; it is simply discarded. Needs a logging configuration in `build_app` |
+| 13 | Version stamp + structured audit line, no secret in logs | **Pass** | medium | Both halves verified live in the container at 0.4.2, not asserted. `/version` returns 0.4.2. The audit trail was silently dropped up to 0.4.1 (no logging configured, so the audit logger had no handler and sat at WARNING); fixed by `configure_logging()` in `build_app`. An authorised PATCH and an archive through the running container each produced exactly one bare-JSON audit line on stdout, parsable without stripping a prefix, carrying event, sanitised actor, timestamp, record id and changed fields. No duplicates. Grepped the container log for the team token: zero hits |
 | 14 | Accessibility to WCAG AA | **Pass** | medium | Fixed: label/`for` associations on every form control (were unassociated), `<main>` landmark, skip link, `aria-live` on the status message, `role="status"` on filter-result count. Computed contrast ratios for every text/background pair in use — one real failure found and fixed (`--text-faint` was 2.81:1, now 4.61:1). Structural/computed checks only; no live screen-reader pass run |
 | 15 | Surgical structure, no dead code | **Pass** | medium | `ruff` clean, one unused import removed, one blind `except Exception` (masking real errors as 429s) fixed to catch the specific exception |
 | 16 | House voice in user-facing copy | **N/A** | light | Internal analyst tool, not customer-facing copy |
@@ -41,7 +41,7 @@ One blocker, and it is not something local work can close: **the GitLab pipeline
 
 ● Blocker 1 clearing (a real green pipeline run) moves this to **Likely after fixes**.
 ● Blocker 2 is now closed: the flattened Dockerfile builds and the image serves traffic.
-● Dimension 13 returning to a pass, once the dropped audit line is fixed.
+● Dimension 13 is back to a pass: the dropped audit line is fixed and verified in-container.
 - Once both clear, re-run this check: if dimensions 9 and 10 are confirmed against the real runner (not just simulated), the band moves to **Ready**.
 
 ## Container build verification, 20 August 2026
@@ -65,11 +65,13 @@ The one thing the previous pass could not do. Recorded here so it does not have 
 ● Writes gated as designed: PATCH with no token 401, with a wrong token 401, with the right token 200.
 ● Persistence proven across a container restart: the patched note survived.
 
-**Two findings, both real, neither caused by the sandbox.**
+**Two findings the build turned up. Both now closed.**
 
-1. **The audit line is silently dropped.** Dimension 13, above. Nothing configures logging, so the audit logger has no handler and sits at WARNING, and every `audit_logger.info(...)` is discarded. A real authorised PATCH through the container produced no audit output. This would have looked fine in any test that asserts on the returned record rather than on the log.
+1. **The audit line was silently dropped. Fixed in 0.4.2.** Nothing configured logging, so the audit logger had no handler and sat at WARNING, and every `audit_logger.info(...)` was discarded. A real authorised PATCH through the 0.4.1 container produced no audit output at all, meaning the create/update/archive trail had been absent for the life of the project. `configure_logging()`, called from `build_app()`, now attaches one stdout handler to the parent `udl_tactics_app` logger, with an audit-aware formatter so audit records emit as the bare JSON line they already are. The audit logger is pinned to INFO so `LOG_LEVEL` cannot silence a compliance record.
 
-2. **The container is non-functional without the file-storage add-on.** `_resolve_data_dir()` falls back to `Path.cwd() / "data"`, which is `/app/data`, and `/app` is root-owned 0755 in the image while the process runs as 10001. With no `STORAGE_MOUNT_PATH` set, every read path returns 500 and `/readyz` correctly reports 503 with `PermissionError: /app/data`. If the add-on is guaranteed present and its mount is writable by the runtime uid, this is by design and worth stating as such. If not, the app fails closed on first deploy. Two options if it needs closing: `mkdir` and `chown 10001` an `/app/data` in the `prep` stage, or refuse to start when `STORAGE_MOUNT_PATH` is unset, which fails loudly rather than per-request.
+   Re-verified in the 0.4.2 container: a PATCH and an archive each produced exactly one parsable JSON line, no duplicates, and the team token appears nowhere in the log. Nine tests cover it, each asserting on what a real handler writes to its stream. Worth noting why the old tests missed this entirely: they asserted through `caplog`, which installs its own root handler, so the trail appeared to work under test and only under test.
+
+2. **The `/app/data` fallback is by design. Confirmed by Ash, 20 August 2026: the file-storage add-on will always be present.** `_resolve_data_dir()` falls back to `Path.cwd() / "data"`, which is `/app/data`, and `/app` is root-owned 0755 while the process runs as 10001, so with no `STORAGE_MOUNT_PATH` every read returns 500 and `/readyz` reports 503. That path is not reachable in deployment: the add-on always supplies a writable mount. No code change made. If the add-on assumption ever changes, the options are to `mkdir` and `chown 10001` an `/app/data` in the `prep` stage, or to refuse to start when `STORAGE_MOUNT_PATH` is unset, which fails loudly rather than per-request.
 
 **What still could not be verified here.** The `prep` stage's `apt-get update && apt-get -y upgrade` failed with 403 Forbidden on `deb.debian.org`, again this sandbox's egress policy, and the `|| true` swallowed it by design. So the OS patch layer applied nothing in this build and remains untested. It should work on the real runner, but treat it as unverified until a build with mirror access confirms it.
 

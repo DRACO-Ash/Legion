@@ -76,16 +76,28 @@ one, because the trailing `WORKDIR /app` adds a metadata layer after the
 flatten. The scan property still holds. Full method, the single sandbox-only
 deviation, and what remains untested are in `READINESS.md`.
 
-That build turned up two real runtime findings, both open:
-● **The audit line never reaches the log.** Nothing in `src/` configures
-  logging, so `udl_tactics_app.audit` has no handler and sits at WARNING.
-  Every `audit_logger.info(...)` is discarded. Needs a logging config in
-  `build_app`. `READINESS.md` dimension 13 is now a Fail, not a Pass.
-● **No `STORAGE_MOUNT_PATH` means no service.** The fallback is
-  `Path.cwd() / "data"`, so `/app/data`, and `/app` is root-owned while the
-  process runs as 10001. Every read returns 500 and `/readyz` reports 503.
-  Fine if the file-storage add-on is always present and writable by the
-  runtime uid; a first-deploy failure if not. Decide which, and record it.
+That build turned up two runtime findings. Both are now closed:
+● **The audit line never reached the log. Fixed in 0.4.2.** Nothing
+  configured logging, so `udl_tactics_app.audit` had no handler and sat at
+  WARNING, and every `audit_logger.info(...)` was discarded: the audit trail
+  had been absent for the life of the project. `configure_logging()` in
+  `src/app.py`, called from `build_app()`, attaches one stdout handler to the
+  parent logger, with an audit-aware formatter so audit records emit as the
+  bare JSON line they already are, and the audit logger pinned to INFO so
+  `LOG_LEVEL` cannot silence a compliance record. Verified in the running
+  container, not asserted. Do not add a second handler to the audit logger
+  itself, and do not turn propagation off: the first duplicates every line,
+  the second breaks `caplog`. Both are explained in the function's docstring.
+● **`STORAGE_MOUNT_PATH` and the `/app/data` fallback: by design.** Ash
+  confirmed on 20 August 2026 that the file-storage add-on will always be
+  present, so the unwritable `/app/data` fallback is not reachable in
+  deployment. No code change. Settled, do not relitigate.
+
+A note on why the audit gap survived so long, worth carrying into anything
+new: the tests that covered it asserted through `caplog`, which installs its
+own root handler. The trail appeared to work under test and only under test.
+If a test proves an observability behaviour, assert on what a real handler
+writes.
 
 **Still not verified:**
 ● The GitLab pipeline itself, per the blocker above.
