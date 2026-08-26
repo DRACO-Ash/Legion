@@ -66,7 +66,7 @@ tr.selected td{ background:rgba(56,95,175,.18); }
 .pill.decayed{ color:var(--green-bright); border-color:var(--green); }
 .pill.decaying{ color:var(--amber-bright); border-color:var(--amber); opacity:.75; }
 .pill.unknown{ color:var(--text-faint); border-color:var(--line); }
-.count{ font-size:11.5px; color:var(--text-faint); margin-bottom:8px; }
+.count{ display:block; font-size:11.5px; color:var(--text-faint); margin-bottom:8px; }
 
 form .field{ margin-bottom:10px; }
 form label{ display:block; font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:var(--text-faint);
@@ -83,7 +83,7 @@ form textarea{ min-height:56px; resize:vertical; }
 .btn-ghost:hover{ color:var(--text); border-color:var(--blue-2); }
 .btn-danger{ background:none; border-color:var(--china); color:var(--china-bright); }
 .btn-danger:hover{ background:rgba(192,87,74,.12); }
-.msg{ font-size:12px; margin-top:8px; min-height:16px; }
+.msg{ display:block; font-size:12px; margin-top:8px; min-height:16px; }
 .msg.error{ color:var(--china-bright); }
 .msg.ok{ color:var(--green-bright); }
 .empty{ text-align:center; padding:30px; color:var(--text-faint); font-size:13px; }
@@ -101,7 +101,7 @@ form textarea{ min-height:56px; resize:vertical; }
       <label for="tokenInput">Team token</label>
       <input type="password" id="tokenInput" placeholder="paste to enable add/edit/archive">
       <button id="tokenSave">Save</button>
-      <span class="token-status" id="tokenStatus" role="status">not set — read only</span>
+      <output class="token-status" id="tokenStatus">not set — read only</output>
     </div>
   </header>
 
@@ -125,7 +125,7 @@ form textarea{ min-height:56px; resize:vertical; }
         </select>
         <label><input type="checkbox" id="fArchived"> Include archived</label>
       </div>
-      <div class="count" id="resultCount" role="status"></div>
+      <output class="count" id="resultCount"></output>
       <div id="tableWrap"></div>
     </div>
 
@@ -168,7 +168,7 @@ form textarea{ min-height:56px; resize:vertical; }
           <button type="button" class="btn btn-ghost" id="clearBtn">Clear</button>
           <button type="button" class="btn btn-danger" id="archiveBtn" style="display:none">Archive</button>
         </div>
-        <div class="msg" id="formMsg" role="status" aria-live="polite"></div>
+        <output class="msg" id="formMsg"></output>
       </form>
     </div>
   </main>

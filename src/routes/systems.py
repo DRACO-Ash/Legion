@@ -18,6 +18,10 @@ from src.models import (
 )
 from src.security import client_key, enforce_rate_limit, enforce_team_token
 
+# One 404 detail for every "not in the catalogue" path, named once so the
+# three routes cannot drift apart (SonarQube python:S1192).
+SYSTEM_NOT_FOUND = "No system with that id"
+
 router = APIRouter(prefix="/api/systems")
 
 
@@ -53,7 +57,7 @@ async def get_system(request: Request, system_id: str):
     record = store.get(system_id)
     if record is None:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="No system with that id"
+            status_code=status.HTTP_404_NOT_FOUND, detail=SYSTEM_NOT_FOUND
         )
     return record
 
@@ -74,7 +78,7 @@ async def update_system(request: Request, system_id: str, payload: TrackedSystem
     )
     if updated is None:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="No system with that id"
+            status_code=status.HTTP_404_NOT_FOUND, detail=SYSTEM_NOT_FOUND
         )
     return updated
 
@@ -88,6 +92,6 @@ async def archive_system(request: Request, system_id: str):
     archived = store.archive(system_id, actor=client_key(request))
     if archived is None:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="No system with that id"
+            status_code=status.HTTP_404_NOT_FOUND, detail=SYSTEM_NOT_FOUND
         )
     return archived

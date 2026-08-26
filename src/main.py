@@ -9,9 +9,13 @@ import uvicorn
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", "8080"))
-    # Binding 0.0.0.0 is required by the App Store's PORT contract (the
-    # deployed container must be reachable on all interfaces for the
-    # platform's own ingress/probe). This file only runs on a laptop for
-    # local dev; the actual container entrypoint is gunicorn, invoked
-    # directly from the Dockerfile CMD, not this script.
-    uvicorn.run("src.app:app", host="0.0.0.0", port=port, reload=False)  # nosec B104
+    # Loopback by default: this script only ever runs on a laptop, where
+    # binding every interface exposes a dev server to the local network for
+    # no benefit. Set HOST explicitly to reach it from another device.
+    #
+    # The App Store's PORT contract (bind all interfaces so the platform's
+    # ingress and probes can reach the container) is met by the Dockerfile's
+    # gunicorn CMD, which is the real container entrypoint. It does not run
+    # this file.
+    host = os.environ.get("HOST", "127.0.0.1")
+    uvicorn.run("src.app:app", host=host, port=port, reload=False)
