@@ -5,6 +5,11 @@ All notable changes to this project are documented here. Format follows
 [Semantic Versioning](https://semver.org/). Pre-1.0: minor bumps may include
 breaking changes, since nothing has shipped to the App Store yet.
 
+## [0.4.3] - 2026-08-26
+
+Clear all 31 SonarQube quality-gate issues: duplicated literals named as constants (data proven unchanged), status roles expressed as <output>, and the local-dev entrypoint no longer binds all interfaces.
+
+
 ## [0.4.2] - 2026-08-20
 
 Fix the audit trail never reaching the log: configure_logging() attaches a stdout handler in build_app, audit lines emit as bare JSON and are never silenced by LOG_LEVEL.
