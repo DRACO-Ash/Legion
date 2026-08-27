@@ -1,0 +1,5 @@
+[project]
+name = "your-app"
+version = "0.1.0"
+description = "One line, plain English."
+requires-python = ">=3.12"

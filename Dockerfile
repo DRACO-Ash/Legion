@@ -9,7 +9,18 @@ RUN pip install -r requirements-runtime.txt
 
 FROM python:3.12-slim AS prep
 # Fail-open OS patch in its own layer, separate from the fail-closed strip below.
-RUN apt-get update && apt-get -y upgrade && rm -rf /var/lib/apt/lists/* || true
+# Deliberately fail-open: a blocked or unreachable package mirror must not stop
+# the build. But a build where the upgrade silently did nothing used to look
+# identical to one where it worked, so the outcome is now recorded two ways: a
+# warning on stderr for the build log, and /etc/os-patch-status inside the
+# image, which survives the flatten and can be read out of the built artefact.
+RUN if apt-get update && apt-get -y upgrade; then \
+      echo "patched" > /etc/os-patch-status; \
+    else \
+      echo "unpatched" > /etc/os-patch-status; \
+      echo "WARNING: OS patch step failed, base packages ship unpatched" >&2; \
+    fi; \
+    rm -rf /var/lib/apt/lists/*
 RUN useradd -u 10001 -r -s /usr/sbin/nologin appuser
 COPY --from=build /opt/venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH" PYTHONUNBUFFERED=1

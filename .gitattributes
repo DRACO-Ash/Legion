@@ -1,0 +1,12 @@
+# Files kept in version control but deliberately excluded from the App Store
+# upload package that `git archive` builds.
+#
+# .gitlab-ci.yml: neither application known to clear the gate ships one inside
+# its package. The file that governs the pipeline lives in the deployment
+# GitLab repository and a version upload does not update it, so a copy in the
+# package is inert at best and misleading to the next person at worst. The copy
+# stays in this repository for reference and history.
+#
+# .claude/: tooling for this repository, not part of the deployable artifact.
+.gitlab-ci.yml export-ignore
+.claude/ export-ignore
