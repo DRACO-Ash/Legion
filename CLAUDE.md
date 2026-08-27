@@ -110,7 +110,16 @@ exit as "Vulnerable dependencies found". No package is actually flagged. See
 `READINESS.md` for the full investigation, including a local run of the
 analyser against the real package that exits 0 with a valid 57-component
 SBOM, and for why that result is strong but not conclusive. Use
-`scripts/verify-dependency-scan.sh` before the next upload.
+`scripts/verify-dependency-scan.sh` only as a diagnostic: calibrated against
+three packages with known outcomes it was wrong on two, so it does not predict
+the gate and its header says so.
+
+**The `pyproject.toml` at the root is load-bearing, do not delete it.** It was
+added in 0.4.4 because it is the only root file present in both App Store
+applications known to clear Dependency Scanning (PSIRENS 1.5.3 and
+Enlightenment 0.23.3) and absent from Legion. It carries `[project]` metadata
+and deliberately no dependency list, matching their shape. `bump_version.sh`
+keeps its version in step with `src/VERSION`; do not edit that line by hand.
 
 **Still not verified:**
 ● The GitLab pipeline itself, per the blocker above.

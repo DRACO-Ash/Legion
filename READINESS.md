@@ -96,6 +96,17 @@ So the package parses cleanly, and `requirements.txt` is recognised as a proper 
 ● *A vulnerable dependency.* No report was ever produced, so nothing was flagged. `pip-audit` is clean and the SBOM builds.
 ● *The malformed-lockfile theory* carried over from another project's `DEPENDENCYSCANNING.md`. That document describes a codebase with `pyproject.toml`, `requirements.lock` and vendored JavaScript, none of which exist here, and its root cause was a `requirements.txt` whose line 2 was not the pip-compile header. Both of this repo's lockfiles carry that header on line 2, and the analyser confirms it detects the lock. That cause does not apply here.
 
+**Two known-passing packages, compared, 27 August 2026.** Ash supplied PSIRENS 1.5.3 and Enlightenment 0.23.3, both of which clear the gate. Comparing their package roots against Legion's gave the first hard differential in this investigation.
+
+**`pyproject.toml` is the only root file present in both passing packages and absent from Legion.** Everything else that differs is documentation. This fits the analyser's own source: `PackageManagerPipTools` treats `requirements.txt` as the lockfile and pairs it with a requirements-type file, listing `pyproject.toml`, `setup.cfg`, `setup.py` and `requirements.in`. Legion supplied only `requirements.in`; both passing packages supply `pyproject.toml`. Added in 0.4.4, mirroring their shape exactly: a `[project]` block with name, version, description and `requires-python`, and deliberately no dependency list, since neither passing package declares one either.
+
+The comparison also killed two theories outright:
+
+● **The lockfile-header theory is dead.** PSIRENS' `requirements.txt` opens with a hand-written banner, the very thing the other project's `DEPENDENCYSCANNING.md` blamed, and it passes. Enlightenment uses the uv header on line 1; Legion uses the pip-compile header on line 2. All three forms differ and header form does not predict the outcome.
+● **Hash-locking and `.in` files are not the discriminator.** PSIRENS ships 21 pinned packages with no hashes and no `.in` files. Enlightenment ships hashes and three `.in`/`.txt` pairs. Legion ships hashes and two pairs. Both extremes pass.
+
+**The local analyser is not a predictor, and the script says so.** Run against all three packages, GitLab's open-source `dependency-scanning` analyser disagreed with the platform on two of them: it failed PSIRENS (which passes) and passed Legion 0.4.3 (which fails). `scripts/verify-dependency-scan.sh` is therefore labelled diagnostic-only, with that calibration table in its header. It is useful for reading the parse warnings the platform swallows, and for nothing else. Treating its pass as a green light would have been exactly the kind of false confidence this project keeps paying for.
+
 **What would settle it.** The analyser's own stderr, which the platform swallows. Either the App Store's "More Details" link on the failed gate, or a re-run with `SECURE_LOG_LEVEL=debug` set in the GitLab CI file, which needs the same direct-commit access as the path fix did.
 
 **Tooling.** `scripts/verify-dependency-scan.sh` builds the analyser and runs it against a built package, printing the swallowed message and failing if no SBOM is produced. `DS_ANALYZER_BIN` reuses a prebuilt binary. Read its caveat header before treating a pass as a guarantee.

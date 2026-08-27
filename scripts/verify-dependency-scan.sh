@@ -12,13 +12,27 @@
 #
 # Requires Go and network access to gitlab.com and proxy.golang.org.
 #
-# CAVEAT, read before trusting a pass: as of 27 August 2026 the Bluestaq
-# pipeline runs an analyser identifying itself as "dependency-scan-python
-# v6.6.1", which prints a line ("Dependency files in other directories will be
-# skipped") that does not exist anywhere in this codebase. This script
-# therefore checks a closely related analyser, not the exact one the platform
-# runs. A pass here means the package parses and produces a valid SBOM; it is
-# not proof the platform's gate will pass.
+# CALIBRATION RESULT, READ THIS BEFORE TRUSTING ANY VERDICT HERE.
+#
+# This script does NOT predict the platform's gate. It was calibrated on 27
+# August 2026 against three packages whose real outcomes are known, and it was
+# wrong on two of them:
+#
+#   package                platform gate     this script
+#   PSIRENS 1.5.3          PASSED            exit 1, no SBOM
+#   Enlightenment 0.23.3   PASSED            exit 0, 27 components
+#   Legion 0.4.3           FAILED            exit 0, 57 components
+#
+# The cause is that the Bluestaq pipeline runs an analyser identifying itself
+# as "dependency-scan-python v6.6.1", which prints a line ("Dependency files in
+# other directories will be skipped") that exists nowhere in the open-source
+# dependency-scanning codebase this script builds (HEAD is v2.5.9). Different
+# tool, different verdict.
+#
+# So use this only as a DIAGNOSTIC: it prints the parse warnings and the SBOM
+# the platform swallows, which is useful for understanding how a package is
+# being classified. Never treat a pass here as evidence the gate will pass, and
+# never treat a failure here as a reason to change a package.
 
 set -euo pipefail
 
@@ -52,8 +66,8 @@ status=${PIPESTATUS[0]}
 set -e
 
 if [ "$status" -ne 0 ]; then
-  echo "FAIL: analyser exited $status. The platform would report this as"
-  echo "      'Vulnerable dependencies found' with no report attached."
+  echo "DIAGNOSTIC ONLY (see header): analyser exited $status."
+  echo "      This does NOT mean the platform gate will fail."
   exit 1
 fi
 
@@ -63,5 +77,5 @@ if [ -z "$sbom" ]; then
   exit 1
 fi
 
-echo "PASS: exit 0, SBOM $sbom written."
+echo "DIAGNOSTIC ONLY (see header): exit 0, SBOM $sbom written."
 python3 -c "import json,sys; d=json.load(open('$sbom')); print('      components:', len(d.get('components', [])), 'graph entries:', len(d.get('dependencies', [])))"

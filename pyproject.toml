@@ -1,0 +1,26 @@
+[project]
+name = "legion"
+version = "0.4.4"
+description = "UDL Tactics App: tracked Russian and Chinese ASAT/RPO satellite systems, cross-checked against live UDL data."
+requires-python = ">=3.12"
+
+# Dependencies are deliberately not declared here. They live in the pip-compile
+# inputs (requirements.in, requirements-runtime.in) and their hash-locked
+# outputs, which is what both the platform's test stage and the Dockerfile
+# install. Declaring them twice would let the two drift.
+#
+# This file exists primarily to pair with requirements.txt for GitLab's
+# Dependency Scanning analyser: its pip-tools package manager treats
+# requirements.txt as the lockfile and needs a requirements-type file
+# (pyproject.toml, setup.cfg, setup.py or requirements.in) alongside it. Both
+# App Store applications known to clear that gate, PSIRENS 1.5.3 and
+# Enlightenment 0.23.3, ship a pyproject.toml of exactly this shape, with
+# [project] metadata and no dependency list. It was the only root file present
+# in both of them and absent here. See READINESS.md for the full comparison.
+#
+# Version is kept in step with src/VERSION by scripts/bump_version.sh. Do not
+# edit it by hand.
+#
+# Test and coverage configuration stays in pytest.ini, which takes precedence
+# over this file; there is no [tool.pytest.ini_options] section here on purpose,
+# so there is only one place to look.

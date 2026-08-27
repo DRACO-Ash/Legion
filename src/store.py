@@ -23,7 +23,7 @@ import json
 import logging
 import os
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -40,7 +40,7 @@ MAX_BACKUPS = 10
 
 
 def _now_iso() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
+    return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
 
 
 def _resolve_data_dir() -> Path:
@@ -138,7 +138,7 @@ class TrackedSystemsStore:
             return
         backup_dir = path.parent / BACKUP_DIR
         backup_dir.mkdir(exist_ok=True)
-        stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%f")
+        stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%f")
         backup_path = backup_dir / f"{STORE_FILENAME}.{stamp}.bak"
         backup_path.write_bytes(path.read_bytes())
         logger.info("Backed up store to %s", backup_path.name)

@@ -30,7 +30,7 @@ if [ ! -d "$REPO_ROOT/.git" ]; then
   exit 1
 fi
 
-if [ -n "$(git -C "$REPO_ROOT" status --porcelain)" ] && [ -n "$(git -C "$REPO_ROOT" status --porcelain -- . ':!src/VERSION' ':!CHANGELOG.md')" ]; then
+if [ -n "$(git -C "$REPO_ROOT" status --porcelain)" ] && [ -n "$(git -C "$REPO_ROOT" status --porcelain -- . ':!src/VERSION' ':!CHANGELOG.md' ':!pyproject.toml')" ]; then
   echo "Error: working tree has uncommitted changes beyond VERSION/CHANGELOG. Commit or stash first." >&2
   exit 1
 fi
@@ -51,6 +51,22 @@ TMP_CHANGELOG="$(mktemp)"
   tail -n +7 "$CHANGELOG_FILE"
 } > "$TMP_CHANGELOG"
 mv "$TMP_CHANGELOG" "$CHANGELOG_FILE"
+
+# pyproject.toml carries the version too (it pairs with requirements.txt for
+# the Dependency Scanning analyser). Keep it in step here rather than by hand.
+PYPROJECT_FILE="$REPO_ROOT/pyproject.toml"
+if [ -f "$PYPROJECT_FILE" ]; then
+  python3 - "$PYPROJECT_FILE" "$NEW_VERSION" <<'PY'
+import re, sys
+path, version = sys.argv[1], sys.argv[2]
+text = open(path, encoding="utf-8").read()
+new, count = re.subn(r'(?m)^version = ".*"$', f'version = "{version}"', text, count=1)
+if count != 1:
+    sys.exit(f"Error: could not find a single version line in {path}")
+open(path, "w", encoding="utf-8").write(new)
+PY
+  git -C "$REPO_ROOT" add pyproject.toml
+fi
 
 git -C "$REPO_ROOT" add src/VERSION CHANGELOG.md
 git -C "$REPO_ROOT" commit -m "Bump version: $CURRENT_VERSION -> $NEW_VERSION
