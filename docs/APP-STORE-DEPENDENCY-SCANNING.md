@@ -178,6 +178,33 @@ If both are clean and the gate still fails, you have a tooling failure, not a
 security finding, and you should say so plainly rather than start upgrading
 packages at random.
 
+### 3.6 Generate the lockfile without annotations
+
+● **FACT.** Neither passing package carries a single `# via` annotation.
+  Enlightenment generated its lockfile with `uv pip compile ... --no-annotate`;
+  PSIRENS has no hashes and no annotations. Legion failed carrying 57 of them.
+● **INFERENCE.** The annotation is emitted as an indented comment block
+  *after* the backslash-continued `--hash` lines of the entry it describes,
+  which is a plausible hazard for a line-continuation parser. This has not been
+  proven against the platform's analyser.
+
+Match the known-passing method:
+
+```
+uv pip compile --python-version 3.12 --generate-hashes --no-annotate \
+    requirements.in -o requirements.txt
+```
+
+Regenerating this way is safe to verify: parse the old and new files and assert
+the package set, versions and hash sets are unchanged before shipping. When
+Legion did this the 57 shared packages were byte-identical in version and
+hashes; the only additions were the removal of annotations and an explicit
+`pip` pin that uv includes and pip-compile omits.
+
+**Note for anyone using the `appstore-python-gate` skill:** its `scripts/lock.sh`
+does not pass `--no-annotate`, so its canonical output carries annotations. If
+this inference holds, that script needs the flag.
+
 ## 4. What is not the cause
 
 Ruled out by direct evidence. Do not spend a cycle on any of these:
@@ -190,6 +217,11 @@ Ruled out by direct evidence. Do not spend a cycle on any of these:
   three pairs and passes.
 ● **The Python version floor.** The passing pair declare `>=3.11` and
   `>=3.12,<3.13` respectively.
+● **A missing `pyproject.toml` on its own.** Adding one with a `[project]`
+  table, which both passers have and the failing package lacked, did not clear
+  the gate. It remains necessary by the analyser's documented resolution
+  mechanism, and it was demonstrably not sufficient. Recorded here because it
+  was the leading theory for a cycle.
 
 ## 5. Diagnosing a failure
 
