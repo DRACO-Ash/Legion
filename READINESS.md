@@ -75,6 +75,31 @@ The one thing the previous pass could not do. Recorded here so it does not have 
 
 **What still could not be verified here.** The `prep` stage's `apt-get update && apt-get -y upgrade` failed with 403 Forbidden on `deb.debian.org`, again this sandbox's egress policy, and the `|| true` swallowed it by design. So the OS patch layer applied nothing in this build and remains untested. It should work on the real runner, but treat it as unverified until a build with mirror access confirms it.
 
+## Dependency Scanning, investigated 27 August 2026
+
+The pipeline's remaining red gate, and the first upload where **Container Build passed**, clearing the stale `udl-tactics-app/` path that had blocked every previous attempt. Test, SAST, Secret Detection, Dependencies and Dockerfile Lint all pass. Code Quality was **skipped**, not passed, so the 31 SonarQube fixes in 0.4.3 are shipped but still unconfirmed by the platform.
+
+**What the platform shows.** The analyser logs two INFO lines, then `exit status 1` after about eight seconds, with no SBOM and no report uploaded. No error text at all. The platform maps a non-zero exit to "Vulnerable dependencies found", so a crashed scan is presented as a finding. That mapping is why this has cost several cycles: there is nothing in the failure that names a package, because no package is involved.
+
+**What was actually tested.** GitLab's `dependency-scanning` analyser was cloned, built from source and run against the exact 0.4.3 package, twice, once with and once without a git repository present (it resolves input-file alternatives through `git ls-files`). Both runs:
+
+● exit **0**,
+● emit `pip-compile requirements.txt lock file detected`,
+● write a valid CycloneDX 1.6 SBOM, 57 components, 26 dependency-graph entries.
+
+So the package parses cleanly, and `requirements.txt` is recognised as a proper pip-compile lockfile. There is one non-fatal warning, `expected plain manifest but found pip-compile lock file`, which is the `pip` package manager declining a file the `pip-compile` package manager then handles correctly.
+
+**The limit of that result, stated plainly.** The Bluestaq pipeline runs an analyser identifying itself as `dependency-scan-python` v6.6.1. It prints `Dependency files in other directories will be skipped`, a line that exists nowhere in the `dependency-scanning` codebase (HEAD is v2.5.9). It is a different analyser. The clean local run is strong evidence the package is well-formed, not proof the platform's gate will pass.
+
+**Two theories ruled out.**
+
+● *A vulnerable dependency.* No report was ever produced, so nothing was flagged. `pip-audit` is clean and the SBOM builds.
+● *The malformed-lockfile theory* carried over from another project's `DEPENDENCYSCANNING.md`. That document describes a codebase with `pyproject.toml`, `requirements.lock` and vendored JavaScript, none of which exist here, and its root cause was a `requirements.txt` whose line 2 was not the pip-compile header. Both of this repo's lockfiles carry that header on line 2, and the analyser confirms it detects the lock. That cause does not apply here.
+
+**What would settle it.** The analyser's own stderr, which the platform swallows. Either the App Store's "More Details" link on the failed gate, or a re-run with `SECURE_LOG_LEVEL=debug` set in the GitLab CI file, which needs the same direct-commit access as the path fix did.
+
+**Tooling.** `scripts/verify-dependency-scan.sh` builds the analyser and runs it against a built package, printing the swallowed message and failing if no SBOM is produced. `DS_ANALYZER_BIN` reuses a prebuilt binary. Read its caveat header before treating a pass as a guarantee.
+
 ## Skills consulted for this pass
 
 `app-store-readiness` (this report), `toolchain-adapters` (Python command mapping), `dependencies` (lockfile standard), `testing-standards` (environment-scoped assertions), `observability-and-audit` (audit line, readiness probe), `accessibility` (audit checklist, contrast computation), `security-hardening`, `app-store-deployment`, `deploy-recipes`, `code-architecture`, `packaging`, `data-layer`, `api-and-integration`.

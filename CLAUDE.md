@@ -99,6 +99,19 @@ own root handler. The trail appeared to work under test and only under test.
 If a test proves an observability behaviour, assert on what a real handler
 writes.
 
+**Pipeline status, 27 August 2026.** Container Build now **passes**: the
+stale `udl-tactics-app/` path that blocked every upload since the beginning
+is gone. Secret Detection, Dependencies, SAST, Test and Dockerfile Lint all
+pass. Code Quality was **skipped**, not passed, so the 31 SonarQube fixes in
+0.4.3 are still unconfirmed by the platform. **Dependency Scanning is the one
+red gate**, and it fails with no error text: the analyser exits 1 after about
+eight seconds having written no SBOM, and the platform relabels any non-zero
+exit as "Vulnerable dependencies found". No package is actually flagged. See
+`READINESS.md` for the full investigation, including a local run of the
+analyser against the real package that exits 0 with a valid 57-component
+SBOM, and for why that result is strong but not conclusive. Use
+`scripts/verify-dependency-scan.sh` before the next upload.
+
 **Still not verified:**
 ● The GitLab pipeline itself, per the blocker above.
 ● The `prep` stage's OS patch layer. `apt-get update` was blocked by the
