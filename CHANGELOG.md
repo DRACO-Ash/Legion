@@ -5,6 +5,11 @@ All notable changes to this project are documented here. Format follows
 [Semantic Versioning](https://semver.org/). Pre-1.0: minor bumps may include
 breaking changes, since nothing has shipped to the App Store yet.
 
+## [0.4.4] - 2026-08-27
+
+Add pyproject.toml to pair with requirements.txt for GitLab Dependency Scanning, matching the shape of two App Store applications known to clear that gate.
+
+
 ## [0.4.3] - 2026-08-26
 
 Clear all 31 SonarQube quality-gate issues: duplicated literals named as constants (data proven unchanged), status roles expressed as <output>, and the local-dev entrypoint no longer binds all interfaces.
