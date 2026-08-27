@@ -5,6 +5,11 @@ All notable changes to this project are documented here. Format follows
 [Semantic Versioning](https://semver.org/). Pre-1.0: minor bumps may include
 breaking changes, since nothing has shipped to the App Store yet.
 
+## [0.4.5] - 2026-08-27
+
+Adopt the appstore-python-gate skill: exclude .gitlab-ci.yml and tooling from the upload package, and make the fail-open OS patch step record its outcome.
+
+
 ## [0.4.4] - 2026-08-27
 
 Add pyproject.toml to pair with requirements.txt for GitLab Dependency Scanning, matching the shape of two App Store applications known to clear that gate.
