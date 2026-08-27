@@ -5,6 +5,11 @@ All notable changes to this project are documented here. Format follows
 [Semantic Versioning](https://semver.org/). Pre-1.0: minor bumps may include
 breaking changes, since nothing has shipped to the App Store yet.
 
+## [0.4.6] - 2026-08-27
+
+Regenerate lockfiles with uv --no-annotate, matching the generation method of a package known to clear Dependency Scanning. Package set, versions and hashes unchanged.
+
+
 ## [0.4.5] - 2026-08-27
 
 Adopt the appstore-python-gate skill: exclude .gitlab-ci.yml and tooling from the upload package, and make the fail-open OS patch step record its outcome.

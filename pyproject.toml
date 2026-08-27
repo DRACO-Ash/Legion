@@ -1,6 +1,6 @@
 [project]
 name = "legion"
-version = "0.4.5"
+version = "0.4.6"
 description = "UDL Tactics App: tracked Russian and Chinese ASAT/RPO satellite systems, cross-checked against live UDL data."
 requires-python = ">=3.12"
 
