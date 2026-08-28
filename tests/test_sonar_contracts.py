@@ -79,3 +79,32 @@ def test_dev_entrypoint_does_not_hardcode_all_interfaces() -> None:
             if isinstance(node, ast.Constant) and isinstance(node.value, str)
         ]
         assert "0.0.0.0" not in literals, f"{path} hardcodes an all-interfaces bind"
+
+
+def test_error_logging_inside_a_handler_uses_exception() -> None:
+    """SonarQube: "Use logging.exception() instead."
+
+    This rule cost three upload cycles. It fired on one line added in 0.4.7,
+    and because the gate's only visible message is "Quality Gate FAILED", three
+    rounds of fixing other conditions changed nothing. Inside an except block,
+    `logger.error` discards the traceback that makes the record worth having.
+    """
+    offenders = []
+    for tree in SCANNED_TREES:
+        for path in sorted(tree.rglob("*.py")):
+            parsed = ast.parse(path.read_text(encoding="utf-8"))
+            for node in ast.walk(parsed):
+                if not isinstance(node, ast.ExceptHandler):
+                    continue
+                for call in ast.walk(node):
+                    if (
+                        isinstance(call, ast.Call)
+                        and isinstance(call.func, ast.Attribute)
+                        and call.func.attr == "error"
+                        and isinstance(call.func.value, ast.Name)
+                        and "log" in call.func.value.id
+                    ):
+                        offenders.append(f"{path.relative_to(ROOT)}:{call.lineno}")
+    assert offenders == [], (
+        f"Use logger.exception() inside an except block, not logger.error(): {offenders}"
+    )

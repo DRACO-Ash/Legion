@@ -141,7 +141,10 @@ Learned the hard way across 0.4.7 and 0.4.8. The SonarQube gate fails on any
 of these, and only the first produces anything resembling an error message:
 
 ● New issues = 0. The local mirror in `tests/test_sonar_contracts.py` covers
-  the rules that have actually fired. It must scan `tests/` as well as `src/`,
+  the rules that have actually fired, including "Use logging.exception()
+  instead", which fires on `logger.error` inside an `except` block and cost
+  three upload cycles on its own because the gate's only visible message is
+  "Quality Gate FAILED". It must scan `tests/` as well as `src/`,
   because `sonar-project.properties` sets `sonar.tests=tests`.
 ● Coverage on new code. Measure the changed lines, not the project total: a
   95% project can still ship a poorly covered diff.

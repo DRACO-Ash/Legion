@@ -93,8 +93,8 @@ class TrackedSystemsStore:
         try:
             with open(path, "r", encoding="utf-8") as fh:
                 data = json.load(fh)
-        except (OSError, json.JSONDecodeError) as exc:
-            logger.error("Store file unreadable, treating as absent: %s", exc)
+        except (OSError, json.JSONDecodeError):
+            logger.exception("Store file unreadable, treating as absent")
             return self._seed()
         return self._migrate(data)
 
@@ -217,7 +217,9 @@ class TrackedSystemsStore:
         try:
             self._read_raw()
         except (OSError, AttributeError, KeyError, TypeError, ValueError) as exc:
-            logger.error("Readiness probe could not load the store: %s", exc)
+            # logger.exception, not logger.error: inside a handler the traceback
+            # is the useful half, and it is what found the ENOSYS cause.
+            logger.exception("Readiness probe could not load the store")
             return False, f"{type(exc).__name__}: {exc}"
         return True, ""
 
