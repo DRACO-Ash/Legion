@@ -1,7 +1,8 @@
 # Dependency Scanning: passing the Bluestaq App Store gate
 
-**Portable reference. Written for Python container apps, 27 August 2026.**
-Distilled from an investigation that cost Legion four upload cycles, then
+**Portable reference. Written for Python container apps, 27 August 2026.
+RESOLVED 28 August 2026: Legion 0.4.6 passed all ten stages and deployed.**
+Distilled from an investigation that cost Legion six upload cycles, then
 resolved by comparing against two applications known to clear the gate.
 
 Fuse this into any App Store project. It is written to be read by whoever is
@@ -15,6 +16,48 @@ failure. The fastest possible summary is one line:
 
 Everything below exists to stop you spending days upgrading packages that were
 never flagged.
+
+## The answer, for anyone arriving here mid-failure
+
+**FACT.** Legion 0.4.6 cleared Dependency Scanning and every other stage. The
+only change between the failing 0.4.5 and the passing 0.4.6 was regenerating
+the lock files with `uv pip compile --generate-hashes --no-annotate`. No
+package was added, removed or upgraded: all 57 shared packages were identical
+in version and in hash set, verified by parsing both files before shipping.
+
+That single upload changed three things at once, so be precise about what is
+proven:
+
+● `# via` annotations removed, 57 to 0.
+● Lock file header changed from the pip-compile form to the uv form.
+● `pip` itself pinned, which uv includes and pip-compile omits.
+
+**INFERENCE, now with a controlled before and after on one codebase.** The
+annotations are the cause. The header form was already ruled out independently:
+PSIRENS passes with a hand-written banner. Both packages known to clear the
+gate carry zero annotations. The annotation is emitted as an indented comment
+block *after* the backslash-continued `--hash` lines of the entry it describes,
+which is the shape that breaks a line-continuation parser.
+
+**Do this first, before anything else in this document.** It is one command and
+it does not move a single version:
+
+```
+uv pip compile --python-version 3.12 --generate-hashes --no-annotate \
+    requirements.in -o requirements.txt
+```
+
+Then parse the old and new files and assert the package set, versions and hash
+sets are unchanged before you ship.
+
+**What was necessary but not sufficient.** A root `pyproject.toml` with a
+`[project]` table. Legion 0.4.5 added one and still failed. Keep it, because
+the resolution mechanism needs it and both passing packages have one, but do
+not expect it alone to clear the gate. That cost a cycle.
+
+**Still UNKNOWN, and still worth capturing.** The analyser's real error text.
+Nobody has seen it. The fix above was found by structural comparison against
+passing packages, not by reading an error message.
 
 ## How to read the confidence markers
 
@@ -67,6 +110,8 @@ real gate outcomes:
 | PSIRENS 1.5.3 | **Passed** | yes | hand-written banner | none | none |
 | Enlightenment 0.23.3 | **Passed** | yes | uv header, line 1 | yes | yes, three pairs |
 | Legion 0.4.3 | **Failed** | **no** | pip-compile header, line 2 | yes | yes, two pairs |
+| Legion 0.4.5 | **Failed** | yes | pip-compile header, line 2 | yes | yes, two pairs |
+| Legion 0.4.6 | **Passed** | yes | uv header, line 1, no annotations | yes | yes, two pairs |
 
 ● **FACT.** A file-level comparison of the three package roots found that
   `pyproject.toml` is the **only** file present in both passing packages and

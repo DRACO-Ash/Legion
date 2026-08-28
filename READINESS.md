@@ -5,7 +5,32 @@
 **Version at time of report:** 0.3.3 (`src/VERSION`); container verification run against 0.4.1, audit fix re-verified in-container at 0.4.2
 **Scope:** pre-flight estimate per `app-store-readiness`. Not the platform's binding decision.
 
-## Band: Not yet
+## Band: Ready. Shipped 28 August 2026.
+
+**Legion 0.4.6 passed all ten App Store stages and deployed.** Every dimension
+below that could only be settled by the platform is now settled by it, not by
+local approximation:
+
+● Dimension 12, the pipeline, was the sole blocker for the life of this report.
+  It is green. The stale `udl-tactics-app/` paths were fixed directly in the
+  GitLab repository.
+● Dimension 10, static analysis, is confirmed: Code Quality passed, so the 31
+  SonarQube fixes in 0.4.3 are verified by the platform rather than by the local
+  mirror of its rules.
+● Dimension 6, container hardening, is confirmed: Container Scan passed, so the
+  flattened image and the zero setuid or setgid property hold against the real
+  Anchore policy, not just against a local `find`.
+● Dimension 9 is confirmed end to end: Test, Container Build and Deploy all
+  green.
+
+Dependency Scanning, which is not a numbered dimension in the table below
+because this report predates the failure, took six upload cycles. The cause was
+pip-compile `# via` annotations in the lock file. See
+`docs/APP-STORE-DEPENDENCY-SCANNING.md`.
+
+The original assessment, retained for the record:
+
+## Band at time of writing: Not yet
 
 One blocker, and it is not something local work can close: **the GitLab pipeline has never once run a stage successfully.** Every dimension below that *can* be verified locally now passes; the ones that require the actual platform runner remain unconfirmed until the `.gitlab-ci.yml` path fix (flagged to Koen, three lines: `dockerfile:`, `base-dir:`, and the `podman build -f` line, all still pointing at a `udl-tactics-app/` subdirectory that no longer exists) lands on `main` and a version upload actually clears Secret Detection.
 

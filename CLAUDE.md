@@ -38,20 +38,28 @@ Practical implication: when the App Store submission process changes
 different mechanisms — a code/zip change here, and a direct GitLab commit
 there — and they will drift if only one happens.
 
-## Current blocker (as of this handoff)
+## Status: shipped
 
-The GitLab pipeline has **never once run a stage successfully** across
-three upload attempts. Root cause, fully diagnosed: `.gitlab-ci.yml` in the
-GitLab repo still references a `udl-tactics-app/` subdirectory that hasn't
-existed since the very first (accidentally nested) upload. Three lines are
-wrong (the Anchore `dockerfile:` input, the SonarQube `base-dir:` input,
-and the `podman build -f` line in `podman-build`). The fix has been handed
-to **Koen** (engineering lead for that repo) via Teams, asking him to either
-make the edit directly or grant write access. **Status: pending, as of this
-handoff.** Check with Ash/Koen before assuming this is resolved.
+**Legion 0.4.6 passed all ten App Store stages and deployed on 28 August 2026.**
+Secret Detection, Dependencies, SAST, Dependency Scanning, Test, Code Quality,
+Dockerfile Lint, Container Build, Container Scan and Deploy are all green. The
+application is Active.
 
-Do not re-attempt "fix the zip" for this — it's proven not to work. The fix
-has to be a direct commit to the GitLab repo's `.gitlab-ci.yml`.
+The two-repository model above still governs everything, and the stale
+`udl-tactics-app/` paths in the GitLab `.gitlab-ci.yml` were fixed directly in
+that repository, not by any change here. That remains the standing lesson: a
+change to the pipeline lands in two places by two different mechanisms.
+
+**What actually cleared Dependency Scanning**, after six upload cycles: the
+lock files were regenerated with `uv pip compile --generate-hashes
+--no-annotate`. The pip-compile `# via` annotations were the cause. No package
+version moved. A root `pyproject.toml` with a `[project]` table was necessary
+but not sufficient, proven by 0.4.5 failing with one present. Full account,
+including the two theories that died on contact, is in
+`docs/APP-STORE-DEPENDENCY-SCANNING.md`.
+
+Regenerate lock files only with `--no-annotate`. Note that the
+`appstore-python-gate` skill's own `scripts/lock.sh` omits that flag.
 
 ## What's verified vs. not
 
