@@ -5,6 +5,11 @@ All notable changes to this project are documented here. Format follows
 [Semantic Versioning](https://semver.org/). Pre-1.0: minor bumps may include
 breaking changes, since nothing has shipped to the App Store yet.
 
+## [0.4.10] - 2026-08-28
+
+Use logging.exception() inside exception handlers, the SonarQube issue that actually failed Code Quality, and guard the rule with a contract test.
+
+
 ## [0.4.9] - 2026-08-28
 
 Remove duplicated lines on new code, take new-code coverage to 100%, and correct the stale SonarQube project key.
