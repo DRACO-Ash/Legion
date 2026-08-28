@@ -36,6 +36,9 @@ audit_logger = logging.getLogger(AUDIT_LOGGER_NAME)
 SCHEMA_VERSION = 1
 STORE_FILENAME = "tracked_systems.json"
 BACKUP_DIR = "backups"
+
+# Warn once per process, not once per write, when the filesystem refuses rename.
+_RENAME_FALLBACK_WARNED = False
 MAX_BACKUPS = 10
 
 
@@ -124,11 +127,50 @@ class TrackedSystemsStore:
         return data
 
     def _write_atomic(self, data: dict[str, Any]) -> None:
+        """Persist the store, preferring an atomic rename.
+
+        `os.replace` is the right primitive on any POSIX filesystem: a reader
+        sees either the whole old store or the whole new one, never half of
+        either. Some mounted volumes do not implement rename at all. The App
+        Store's file-storage add-on returns `OSError: [Errno 38] Function not
+        implemented`, which took a live deployment to find, because the mount
+        happily accepts the write-then-delete that `probe_writable` used to do.
+        Every read then 500s while readiness reports healthy.
+
+        So try the atomic path, and if the filesystem refuses it, write the
+        payload straight over the target. That gives up atomicity, which is a
+        real loss and is logged as one. It is survivable here: `_read_raw`
+        treats an unreadable store as absent and re-seeds, and `_backup` runs
+        before every archive. A working application beats a pristine write
+        primitive on a filesystem that does not offer it.
+        """
         path = self._store_path()
         tmp = path.with_suffix(".json.tmp")
+        payload = json.dumps(data, indent=2, ensure_ascii=False)
         with open(tmp, "w", encoding="utf-8") as fh:
-            json.dump(data, fh, indent=2, ensure_ascii=False)
-        os.replace(tmp, path)  # atomic on the same filesystem
+            fh.write(payload)
+        try:
+            os.replace(tmp, path)
+        except OSError as exc:
+            # Deliberately broad: the errno varies by filesystem (ENOSYS on the
+            # App Store add-on, EXDEV and EPERM on others). If the fallback
+            # cannot write either, that error propagates and is the more
+            # actionable one, so nothing is masked.
+            global _RENAME_FALLBACK_WARNED
+            if not _RENAME_FALLBACK_WARNED:
+                logger.warning(
+                    "Atomic rename is not supported on this filesystem (%s: %s). "
+                    "Falling back to a direct write, which is not atomic.",
+                    type(exc).__name__,
+                    exc,
+                )
+                _RENAME_FALLBACK_WARNED = True
+            with open(path, "w", encoding="utf-8") as fh:
+                fh.write(payload)
+            try:
+                tmp.unlink()
+            except OSError:
+                pass
 
     def _backup(self) -> None:
         """Timestamped copy before a destructive action (archive), pruned to
@@ -162,9 +204,22 @@ class TrackedSystemsStore:
             probe_path = data_dir / ".readyz-probe"
             probe_path.write_text("ok", encoding="utf-8")
             probe_path.unlink()
-            return True, ""
         except OSError as exc:
             return False, f"{type(exc).__name__}: {exc}"
+
+        # A directory that accepts a write-then-delete can still be unusable.
+        # The App Store add-on passed exactly that check while every read
+        # returned 500, because the store's own rename hit ENOSYS. So exercise
+        # the real path as well: load the store, seeding it if it is absent.
+        # Anything this catches is a genuine "not ready", and a readiness
+        # endpoint must report a fault rather than raise one of its own, so the
+        # catch is deliberately broad and the detail is always returned.
+        try:
+            self._read_raw()
+        except Exception as exc:  # noqa: BLE001 - see comment above
+            logger.error("Readiness probe could not load the store: %s", exc)
+            return False, f"{type(exc).__name__}: {exc}"
+        return True, ""
 
     # ------------------------------------------------------------------
     # Public API

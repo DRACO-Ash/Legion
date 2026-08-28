@@ -73,9 +73,19 @@ def enforce_rate_limit(limiter: RateLimiter, request: Request) -> None:
 
 
 def enforce_team_token(request: Request, team_token: str | None) -> None:
-    """Gate a cost-incurring route. No-op if no team token is configured (local dev)."""
+    """Gate a state-changing or cost-incurring route.
+
+    Fails closed when no token is configured. This used to return early, so a
+    deployment that never set TEAM_TOKEN accepted unauthenticated writes from
+    anyone who could reach it, while the UI displayed "read only" and looked
+    safe. The UI hint is a convenience; this is the control. Set TEAM_TOKEN
+    (see .env.example) to enable writes, locally as well as in deployment.
+    """
     if not team_token:
-        return
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Writes are disabled: no team token is configured for this deployment",
+        )
     given = extract_bearer_token(request)
     if not token_matches(given, team_token):
         raise HTTPException(
