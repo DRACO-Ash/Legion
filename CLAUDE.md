@@ -135,6 +135,27 @@ keeps its version in step with `src/VERSION`; do not edit that line by hand.
   build environment's egress policy and the `|| true` swallowed it, so the
   upgrade applied nothing in that build.
 
+## The Code Quality gate has four conditions, not one
+
+Learned the hard way across 0.4.7 and 0.4.8. The SonarQube gate fails on any
+of these, and only the first produces anything resembling an error message:
+
+● New issues = 0. The local mirror in `tests/test_sonar_contracts.py` covers
+  the rules that have actually fired. It must scan `tests/` as well as `src/`,
+  because `sonar-project.properties` sets `sonar.tests=tests`.
+● Coverage on new code. Measure the changed lines, not the project total: a
+  95% project can still ship a poorly covered diff.
+● **Duplicated lines on new code.** This one has no local check and is easy to
+  trip: a new test file that copies an 11-line fixture from an existing one is
+  duplicated enough to fail on its own. Shared fixtures live in
+  `tests/conftest.py` (`make_seed_record`) for exactly this reason.
+● Security hotspots reviewed. If this is the failing condition, no upload will
+  ever fix it: a human must review them in the SonarQube user interface.
+
+The failed job uploads `sonar-quality-gate.json`, which names which condition
+failed, plus `sonar-issues.json` and `sonar-hotspots.json`. Read those first.
+The job log itself says only "Quality Gate FAILED".
+
 ## Architecture, briefly
 
 - `src/app.py` — app factory (`build_app`), CORS, two-tier rate limiting.

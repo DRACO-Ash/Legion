@@ -96,6 +96,35 @@ def make_settings(**overrides) -> Settings:
     return Settings(**base)
 
 
+def make_seed_record(**overrides) -> dict:
+    """One canonical minimal tracked-system record for tests.
+
+    Shared because the platform's SonarQube gate measures duplicated lines on
+    new code against a 3% threshold, and a copy of this literal in a new test
+    file is a duplicated block large enough to fail it on its own.
+    """
+    record = {
+        "family_id": "test-fam",
+        "family_title": "Test Family",
+        "family_sub": "sub",
+        "nation": "RU",
+        "designator": "TEST-1",
+        "catalogue_name": "TESTSAT-1",
+        "launch_year": 2020,
+        "launch_site": None,
+        "norad_id": None,
+        "regime": "LEO",
+        "delta_v": None,
+        "status": "unknown",
+        "life": None,
+        "coplanar": None,
+        "notes": None,
+        "flag": None,
+    }
+    record.update(overrides)
+    return record
+
+
 @pytest.fixture
 def fake_udl():
     return FakeUDLClient(

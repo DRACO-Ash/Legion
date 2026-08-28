@@ -22,31 +22,20 @@ from fastapi.testclient import TestClient
 from src.app import build_app
 from src.store import TrackedSystemsStore
 
-from .conftest import make_settings
+from .conftest import make_seed_record, make_settings
 
 # Named once: the platform's SonarQube gate counts duplicated literals in the
 # test tree as well as in src (sonar.tests=tests), and allows zero new issues.
 ENOSYS_MESSAGE = "Function not implemented"
 
 SEED = [
-    {
-        "family_id": "res-fam",
-        "family_title": "Resilience Family",
-        "family_sub": "sub",
-        "nation": "RU",
-        "designator": "RES-1",
-        "catalogue_name": "RESSAT-1",
-        "launch_year": 2024,
-        "launch_site": None,
-        "norad_id": None,
-        "regime": "LEO",
-        "delta_v": None,
-        "status": "unknown",
-        "life": None,
-        "coplanar": None,
-        "notes": None,
-        "flag": None,
-    }
+    make_seed_record(
+        family_id="res-fam",
+        family_title="Resilience Family",
+        designator="RES-1",
+        catalogue_name="RESSAT-1",
+        launch_year=2024,
+    )
 ]
 
 
@@ -149,3 +138,22 @@ def test_writes_fail_closed_when_no_team_token_is_configured(
         response = getattr(client, method)(path, **kwargs)
     assert response.status_code == 503
     assert "no team token" in response.json()["detail"]
+
+
+def test_write_survives_a_temp_file_that_cannot_be_removed(
+    store, tmp_path, no_rename, monkeypatch
+):
+    """The fallback must not fail because cleanup did.
+
+    Covers the last uncovered branch of the write path: a filesystem that
+    refuses rename may equally refuse unlink, and the store is written by then.
+    """
+    import pathlib
+
+    def refuse_unlink(self, *args, **kwargs):
+        raise OSError(errno.EPERM, "Operation not permitted")
+
+    monkeypatch.setattr(pathlib.Path, "unlink", refuse_unlink)
+    records = store.list()
+    assert len(records) == 1
+    assert (tmp_path / "tracked_systems.json").exists()

@@ -19,25 +19,16 @@ import pytest
 from src.app import _STDOUT_HANDLER_NAME, configure_logging
 from src.store import APP_LOGGER_NAME, AUDIT_LOGGER_NAME, TrackedSystemsStore
 
+from .conftest import make_seed_record
+
 SEED = [
-    {
-        "family_id": "log-fam",
-        "family_title": "Logging Family",
-        "family_sub": "sub",
-        "nation": "RU",
-        "designator": "LOG-1",
-        "catalogue_name": "LOGSAT-1",
-        "launch_year": 2021,
-        "launch_site": None,
-        "norad_id": None,
-        "regime": "LEO",
-        "delta_v": None,
-        "status": "unknown",
-        "life": None,
-        "coplanar": None,
-        "notes": None,
-        "flag": None,
-    }
+    make_seed_record(
+        family_id="log-fam",
+        family_title="Logging Family",
+        designator="LOG-1",
+        catalogue_name="LOGSAT-1",
+        launch_year=2021,
+    )
 ]
 
 
