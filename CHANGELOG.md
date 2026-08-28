@@ -5,6 +5,11 @@ All notable changes to this project are documented here. Format follows
 [Semantic Versioning](https://semver.org/). Pre-1.0: minor bumps may include
 breaking changes, since nothing has shipped to the App Store yet.
 
+## [0.4.7] - 2026-08-28
+
+Survive a filesystem without rename, make readiness exercise the real read path, and fail closed on writes when no team token is configured.
+
+
 ## [0.4.6] - 2026-08-27
 
 Regenerate lockfiles with uv --no-annotate, matching the generation method of a package known to clear Dependency Scanning. Package set, versions and hashes unchanged.
