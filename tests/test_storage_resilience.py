@@ -19,11 +19,14 @@ import os
 import pytest
 from fastapi.testclient import TestClient
 
-from src import store as store_module
 from src.app import build_app
 from src.store import TrackedSystemsStore
 
 from .conftest import make_settings
+
+# Named once: the platform's SonarQube gate counts duplicated literals in the
+# test tree as well as in src (sonar.tests=tests), and allows zero new issues.
+ENOSYS_MESSAGE = "Function not implemented"
 
 SEED = [
     {
@@ -50,10 +53,9 @@ SEED = [
 @pytest.fixture
 def no_rename(monkeypatch):
     """Simulate the add-on mount: rename is not implemented at all."""
-    monkeypatch.setattr(store_module, "_RENAME_FALLBACK_WARNED", False)
 
     def refuse(src, dst):
-        raise OSError(errno.ENOSYS, "Function not implemented", str(src))
+        raise OSError(errno.ENOSYS, ENOSYS_MESSAGE, str(src))
 
     monkeypatch.setattr(os, "replace", refuse)
 
@@ -95,12 +97,12 @@ def test_readiness_fails_when_the_store_cannot_be_loaded(store, monkeypatch):
     """The probe used to pass while every read returned 500."""
 
     def broken(self):
-        raise OSError(errno.ENOSYS, "Function not implemented")
+        raise OSError(errno.ENOSYS, ENOSYS_MESSAGE)
 
     monkeypatch.setattr(TrackedSystemsStore, "_read_raw", broken)
     writable, detail = store.probe_writable()
     assert writable is False
-    assert "ENOSYS" in detail or "Function not implemented" in detail
+    assert "ENOSYS" in detail or ENOSYS_MESSAGE in detail
 
 
 def test_readiness_passes_when_the_store_loads(store):
@@ -116,7 +118,7 @@ def test_readyz_reports_not_ready_when_reads_would_fail(
     monkeypatch.setenv("STORAGE_MOUNT_PATH", str(tmp_path))
 
     def broken(self):
-        raise OSError(errno.ENOSYS, "Function not implemented")
+        raise OSError(errno.ENOSYS, ENOSYS_MESSAGE)
 
     monkeypatch.setattr(TrackedSystemsStore, "_read_raw", broken)
     app = build_app(settings=make_settings(), udl_client=fake_udl)

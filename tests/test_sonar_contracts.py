@@ -15,7 +15,12 @@ import collections
 import pathlib
 import re
 
-SRC = pathlib.Path(__file__).resolve().parent.parent / "src"
+ROOT = pathlib.Path(__file__).resolve().parent.parent
+SRC = ROOT / "src"
+# sonar-project.properties sets sonar.tests=tests, so the platform counts
+# duplicated literals in the test tree too. Scanning only src let a new issue
+# through in 0.4.7 and failed the gate.
+SCANNED_TREES = (SRC, ROOT / "tests")
 INDEX_HTML = SRC / "static" / "index.html"
 
 # S1192 fires on a literal repeated three or more times. Empirically the
@@ -41,8 +46,9 @@ def _duplicated_literals(path: pathlib.Path) -> dict[str, list[int]]:
 def test_no_duplicated_string_literals() -> None:
     """SonarQube python:S1192."""
     offenders = {
-        f"{path.relative_to(SRC.parent)}:{min(lines)}": (text[:60], len(lines))
-        for path in sorted(SRC.rglob("*.py"))
+        f"{path.relative_to(ROOT)}:{min(lines)}": (text[:60], len(lines))
+        for tree in SCANNED_TREES
+        for path in sorted(tree.rglob("*.py"))
         for text, lines in _duplicated_literals(path).items()
     }
     assert offenders == {}, (

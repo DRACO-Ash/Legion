@@ -36,9 +36,6 @@ audit_logger = logging.getLogger(AUDIT_LOGGER_NAME)
 SCHEMA_VERSION = 1
 STORE_FILENAME = "tracked_systems.json"
 BACKUP_DIR = "backups"
-
-# Warn once per process, not once per write, when the filesystem refuses rename.
-_RENAME_FALLBACK_WARNED = False
 MAX_BACKUPS = 10
 
 
@@ -83,6 +80,8 @@ class StoreValidationError(Exception):
 class TrackedSystemsStore:
     def __init__(self, seed_records: list[dict[str, Any]] | None = None):
         self._seed_records = seed_records or []
+        # Warn once per store, not once per write, if rename is unsupported.
+        self._warned_rename_fallback = False
 
     def _store_path(self) -> Path:
         return _resolve_data_dir() / STORE_FILENAME
@@ -156,21 +155,20 @@ class TrackedSystemsStore:
             # App Store add-on, EXDEV and EPERM on others). If the fallback
             # cannot write either, that error propagates and is the more
             # actionable one, so nothing is masked.
-            global _RENAME_FALLBACK_WARNED
-            if not _RENAME_FALLBACK_WARNED:
+            if not self._warned_rename_fallback:
                 logger.warning(
                     "Atomic rename is not supported on this filesystem (%s: %s). "
                     "Falling back to a direct write, which is not atomic.",
                     type(exc).__name__,
                     exc,
                 )
-                _RENAME_FALLBACK_WARNED = True
+                self._warned_rename_fallback = True
             with open(path, "w", encoding="utf-8") as fh:
                 fh.write(payload)
             try:
                 tmp.unlink()
-            except OSError:
-                pass
+            except OSError as cleanup_error:
+                logger.debug("Could not remove %s: %s", tmp, cleanup_error)
 
     def _backup(self) -> None:
         """Timestamped copy before a destructive action (archive), pruned to
@@ -211,12 +209,14 @@ class TrackedSystemsStore:
         # The App Store add-on passed exactly that check while every read
         # returned 500, because the store's own rename hit ENOSYS. So exercise
         # the real path as well: load the store, seeding it if it is absent.
-        # Anything this catches is a genuine "not ready", and a readiness
-        # endpoint must report a fault rather than raise one of its own, so the
-        # catch is deliberately broad and the detail is always returned.
+        # A readiness endpoint must report a fault rather than raise one of its
+        # own, so this catches the shapes a broken store actually produces, each
+        # reproduced against the built container: OSError for the add-on's
+        # missing rename, and AttributeError, KeyError, TypeError or ValueError
+        # for a store file that is valid JSON of the wrong shape.
         try:
             self._read_raw()
-        except Exception as exc:  # noqa: BLE001 - see comment above
+        except (OSError, AttributeError, KeyError, TypeError, ValueError) as exc:
             logger.error("Readiness probe could not load the store: %s", exc)
             return False, f"{type(exc).__name__}: {exc}"
         return True, ""
