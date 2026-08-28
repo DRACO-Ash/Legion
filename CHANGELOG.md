@@ -5,6 +5,11 @@ All notable changes to this project are documented here. Format follows
 [Semantic Versioning](https://semver.org/). Pre-1.0: minor bumps may include
 breaking changes, since nothing has shipped to the App Store yet.
 
+## [0.4.8] - 2026-08-28
+
+Clear the SonarQube issues introduced by the 0.4.7 fix, and widen the local S1192 mirror to the tests tree, which is where it missed one.
+
+
 ## [0.4.7] - 2026-08-28
 
 Survive a filesystem without rename, make readiness exercise the real read path, and fail closed on writes when no team token is configured.
