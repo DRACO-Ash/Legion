@@ -14,6 +14,15 @@
   --line:#27406e; --line-soft:#1f3358;
   --text:#e6ecf6; --text-dim:#9fb2cf; --text-faint:#7d8fb3;
   --radius:3px; --motion:150ms;
+  /* Categorical series slots, in fixed order, for the family charts. These
+     are the dark steps of the validated reference palette, checked against
+     this panel surface (#152238): lightness band, chroma floor, adjacent
+     colour-vision-deficiency separation, normal-vision separation and
+     contrast all pass. The order is the colour-blind-safety mechanism, so
+     do not reorder them, and never add a ninth: a family past eight members
+     lists the remainder instead of reusing a colour. */
+  --series-1:#3987e5; --series-2:#d95926; --series-3:#199e70; --series-4:#c98500;
+  --series-5:#d55181; --series-6:#008300; --series-7:#9085e9; --series-8:#e66767;
 }
 @media (prefers-reduced-motion: reduce){ *{ transition-duration:.001ms !important; } }
 *{ box-sizing:border-box; }
@@ -68,6 +77,19 @@ tr.selected td{ background:rgba(56,95,175,.18); }
 .pill.unknown{ color:var(--text-faint); border-color:var(--line); }
 .count{ display:block; font-size:11.5px; color:var(--text-faint); margin-bottom:8px; }
 
+/* Sortable column headers. The whole header is a button so the control is
+   reachable by keyboard and announced as one; aria-sort on the th is what a
+   screen reader uses to say which column the order follows. */
+th.sortable{ padding:0; }
+th.sortable button{ display:flex; align-items:center; gap:5px; width:100%; background:none; border:0;
+  color:inherit; font:inherit; text-transform:inherit; letter-spacing:inherit; cursor:pointer;
+  padding:6px 8px; text-align:left; }
+th.sortable button:hover{ color:var(--blue-2); }
+th.sortable button:focus-visible{ outline:2px solid var(--blue-2); outline-offset:-2px; }
+th[aria-sort="ascending"] button, th[aria-sort="descending"] button{ color:var(--text); }
+.sort-mark{ font-size:9px; color:var(--text-faint); }
+th[aria-sort="ascending"] .sort-mark, th[aria-sort="descending"] .sort-mark{ color:var(--blue-2); }
+
 form .field{ margin-bottom:10px; }
 form label{ display:block; font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:var(--text-faint);
   margin-bottom:4px; }
@@ -87,6 +109,37 @@ form textarea{ min-height:56px; resize:vertical; }
 .msg.error{ color:var(--china-bright); }
 .msg.ok{ color:var(--green-bright); }
 .empty{ text-align:center; padding:30px; color:var(--text-faint); font-size:13px; }
+
+/* Family movement charts */
+.chart-panel{ grid-column:1 / -1; }
+.chart-controls{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:6px; }
+.chart-controls select{ background:var(--surface-3); border:1px solid var(--line); color:var(--text);
+  padding:7px 9px; border-radius:var(--radius); font-family:inherit; font-size:12.5px; }
+.chart-block{ margin-top:22px; }
+.chart-block h3{ font-size:13px; margin:0; color:var(--text); font-weight:600; }
+.chart-unit{ font-size:11px; color:var(--text-faint); font-weight:400; }
+.chart-note{ font-size:11.5px; color:var(--text-faint); margin:4px 0 10px; max-width:80ch; line-height:1.5; }
+.chart-figure{ position:relative; }
+svg.chart{ width:100%; height:auto; display:block; overflow:visible; }
+.legend{ display:flex; flex-wrap:wrap; gap:6px 20px; margin-top:12px; }
+.legend-item{ display:flex; align-items:center; gap:7px; font-size:11.5px; color:var(--text-dim); }
+.legend-key{ width:16px; height:3px; border-radius:2px; flex:none; }
+.legend-value{ color:var(--text); font-variant-numeric:tabular-nums; }
+.legend-note{ color:var(--text-faint); font-style:italic; }
+.tip{ position:absolute; pointer-events:none; z-index:5; background:var(--surface); border:1px solid var(--line);
+  border-radius:var(--radius); padding:6px 9px; font-size:11.5px; color:var(--text); white-space:nowrap;
+  opacity:0; transition:opacity var(--motion); }
+.tip.on{ opacity:1; }
+.tip-name{ font-weight:600; }
+.tip-value{ font-variant-numeric:tabular-nums; }
+.table-view{ margin-top:12px; }
+.table-view summary{ cursor:pointer; font-size:11.5px; color:var(--text-dim); }
+.table-view summary:hover{ color:var(--text); }
+.chart-table{ max-height:320px; overflow:auto; margin-top:8px; }
+.chart-table td{ font-variant-numeric:tabular-nums; }
+.skipped{ font-size:11.5px; color:var(--text-faint); margin-top:12px; }
+/* Refetching holds the previous render rather than flashing a skeleton. */
+.stale{ opacity:.45; }
 </style>
 </head>
 <body>
@@ -171,14 +224,46 @@ form textarea{ min-height:56px; resize:vertical; }
         <output class="msg" id="formMsg"></output>
       </form>
     </div>
+
+    <section class="panel chart-panel">
+      <h2>Family movement</h2>
+      <div class="chart-controls">
+        <label class="visually-hidden" for="cFamily">Family</label>
+        <select id="cFamily"><option value="">Select a family…</option></select>
+        <label class="visually-hidden" for="cWindow">Window</label>
+        <select id="cWindow">
+          <option value="7">Last 7 days</option>
+          <option value="30" selected>Last 30 days</option>
+          <option value="90">Last 90 days</option>
+          <option value="180">Last 180 days</option>
+        </select>
+        <label class="visually-hidden" for="cMode">Scale</label>
+        <select id="cMode">
+          <option value="absolute">Absolute position</option>
+          <option value="relative">Relative to window start</option>
+        </select>
+        <button type="button" class="btn btn-ghost" id="cReload">Reload</button>
+      </div>
+      <output class="msg" id="chartMsg">Pick a family to plot its element sets. Reads live UDL data, so a team token is required.</output>
+      <div id="charts"></div>
+    </section>
   </main>
 </div>
 
-
 <script>
 const STATUS_LABEL = {onorbit:"On-orbit", decayed:"Decayed/Deorbited", decaying:"Decaying", unknown:"Unconfirmed"};
+// Operational order, not alphabetical: sorting by status is a question about
+// what is still flying, so on-orbit leads and unconfirmed trails.
+const STATUS_ORDER = ["onorbit", "decaying", "decayed", "unknown"];
+const EM_DASH = "—";
 let selectedId = null;
 let currentList = [];
+
+function esc(value){
+  return String(value ?? "").replace(/[&<>"']/g, ch => (
+    {"&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;"}[ch]
+  ));
+}
 
 function token(){ return sessionStorage.getItem("teamToken") || ""; }
 function authHeaders(){
@@ -226,9 +311,71 @@ function renderNationRegimeOptions(list){
   const keepNation = nationSel.value, keepRegime = regimeSel.value;
   const nations = [...new Set(list.map(s => s.nation).filter(Boolean))].sort();
   const regimes = [...new Set(list.map(s => s.regime).filter(Boolean))].sort();
-  nationSel.innerHTML = '<option value="">All nations</option>' + nations.map(n => `<option value="${n}">${n}</option>`).join("");
-  regimeSel.innerHTML = '<option value="">All regimes</option>' + regimes.map(r => `<option value="${r}">${r}</option>`).join("");
+  nationSel.innerHTML = '<option value="">All nations</option>' + nations.map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join("");
+  regimeSel.innerHTML = '<option value="">All regimes</option>' + regimes.map(r => `<option value="${esc(r)}">${esc(r)}</option>`).join("");
   nationSel.value = keepNation; regimeSel.value = keepRegime;
+}
+
+/* ---------------------------------------------------------------------------
+   Sorting
+
+   Sorting happens in the browser against the rows already fetched, so it
+   costs no request and holds through a re-render (selecting a row redraws the
+   table). `key: null` means catalogue order, which is the seeded chronology
+   and the order the table opens in.
+--------------------------------------------------------------------------- */
+const SORT_COLUMNS = [
+  {key:"catalogue_name", label:"Name",     type:"text"},
+  {key:"nation",         label:"Nation",   type:"text"},
+  {key:"regime",         label:"Regime",   type:"text"},
+  {key:"launch_year",    label:"Launch",   type:"number"},
+  {key:"status",         label:"Status",   type:"status"},
+  {key:"norad_id",       label:"NORAD ID", type:"number"},
+];
+const COLLATOR = new Intl.Collator("en-GB", {numeric:true, sensitivity:"base"});
+let sortState = {key:null, direction:1};
+
+function sortValue(record, column){
+  const raw = record[column.key];
+  if(raw === null || raw === undefined || raw === "") return null;
+  if(column.type === "number"){
+    const parsed = Number(raw);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  if(column.type === "status"){
+    const rank = STATUS_ORDER.indexOf(raw);
+    return rank === -1 ? STATUS_ORDER.length : rank;
+  }
+  return String(raw);
+}
+
+function sortRows(list){
+  if(!sortState.key) return list;
+  const column = SORT_COLUMNS.find(c => c.key === sortState.key);
+  if(!column) return list;
+  return [...list].sort((a, b) => {
+    const left = sortValue(a, column), right = sortValue(b, column);
+    // A blank always sorts last, whichever way the column is pointing: a row
+    // with no NORAD ID is missing data, not the smallest value.
+    if(left === null && right === null) return COLLATOR.compare(a.catalogue_name, b.catalogue_name);
+    if(left === null) return 1;
+    if(right === null) return -1;
+    const order = typeof left === "string" ? COLLATOR.compare(left, right) : left - right;
+    // Ties break on name so the order is total, and so a re-render cannot
+    // shuffle equal rows around.
+    return order !== 0 ? order * sortState.direction : COLLATOR.compare(a.catalogue_name, b.catalogue_name);
+  });
+}
+
+function sortHeader(){
+  return SORT_COLUMNS.map(column => {
+    const active = sortState.key === column.key;
+    const ariaSort = active ? (sortState.direction === 1 ? "ascending" : "descending") : "none";
+    const mark = active ? (sortState.direction === 1 ? "▲" : "▼") : "↕";
+    return `<th class="sortable" aria-sort="${ariaSort}">
+      <button type="button" data-sort="${column.key}">${esc(column.label)}<span class="sort-mark" aria-hidden="true">${mark}</span></button>
+    </th>`;
+  }).join("");
 }
 
 function renderTable(list){
@@ -237,21 +384,31 @@ function renderTable(list){
     wrap.innerHTML = '<div class="empty">No systems match the current filters.</div>';
     return;
   }
+  const rows = sortRows(list);
   wrap.innerHTML = `<table>
-    <thead><tr><th>Name</th><th>Nation</th><th>Regime</th><th>Launch</th><th>Status</th><th>NORAD ID</th></tr></thead>
-    <tbody>${list.map(s => `
-      <tr class="row ${s.id === selectedId ? "selected" : ""}" data-id="${s.id}">
-        <td>${s.catalogue_name}${s.archived ? " <em>(archived)</em>" : ""}</td>
-        <td><span class="badge ${s.nation === "RU" ? "rus" : s.nation === "CN" ? "chn" : "other"}">${s.nation}</span></td>
-        <td>${s.regime}</td>
-        <td>${s.launch_year}</td>
-        <td><span class="pill ${s.status}">${STATUS_LABEL[s.status] || s.status}</span></td>
-        <td>${s.norad_id || "—"}</td>
+    <thead><tr>${sortHeader()}</tr></thead>
+    <tbody>${rows.map(s => `
+      <tr class="row ${s.id === selectedId ? "selected" : ""}" data-id="${esc(s.id)}">
+        <td>${esc(s.catalogue_name)}${s.archived ? " <em>(archived)</em>" : ""}</td>
+        <td><span class="badge ${s.nation === "RU" ? "rus" : s.nation === "CN" ? "chn" : "other"}">${esc(s.nation)}</span></td>
+        <td>${esc(s.regime)}</td>
+        <td>${esc(s.launch_year)}</td>
+        <td><span class="pill ${esc(s.status)}">${esc(STATUS_LABEL[s.status] || s.status)}</span></td>
+        <td>${esc(s.norad_id || EM_DASH)}</td>
       </tr>`).join("")}
     </tbody>
   </table>`;
   wrap.querySelectorAll("tr.row").forEach(tr => {
     tr.addEventListener("click", () => selectSystem(tr.getAttribute("data-id")));
+  });
+  wrap.querySelectorAll("button[data-sort]").forEach(button => {
+    button.addEventListener("click", () => {
+      const key = button.getAttribute("data-sort");
+      sortState = sortState.key === key
+        ? {key, direction: -sortState.direction}
+        : {key, direction: 1};
+      renderTable(currentList);
+    });
   });
 }
 
@@ -323,6 +480,7 @@ document.getElementById("systemForm").addEventListener("submit", async (e) => {
     msg.textContent = selectedId ? "Saved." : "Added.";
     msg.className = "msg ok";
     await loadSystems();
+    await loadFamilies();
   } else {
     const body = await res.json().catch(() => ({}));
     msg.textContent = "Error: " + (body.detail || res.status);
@@ -345,6 +503,7 @@ document.getElementById("archiveBtn").addEventListener("click", async () => {
     msg.className = "msg ok";
     document.getElementById("clearBtn").click();
     await loadSystems();
+    await loadFamilies();
   } else {
     msg.textContent = "Error archiving.";
     msg.className = "msg error";
@@ -356,8 +515,392 @@ document.getElementById("archiveBtn").addEventListener("click", async () => {
   document.getElementById(id).addEventListener("change", loadSystems);
 });
 
+/* ---------------------------------------------------------------------------
+   Family movement charts
+
+   One chart per metric, never two scales on one plot. A GEO object is drawn
+   on mean longitude and a LEO object on mean motion; a family holding both
+   gets two charts stacked, because sharing an axis between them would invent
+   a relationship that is not in the data.
+
+   Colour comes from the server's colour_index, which is the satellite's fixed
+   position in its family, so filtering the catalogue never repaints a
+   surviving line. Eight slots, never cycled.
+--------------------------------------------------------------------------- */
+const CHART_W = 900, CHART_H = 300;
+const PAD = {top:16, right:112, bottom:36, left:62};
+const PLOT_W = CHART_W - PAD.left - PAD.right;
+const PLOT_H = CHART_H - PAD.top - PAD.bottom;
+// Read from the stylesheet rather than repeated here, so the palette has one
+// definition and the SVG cannot drift from the CSS.
+const CSS = getComputedStyle(document.documentElement);
+function cssColour(name){ return CSS.getPropertyValue(name).trim(); }
+const SERIES_SLOTS = 8;
+const SERIES_COLOURS = Array.from({length: SERIES_SLOTS}, (_, i) => cssColour(`--series-${i + 1}`));
+const GRID = cssColour("--line-soft");
+const AXIS_TEXT = cssColour("--text-faint");
+const SURFACE = cssColour("--surface-2");
+const LONGITUDE_METRIC = "mean_longitude";
+const HIT_RADIUS = 26;
+const LABEL_CLEARANCE = 14;
+const DAY_MS = 86400000;
+
+function colourFor(index){ return SERIES_COLOURS[index % SERIES_COLOURS.length]; }
+
+/* Absolute or relative.
+
+   A GEO family can be spread across 200 degrees of the belt, and on that
+   scale a satellite's three degrees of drift is a flat line. Re-basing every
+   series to its own first value in the window puts them on one comparable
+   scale - the standard move for series of different offsets, and the only
+   way the class's *movement* is legible. Absolute stays the default because
+   it is the un-transformed truth and answers the other question: where is
+   this class parked. */
+let chartMode = "absolute";
+let lastPayload = null;
+
+function plotted(series, isLongitude){
+  const values = series.points.map(point => point.value);
+  if(chartMode !== "relative" || values.length === 0) return values;
+  const base = values[0];
+  return values.map(value => isLongitude ? wrapDegrees(value - base) : value - base);
+}
+
+function wrapDegrees(value){ return ((value + 180) % 360 + 360) % 360 - 180; }
+
+function decimalsFor(range){
+  if(range >= 10) return 1;
+  if(range >= 1) return 2;
+  if(range >= 0.1) return 3;
+  if(range >= 0.01) return 4;
+  return 5;
+}
+
+function decimalsForStep(step){
+  if(step >= 1) return 0;
+  return Math.min(6, Math.ceil(-Math.log10(step)));
+}
+
+function niceTicks(lo, hi, target){
+  const raw = (hi - lo) / target;
+  const magnitude = Math.pow(10, Math.floor(Math.log10(raw)));
+  const normalised = raw / magnitude;
+  const step = (normalised >= 5 ? 10 : normalised >= 2 ? 5 : normalised >= 1 ? 2 : 1) * magnitude;
+  const ticks = [];
+  for(let value = Math.ceil(lo / step) * step; value <= hi + step * 1e-9; value += step){
+    ticks.push(Number(value.toFixed(10)));
+  }
+  return {ticks, step};
+}
+
+function formatDate(ms, withTime){
+  const date = new Date(ms);
+  const day = date.toLocaleDateString("en-GB", {day:"numeric", month:"short", timeZone:"UTC"});
+  if(!withTime) return day;
+  const time = date.toLocaleTimeString("en-GB", {hour:"2-digit", minute:"2-digit", timeZone:"UTC"});
+  return `${day} ${time}`;
+}
+
+function formatEpoch(iso){
+  return new Date(iso).toISOString().replace("T", " ").slice(0, 16) + "Z";
+}
+
+function withUnit(value, unit){
+  // A degree sign sits tight against the number; a word unit needs the space.
+  return unit.startsWith("°") ? `${value}${unit}` : `${value} ${unit}`;
+}
+
+function seriesSummary(series, decimals, unit){
+  const parts = [];
+  if(series.latest_value !== null && series.latest_value !== undefined){
+    parts.push(`<span class="legend-value">${esc(withUnit(series.latest_value.toFixed(decimals), unit))}</span>`);
+  }
+  if(series.drift_deg_per_day !== null && series.drift_deg_per_day !== undefined){
+    const drift = series.drift_deg_per_day;
+    parts.push(`<span class="legend-value">${drift >= 0 ? "+" : ""}${esc(drift.toFixed(3))}°/day</span>`);
+  }
+  if(series.note) parts.push(`<span class="legend-note">${esc(series.note)}</span>`);
+  return parts.join(" · ");
+}
+
+function chartMarkup(chart, index){
+  const isLongitude = chart.metric === LONGITUDE_METRIC;
+  const relative = chartMode === "relative";
+  const unit = relative && isLongitude ? "°" : chart.unit;
+  const prepared = chart.series
+    .map(series => ({
+      series,
+      values: plotted(series, isLongitude),
+      times: series.points.map(point => Date.parse(point.epoch)),
+    }))
+    .filter(entry => entry.values.length > 0);
+
+  let svg = '<div class="empty">No element sets in this window for any member of this family.</div>';
+  let hits = [];
+  let decimals = 2;
+
+  if(prepared.length > 0){
+    const values = prepared.flatMap(entry => entry.values);
+    const times = prepared.flatMap(entry => entry.times);
+    let lo = Math.min(...values), hi = Math.max(...values);
+    const spread = (hi - lo) || Math.max(Math.abs(hi) * 0.001, isLongitude ? 0.5 : 0.001);
+    lo -= spread * 0.12; hi += spread * 0.12;
+    let xMin = Math.min(...times), xMax = Math.max(...times);
+    if(xMax === xMin){ xMin -= DAY_MS / 2; xMax += DAY_MS / 2; }
+    decimals = Math.min(decimalsFor(hi - lo), 4);
+
+    const sx = t => PAD.left + ((t - xMin) / (xMax - xMin)) * PLOT_W;
+    const sy = v => PAD.top + PLOT_H - ((v - lo) / (hi - lo)) * PLOT_H;
+
+    const {ticks, step} = niceTicks(lo, hi, 5);
+    const tickDecimals = decimalsForStep(step);
+    const grid = ticks.map(value => `
+      <line x1="${PAD.left}" y1="${sy(value).toFixed(2)}" x2="${PAD.left + PLOT_W}" y2="${sy(value).toFixed(2)}" stroke="${GRID}" stroke-width="1"/>
+      <text x="${PAD.left - 10}" y="${(sy(value) + 3.5).toFixed(2)}" text-anchor="end" font-size="10" fill="${AXIS_TEXT}" style="font-variant-numeric:tabular-nums">${esc(value.toFixed(tickDecimals))}</text>`).join("");
+
+    const withTime = (xMax - xMin) < 2 * DAY_MS;
+    const xTicks = [0, 0.25, 0.5, 0.75, 1].map(fraction => {
+      const at = xMin + (xMax - xMin) * fraction;
+      const anchor = fraction === 0 ? "start" : fraction === 1 ? "end" : "middle";
+      return `<text x="${sx(at).toFixed(2)}" y="${CHART_H - 14}" text-anchor="${anchor}" font-size="10" fill="${AXIS_TEXT}">${esc(formatDate(at, withTime))}</text>`;
+    }).join("");
+
+    const ends = prepared.map(entry => ({
+      entry,
+      x: sx(entry.times[entry.times.length - 1]),
+      y: sy(entry.values[entry.values.length - 1]),
+    })).sort((a, b) => a.y - b.y);
+    // Direct labels only where they will not collide. Where lines converge the
+    // legend carries identity instead: nudging labels apart detaches them from
+    // their line and reads as noise.
+    let lastLabelY = -Infinity;
+    ends.forEach(end => {
+      end.label = end.y - lastLabelY >= LABEL_CLEARANCE;
+      if(end.label) lastLabelY = end.y;
+    });
+
+    const marks = ends.map(end => {
+      const {entry} = end;
+      const colour = colourFor(entry.series.colour_index);
+      const coords = entry.values.map((value, i) => ({x: sx(entry.times[i]), y: sy(value)}));
+      coords.forEach((coord, i) => hits.push({
+        x: coord.x, y: coord.y, colour,
+        name: entry.series.catalogue_name,
+        epoch: entry.series.points[i].epoch,
+        value: entry.values[i],
+        absolute: entry.series.points[i].value,
+      }));
+      let path = "";
+      if(coords.length > 1){
+        const segments = [];
+        let current = [];
+        coords.forEach((coord, i) => {
+          // A track crossing the antimeridian jumps 360 degrees. Breaking the
+          // line there is honest; sweeping it across the plot would not be.
+          if(i > 0 && isLongitude && Math.abs(entry.values[i] - entry.values[i - 1]) > 180){
+            segments.push(current); current = [];
+          }
+          current.push(`${coord.x.toFixed(2)},${coord.y.toFixed(2)}`);
+        });
+        segments.push(current);
+        const d = segments.filter(segment => segment.length > 1).map(segment => "M" + segment.join("L")).join(" ");
+        if(d) path = `<path d="${d}" fill="none" stroke="${colour}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`;
+      }
+      const dot = `<circle cx="${end.x.toFixed(2)}" cy="${end.y.toFixed(2)}" r="4" fill="${colour}" stroke="${SURFACE}" stroke-width="2"/>`;
+      const label = end.label
+        ? `<text x="${(end.x + 10).toFixed(2)}" y="${(end.y + 3.5).toFixed(2)}" font-size="10.5" fill="${AXIS_TEXT}">${esc(entry.series.catalogue_name)}</text>`
+        : "";
+      return path + dot + label;
+    }).join("");
+
+    const caption = relative
+      ? `${chart.title} relative to each satellite's first element set in this window`
+      : chart.title;
+    svg = `<svg class="chart" viewBox="0 0 ${CHART_W} ${CHART_H}" role="img" aria-label="${esc(caption)}, one line per family member. The table below carries the same values.">
+      ${grid}
+      <line x1="${PAD.left}" y1="${PAD.top + PLOT_H}" x2="${PAD.left + PLOT_W}" y2="${PAD.top + PLOT_H}" stroke="${GRID}" stroke-width="1"/>
+      ${xTicks}
+      ${marks}
+      <circle id="focus-${index}" r="7" fill="none" stroke="none" stroke-width="2"/>
+    </svg>`;
+  }
+
+  const legend = chart.series.map(series => `
+    <span class="legend-item">
+      <span class="legend-key" style="background:${colourFor(series.colour_index)}"></span>
+      <span>${esc(series.catalogue_name)}</span>
+      ${seriesSummary(series, decimals, chart.unit)}
+    </span>`).join("");
+
+  const rows = prepared.flatMap(entry => entry.series.points.map((point, i) => `
+    <tr>
+      <td>${esc(entry.series.catalogue_name)}</td>
+      <td>${esc(entry.series.norad_id)}</td>
+      <td>${esc(formatEpoch(point.epoch))}</td>
+      <td>${esc(point.value.toFixed(decimals))}</td>
+      ${relative ? `<td>${esc(entry.values[i].toFixed(decimals))}</td>` : ""}
+    </tr>`));
+  const table = `
+    <details class="table-view">
+      <summary>Table view — every plotted value (${rows.length})</summary>
+      <div class="chart-table">
+        <table>
+          <thead><tr>
+            <th>Satellite</th><th>NORAD ID</th><th>Epoch (UTC)</th>
+            <th>${esc(chart.title)} (${esc(chart.unit)})</th>
+            ${relative ? `<th>Change (${esc(unit)})</th>` : ""}
+          </tr></thead>
+          <tbody>${rows.join("")}</tbody>
+        </table>
+      </div>
+    </details>`;
+
+  const subtitle = relative ? " · change since the start of the window" : "";
+  return {
+    html: `<div class="chart-block">
+      <h3>${esc(chart.title)} <span class="chart-unit">${esc(unit)}${esc(subtitle)}</span></h3>
+      <p class="chart-note">${esc(chart.description)}</p>
+      <div class="chart-figure" id="figure-${index}">${svg}<div class="tip" id="tip-${index}"></div></div>
+      <div class="legend">${legend}</div>
+      ${table}
+    </div>`,
+    hits,
+    decimals,
+    unit,
+    relative,
+    figureId: `figure-${index}`,
+  };
+}
+
+function attachHover(block, index, absoluteUnit){
+  const figure = document.getElementById(block.figureId);
+  const svg = figure.querySelector("svg");
+  if(!svg || block.hits.length === 0) return;
+  const tip = document.getElementById(`tip-${index}`);
+  const focus = document.getElementById(`focus-${index}`);
+
+  const hide = () => { tip.classList.remove("on"); focus.setAttribute("stroke", "none"); };
+
+  svg.addEventListener("mousemove", event => {
+    const box = svg.getBoundingClientRect();
+    const x = (event.clientX - box.left) * (CHART_W / box.width);
+    const y = (event.clientY - box.top) * (CHART_H / box.height);
+    let nearest = null, best = HIT_RADIUS;
+    block.hits.forEach(hit => {
+      const distance = Math.hypot(hit.x - x, hit.y - y);
+      if(distance < best){ best = distance; nearest = hit; }
+    });
+    if(!nearest){ hide(); return; }
+    focus.setAttribute("cx", nearest.x);
+    focus.setAttribute("cy", nearest.y);
+    focus.setAttribute("stroke", nearest.colour);
+    const sign = nearest.value >= 0 && block.relative ? "+" : "";
+    const shown = withUnit(`${sign}${nearest.value.toFixed(block.decimals)}`, block.unit);
+    const absolute = block.relative
+      ? `<br><span class="tip-value">${esc(withUnit(nearest.absolute.toFixed(block.decimals), absoluteUnit))} absolute</span>`
+      : "";
+    tip.innerHTML = `<span class="tip-name">${esc(nearest.name)}</span><br>
+      <span class="tip-value">${esc(shown)}</span>${absolute}<br>
+      ${esc(formatEpoch(nearest.epoch))}`;
+    tip.classList.add("on");
+    tip.style.left = `${(nearest.x / CHART_W) * box.width + 14}px`;
+    tip.style.top = `${(nearest.y / CHART_H) * box.height - 10}px`;
+  });
+  svg.addEventListener("mouseleave", hide);
+}
+
+function renderCharts(payload){
+  const host = document.getElementById("charts");
+  if(payload.charts.length === 0){
+    host.innerHTML = '<div class="empty">No member of this family has a NORAD ID to look up.</div>';
+    return;
+  }
+  const blocks = payload.charts.map((chart, index) => chartMarkup(chart, index));
+  const skipped = payload.skipped.length
+    ? `<p class="skipped">Not charted: ${payload.skipped.map(entry => `${esc(entry.catalogue_name)} (${esc(entry.reason)})`).join("; ")}.</p>`
+    : "";
+  host.innerHTML = blocks.map(block => block.html).join("") + skipped;
+  blocks.forEach((block, index) => attachHover(block, index, payload.charts[index].unit));
+}
+
+async function loadFamilies(){
+  const res = await fetch("/api/systems");
+  if(!res.ok) return;
+  const body = await res.json();
+  const families = new Map();
+  body.systems.forEach(system => {
+    const entry = families.get(system.family_id) || {title: system.family_title, count: 0};
+    entry.count += 1;
+    families.set(system.family_id, entry);
+  });
+  const select = document.getElementById("cFamily");
+  const keep = select.value;
+  const options = [...families.entries()]
+    .sort((a, b) => COLLATOR.compare(a[1].title, b[1].title))
+    .map(([id, entry]) => `<option value="${esc(id)}">${esc(entry.title)} (${entry.count})</option>`)
+    .join("");
+  select.innerHTML = '<option value="">Select a family…</option>' + options;
+  select.value = keep;
+}
+
+const CHART_ERRORS = {
+  401: "Set the team token above: element sets come from UDL and the lookup is gated.",
+  429: "Too many requests just now. Wait a moment and reload.",
+  502: "UDL did not answer. Try again, or check the UDL status.",
+};
+
+async function loadFamilyCharts(){
+  const familyId = document.getElementById("cFamily").value;
+  const msg = document.getElementById("chartMsg");
+  const host = document.getElementById("charts");
+  if(!familyId){
+    host.innerHTML = "";
+    msg.textContent = "Pick a family to plot its element sets.";
+    msg.className = "msg";
+    return;
+  }
+  const params = {family_id: familyId, window_days: document.getElementById("cWindow").value};
+  msg.textContent = "Loading element sets…";
+  msg.className = "msg";
+  host.classList.add("stale");
+  let res;
+  try{
+    res = await fetch("/api/udl/family-elements?" + qs(params), {headers: authHeaders()});
+  } catch {
+    host.classList.remove("stale");
+    msg.textContent = "Could not reach the server.";
+    msg.className = "msg error";
+    return;
+  }
+  host.classList.remove("stale");
+  if(!res.ok){
+    const body = await res.json().catch(() => ({}));
+    msg.textContent = CHART_ERRORS[res.status] || body.detail || `Could not load element sets (${res.status}).`;
+    msg.className = "msg error";
+    return;
+  }
+  lastPayload = await res.json();
+  const payload = lastPayload;
+  renderCharts(payload);
+  const depth = payload.source === "elset-history"
+    ? "full history"
+    : payload.source === "elset-latest" ? "latest element set only" : payload.source;
+  msg.textContent = `${payload.family_title} · last ${payload.window_days} days · ${depth} · generated ${formatEpoch(payload.generated_at)}`;
+  msg.className = "msg";
+}
+
+document.getElementById("cFamily").addEventListener("change", loadFamilyCharts);
+document.getElementById("cWindow").addEventListener("change", loadFamilyCharts);
+document.getElementById("cReload").addEventListener("click", loadFamilyCharts);
+// Switching scale is a redraw of data already fetched, never another UDL call.
+document.getElementById("cMode").addEventListener("change", () => {
+  chartMode = document.getElementById("cMode").value;
+  if(lastPayload) renderCharts(lastPayload);
+});
+
 refreshTokenStatus();
 loadSystems();
+loadFamilies();
 </script>
 </body>
 </html>

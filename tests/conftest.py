@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 
 from src.app import build_app
 from src.config import Settings
+from src.orbits import parse_epoch
 from src.udl_client import UDLNotConfigured
 
 
@@ -17,10 +18,17 @@ class FakeUDLClient:
         configured: bool = True,
         satellites: list[dict] | None = None,
         raise_error: Exception | None = None,
+        elset_history: dict[str, list[dict]] | None = None,
+        history_supported: bool = True,
     ):
         self._configured = configured
         self._satellites = satellites if satellites is not None else []
         self._raise_error = raise_error
+        # Keyed by satNo. `history_supported=False` reproduces UDL answering
+        # 4xx for /udl/elset/history, which is the fallback path the charts
+        # have to survive, since that endpoint is an inference.
+        self._elset_history = elset_history or {}
+        self._history_supported = history_supported
         self.calls: list[dict] = []
 
     @property
@@ -72,6 +80,19 @@ class FakeUDLClient:
             if needle in str(e.get("commonName", "")).strip().casefold()
         ]
 
+    async def get_elset_history(self, sat_no: str, *, since):
+        self.calls.append({"op": "get_elset_history", "sat_no": sat_no, "since": since})
+        self._check()
+        if not self._history_supported:
+            return None
+        records = self._elset_history.get(str(sat_no), [])
+        return [
+            record
+            for record in records
+            if parse_epoch(record.get("epoch")) is None
+            or parse_epoch(record.get("epoch")) >= since
+        ]
+
     async def get_elset(self, sat_no: str):
         self.calls.append({"op": "get_elset", "sat_no": sat_no})
         self._check()
@@ -120,6 +141,29 @@ def make_seed_record(**overrides) -> dict:
         "coplanar": None,
         "notes": None,
         "flag": None,
+    }
+    record.update(overrides)
+    return record
+
+
+def make_elset(**overrides) -> dict:
+    """One canonical UDL element set for tests.
+
+    Shared for the same reason as make_seed_record: the platform measures
+    duplicated lines on new code, and an eight-key literal copied into a
+    second test file is a duplicated block large enough to fail the gate on
+    its own. Values describe a near-geostationary object so that the default
+    is charted on mean longitude.
+    """
+    record = {
+        "satNo": "41838",
+        "epoch": "2026-08-01T00:00:00.000000Z",
+        "inclination": 0.06,
+        "eccentricity": 0.0002,
+        "raan": 80.0,
+        "argOfPerigee": 120.0,
+        "meanAnomaly": 200.0,
+        "meanMotion": 1.0027379,
     }
     record.update(overrides)
     return record

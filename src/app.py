@@ -18,7 +18,9 @@ from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from src._version import __version__
+from src.cache import TTLCache
 from src.config import Settings, load_settings
+from src.family_elements import CACHE_TTL_SECONDS
 from src.routes import health, systems, udl, ui
 from src.security import RateLimiter, enforce_rate_limit
 from src.seed_data import SEED_RECORDS
@@ -138,6 +140,9 @@ def build_app(
         password=settings.udl_password,
         timeout_seconds=settings.udl_timeout_seconds,
     )
+    # One family chart is one UDL call per member, so an analyst clicking
+    # between families would re-fetch the same element sets within seconds.
+    app.state.elset_cache = TTLCache(ttl_seconds=CACHE_TTL_SECONDS)
     app.state.strict_limiter = RateLimiter(
         limit=STRICT_LIMIT_PER_MINUTE, window_seconds=60.0
     )

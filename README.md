@@ -79,11 +79,51 @@ dependency to `requirements-runtime.txt`; add a new test-only dependency to
 | `GET /api/udl/jco-hrr/{sat_no}?window_hours=` | Bearer team token | Look up one JCO HRR entry by satNo |
 | `GET /api/udl/elset/{sat_no}` | Bearer team token | Latest element set for a satNo |
 | `GET /api/udl/clash-check?window_hours=` | Bearer team token | Resolves the COSMOS-2612/2613/2614 NORAD 68762 clash against live UDL |
+| `GET /api/udl/family-elements?family_id=&window_days=` | Bearer team token | Element-set tracks for every catalogued member of one family, ready to chart |
 
-Auth is a shared bearer token (`TEAM_TOKEN`), compared in constant time. Unset
-locally, all write routes run open (loopback-only assumption); set it before
-hosting for a team, together with `ALLOWED_ORIGIN` (the app refuses to start
-on a wildcard origin with a token set).
+Auth is a shared bearer token (`TEAM_TOKEN`), compared in constant time. It
+fails closed: with no token configured, every write and every UDL route
+answers 503 rather than running open. Set it, together with `ALLOWED_ORIGIN`
+(the app refuses to start on a wildcard origin with a token set), before the
+app is of any use beyond reading the catalogue.
+
+## Reading the catalogue
+
+Every column in the catalogue table sorts: click a heading once for ascending,
+again for descending. Launch year and NORAD ID sort numerically, status sorts
+by operational order (on-orbit, decaying, decayed, unconfirmed) rather than
+alphabetically, and a record with no value in the sorted column always lands at
+the bottom rather than at whichever end the sort is pointing. Sorting happens in
+the browser against the rows already fetched, so it costs no request and holds
+through filtering.
+
+## Family movement charts
+
+The panel below the catalogue plots a whole family's element sets together,
+which is the only scale at which a class's behaviour is visible: one satellite
+drifting means little, six of them drifting the same way is a pattern.
+
+- **GEO members are charted on mean longitude**, derived from the element set
+  as `RAAN + argOfPerigee + meanAnomaly - GMST(epoch)`. UDL carries no
+  longitude field, so this is an approximation - sound for a near-circular,
+  near-equatorial orbit, which is what station-keeping means in practice.
+  Good for drift, station-keeping and one object closing on another; not for
+  conjunction assessment.
+- **Everything else is charted on mean motion**, in revolutions per day,
+  exactly as UDL reports it. A step change is an orbit change; a steady slope
+  is decay.
+- A satellite catalogued as GEO but no longer moving like one - a decayed or
+  manoeuvred object - moves to the mean-motion chart automatically, because a
+  longitude derived from a non-synchronous orbit is a meaningless number that
+  still reads like a position.
+- The two never share an axis. A family holding both kinds of object gets two
+  charts stacked.
+- **Absolute** shows where the class is parked. **Relative to window start**
+  re-bases each satellite to its own first element set, which is what makes
+  drift legible when a family is spread across 200 degrees of the belt.
+  Switching between them redraws data already fetched; it costs no UDL call.
+- Each chart carries a legend with each satellite's latest value and drift
+  rate, a hover tooltip, and a table view holding every plotted value.
 
 ## Credentials
 
@@ -112,6 +152,19 @@ Not done in this build session. The remaining steps, per your org's
   Fine for a first release; revisit if this ever runs multi-replica.
 - `/udl/elset` lookups assume the first list item is the most recent element
   set; unconfirmed against live UDL.
+- The chart history comes from `/udl/elset/history` with a `satNo` and an
+  `epoch` range filter. UDL publishes a `/history` sub-resource on its
+  collections as a general pattern, but this specific path and these
+  parameters are inference, not verified fact. If UDL answers 4xx the app
+  falls back to the single latest element set, so the chart still draws - one
+  point per satellite instead of a track. `/readyz` will not tell you which
+  happened; the line under the chart controls will.
+- Charts carry at most eight satellites, the number of colours in the
+  validated categorical palette. A ninth would be indistinguishable from an
+  existing line under colour-vision deficiency, so a larger family lists the
+  remainder as "not charted" instead. No seeded family is that large.
+- Element sets are cached in-process for two minutes per satellite, per
+  worker, so switching between families does not re-run the same lookups.
 - The JSON store is single-writer per process (per data-layer's decision
   rule) - fine for a handful of analysts, but move to the Postgres add-on
   if concurrent writers or relational queries become a real need.

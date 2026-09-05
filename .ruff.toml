@@ -1,0 +1,6 @@
+# Dev-time only, and deliberately not part of the upload package (see
+# .gitattributes). The one rule here exists because `ruff format .` at the
+# repository root rewrote the vendored appstore-python-gate skill's own
+# scripts: they are a package this repository carries, not code it owns, and a
+# formatter reflowing them makes a diff nobody asked for.
+extend-exclude = [".claude"]

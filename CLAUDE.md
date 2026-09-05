@@ -176,6 +176,14 @@ The job log itself says only "Quality Gate FAILED".
   delete, backed up before every archive, schema-versioned.
 - `src/routes/systems.py` — CRUD API. Reads public, writes gated by a
   shared bearer token (`TEAM_TOKEN`).
+- `src/orbits.py` — the orbital derivations behind the charts: epoch
+  parsing, Julian date, GMST (IAU 1982), GEO mean longitude, drift rate,
+  and the regime-to-metric rule. Pure functions, stdlib only.
+- `src/family_elements.py` — assembles one family's element sets into
+  chart-ready series. Owns the fan-out to UDL, the per-satellite failure
+  handling and the colour assignment.
+- `src/cache.py` — a small in-process TTL cache so a family chart does not
+  re-ask UDL for element sets it fetched seconds ago.
 - `src/static/index.html` — the admin UI served at `GET /`. Single file,
   vanilla JS, fetches the API directly.
 - `src/seed_data.py` — the 49 systems from `Red_ASAT_Systems.xlsx`,
@@ -184,6 +192,39 @@ The job log itself says only "Quality Gate FAILED".
 - Credentials: env vars first (`UDL_USERNAME`/`UDL_PASSWORD`), falling back
   to `~/.config/phase_offset/credentials.ini` `[udl]` for local dev only —
   never present inside the built container.
+
+## The family movement charts: rules that must hold
+
+Added in 0.5.0. Four things are load-bearing and easy to undo by accident:
+
+● **Mean longitude is an approximation, and the UI says so.** UDL has no
+  longitude field; it is derived as `RAAN + argOfPerigee + meanAnomaly -
+  GMST(epoch)`, which holds for a near-circular, near-equatorial orbit. It is
+  good for drift and station-keeping, not for conjunction assessment. Do not
+  quietly promote it to fact anywhere.
+● **`/udl/elset/history` is INFERENCE, not FACT.** CONTEXT-001's LEARNED
+  register documents neither the path nor a `satNo`/`epoch` filter on it; it
+  is a pattern-match against UDL's general `/history` convention. The client
+  therefore treats a 4xx as "not available here" and falls back to the latest
+  element set, while a 5xx or a timeout still raises. Confirm the endpoint
+  against a live pull before trusting a chart's history depth.
+● **One metric, one axis, always.** GEO objects are charted on mean
+  longitude, everything else on mean motion, and the two never share a plot.
+  A dual-axis chart invents a correlation that is not in the data. A family
+  holding both gets two charts.
+● **Colour follows the satellite, never its position in the result.** The
+  server sends a `colour_index` fixed by the family's launch-order member
+  list, so filtering never repaints a surviving line. The palette is the
+  validated eight-slot dark set, held once in CSS custom properties and read
+  from there by the chart code; the order is the colour-vision-deficiency
+  safety mechanism. Never reorder it, and never add a ninth: a family past
+  eight lists the remainder as "not charted". If the palette ever changes,
+  re-run the dataviz skill's `validate_palette.js` against the panel surface
+  (`#152238`) first.
+
+`tests/test_ui_contracts.py` pins the parts of this that are checkable from
+Python, including that every path the UI fetches exists in the app's OpenAPI
+schema, and that catalogue values are escaped before reaching the markup.
 
 ## Working in this repo
 

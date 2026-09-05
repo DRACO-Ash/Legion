@@ -4,10 +4,12 @@ import logging
 
 from fastapi import APIRouter, HTTPException, Request, status
 
+from src.family_elements import build_family_charts, clamp_window_days
 from src.models import (
     ClashCandidate,
     ClashCheckResponse,
     ElsetRecord,
+    FamilyElementsResponse,
     JCOHRRRecord,
     SearchResponse,
 )
@@ -26,6 +28,8 @@ router = APIRouter(prefix="/api/udl")
 CLASH_CANDIDATES = ["COSMOS-2612", "COSMOS-2613", "COSMOS-2614"]
 CLASH_SOURCE_NORAD_ID = "68762"
 
+UDL_NOT_CONFIGURED_DETAIL = "UDL is not configured"
+
 
 def _gate(request: Request) -> None:
     settings = request.app.state.settings
@@ -37,7 +41,7 @@ def _to_generic_error(exc: Exception) -> HTTPException:
     if isinstance(exc, UDLNotConfigured):
         return HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="UDL is not configured",
+            detail=UDL_NOT_CONFIGURED_DETAIL,
         )
     if isinstance(exc, UDLError):
         return HTTPException(
@@ -186,3 +190,48 @@ async def clash_check(request: Request, window_hours: int | None = None):
     return ClashCheckResponse(
         summary=summary, window_hours=window_hours, candidates=candidates
     )
+
+
+@router.get("/family-elements", response_model=FamilyElementsResponse)
+async def family_elements(
+    request: Request, family_id: str, window_days: int | None = None
+):
+    """Element-set tracks for every catalogued member of one family.
+
+    The catalogue supplies the membership and the NORAD IDs; UDL supplies the
+    element sets. The family, not the filtered catalogue view, defines the
+    series: a chart of a class is only meaningful with the whole class on it,
+    so a nation or status filter in the UI narrows the table without silently
+    narrowing the chart.
+    """
+    _gate(request)
+    client = request.app.state.udl_client
+    if not client.configured:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=UDL_NOT_CONFIGURED_DETAIL,
+        )
+
+    store = request.app.state.systems_store
+    members = [
+        record
+        for record in store.list(include_archived=False)
+        if record.get("family_id") == family_id
+    ]
+    if not members:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No catalogued systems in that family",
+        )
+
+    try:
+        return await build_family_charts(
+            client=client,
+            cache=getattr(request.app.state, "elset_cache", None),
+            family_id=family_id,
+            family_title=str(members[0].get("family_title") or family_id),
+            members=members,
+            window_days=clamp_window_days(window_days),
+        )
+    except (UDLError, UDLNotConfigured) as exc:
+        raise _to_generic_error(exc) from exc

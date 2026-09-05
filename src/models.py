@@ -141,3 +141,54 @@ class ClashCheckResponse(BaseModel):
     summary: str
     window_hours: int
     candidates: list[ClashCandidate]
+
+
+class ElementPoint(BaseModel):
+    """One element set reduced to the single number the chart plots."""
+
+    epoch: str
+    value: float
+
+
+class FamilySeries(BaseModel):
+    """One satellite's track within a family chart."""
+
+    catalogue_name: str
+    norad_id: str
+    regime: str
+    status: str
+    archived: bool
+    # Position in the family's stable member ordering, so a satellite keeps
+    # the same colour whichever chart it lands in and whichever members are
+    # filtered out. Colour follows the entity, never its rank in the result.
+    colour_index: int
+    source: str
+    points: list[ElementPoint]
+    latest_value: float | None = None
+    drift_deg_per_day: float | None = None
+    note: str | None = None
+
+
+class FamilyChart(BaseModel):
+    """Every series in a family that shares one metric, and so one y-axis."""
+
+    metric: str
+    title: str
+    unit: str
+    description: str
+    series: list[FamilySeries]
+
+
+class FamilyMemberSkipped(BaseModel):
+    catalogue_name: str
+    reason: str
+
+
+class FamilyElementsResponse(BaseModel):
+    family_id: str
+    family_title: str
+    window_days: int
+    generated_at: str
+    source: str
+    charts: list[FamilyChart]
+    skipped: list[FamilyMemberSkipped]

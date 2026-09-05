@@ -7,6 +7,8 @@
 # package is inert at best and misleading to the next person at worst. The copy
 # stays in this repository for reference and history.
 #
-# .claude/: tooling for this repository, not part of the deployable artifact.
+# .claude/ and .ruff.toml: tooling for this repository, not part of the
+# deployable artifact.
 .gitlab-ci.yml export-ignore
 .claude/ export-ignore
+.ruff.toml export-ignore

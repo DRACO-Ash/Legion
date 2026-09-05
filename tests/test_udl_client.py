@@ -1,9 +1,13 @@
+from datetime import UTC, datetime
+
 import httpx
 import pytest
 import respx
 
 from src.udl_client import (
+    ELSET_HISTORY_CAP,
     ENDPOINT_ELSET,
+    ENDPOINT_ELSET_HISTORY,
     ENDPOINT_NOTIFICATION,
     UDLClient,
     UDLError,
@@ -225,6 +229,84 @@ async def test_get_elset_unexpected_shape_raises_udl_error(client):
         with pytest.raises(UDLError):
             await client.get_elset("68762")
     await client.aclose()
+
+
+SINCE = datetime(2026, 8, 1, tzinfo=UTC)
+
+
+@pytest.mark.anyio
+async def test_get_elset_history_sends_satno_and_an_epoch_range(client):
+    """The trailing-Z microsecond form is what UDL wants for an epoch filter."""
+    with respx.mock(base_url=BASE_URL) as mock:
+        route = mock.get(ENDPOINT_ELSET_HISTORY).mock(
+            return_value=httpx.Response(200, json=[{"satNo": "43874"}])
+        )
+        await client.get_elset_history("43874", since=SINCE)
+    request_url = route.calls[0].request.url
+    assert request_url.params["satNo"] == "43874"
+    assert request_url.params["epoch"] == ">2026-08-01T00:00:00.000000Z"
+    await client.aclose()
+
+
+@pytest.mark.anyio
+async def test_get_elset_history_caps_a_runaway_response(client):
+    payload = [{"satNo": "43874", "epoch": str(index)} for index in range(3000)]
+    with respx.mock(base_url=BASE_URL) as mock:
+        mock.get(ENDPOINT_ELSET_HISTORY).mock(
+            return_value=httpx.Response(200, json=payload)
+        )
+        records = await client.get_elset_history("43874", since=SINCE)
+    assert len(records) == ELSET_HISTORY_CAP
+    await client.aclose()
+
+
+@pytest.mark.anyio
+async def test_get_elset_history_drops_non_object_entries(client):
+    with respx.mock(base_url=BASE_URL) as mock:
+        mock.get(ENDPOINT_ELSET_HISTORY).mock(
+            return_value=httpx.Response(200, json=[{"satNo": "43874"}, "junk", None])
+        )
+        records = await client.get_elset_history("43874", since=SINCE)
+    assert records == [{"satNo": "43874"}]
+    await client.aclose()
+
+
+@pytest.mark.anyio
+async def test_a_4xx_means_fall_back_not_fail(client):
+    """The history endpoint is an inference. A 404 or 403 says "not available
+    here", and the caller drops to the latest element set instead."""
+    with respx.mock(base_url=BASE_URL) as mock:
+        mock.get(ENDPOINT_ELSET_HISTORY).mock(return_value=httpx.Response(404))
+        assert await client.get_elset_history("43874", since=SINCE) is None
+    await client.aclose()
+
+
+@pytest.mark.anyio
+async def test_a_5xx_is_a_real_outage_and_raises(client):
+    with respx.mock(base_url=BASE_URL) as mock:
+        mock.get(ENDPOINT_ELSET_HISTORY).mock(return_value=httpx.Response(503))
+        with pytest.raises(UDLError) as raised:
+            await client.get_elset_history("43874", since=SINCE)
+    assert raised.value.status_code == 503
+    await client.aclose()
+
+
+@pytest.mark.anyio
+async def test_get_elset_history_unexpected_shape_raises_udl_error(client):
+    with respx.mock(base_url=BASE_URL) as mock:
+        mock.get(ENDPOINT_ELSET_HISTORY).mock(
+            return_value=httpx.Response(200, json={"not": "a list"})
+        )
+        with pytest.raises(UDLError):
+            await client.get_elset_history("43874", since=SINCE)
+    await client.aclose()
+
+
+@pytest.mark.anyio
+async def test_get_elset_history_not_configured_raises(unconfigured_client):
+    with pytest.raises(UDLNotConfigured):
+        await unconfigured_client.get_elset_history("43874", since=SINCE)
+    await unconfigured_client.aclose()
 
 
 @pytest.fixture
