@@ -20,9 +20,15 @@ class FakeUDLClient:
         raise_error: Exception | None = None,
         elset_history: dict[str, list[dict]] | None = None,
         history_supported: bool = True,
+        hrr: list[dict] | None = None,
     ):
         self._configured = configured
         self._satellites = satellites if satellites is not None else []
+        # The JCO HRR feed, which is where a satellite's rank comes from.
+        # Defaults to `satellites` so the older tests that put ranked feed
+        # entries there still work; pass it separately when the same fake also
+        # has to serve element sets, which carry no rank.
+        self._hrr = hrr
         self._raise_error = raise_error
         # Keyed by satNo. `history_supported=False` reproduces UDL answering
         # 4xx for /udl/elset/history, which is the fallback path the charts
@@ -47,7 +53,7 @@ class FakeUDLClient:
     async def fetch_jco_hrr(self, *, window_hours: int = 24):
         self.calls.append({"op": "fetch_jco_hrr", "window_hours": window_hours})
         self._check()
-        return list(self._satellites)
+        return list(self._hrr if self._hrr is not None else self._satellites)
 
     async def find_by_common_name(self, common_name: str, *, window_hours: int = 24):
         self.calls.append(
@@ -80,12 +86,14 @@ class FakeUDLClient:
             if needle in str(e.get("commonName", "")).strip().casefold()
         ]
 
-    async def get_elset_history(self, sat_no: str, *, since):
+    async def get_elset_history(self, sat_no: str, *, since=None):
         self.calls.append({"op": "get_elset_history", "sat_no": sat_no, "since": since})
         self._check()
         if not self._history_supported:
             return None
         records = self._elset_history.get(str(sat_no), [])
+        if since is None:
+            return list(records)
         return [
             record
             for record in records

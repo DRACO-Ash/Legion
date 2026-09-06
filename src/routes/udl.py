@@ -203,6 +203,9 @@ async def family_elements(
     series: a chart of a class is only meaningful with the whole class on it,
     so a nation or status filter in the UI narrows the table without silently
     narrowing the chart.
+
+    Only objects at JCO HRR rank 0 to 3 are pulled. `window_days=0` asks for
+    the full history UDL holds rather than a trailing window.
     """
     _gate(request)
     client = request.app.state.udl_client
@@ -232,6 +235,7 @@ async def family_elements(
             family_title=str(members[0].get("family_title") or family_id),
             members=members,
             window_days=clamp_window_days(window_days),
+            hrr_window_hours=request.app.state.settings.udl_jco_hrr_window_hours,
         )
     except (UDLError, UDLNotConfigured) as exc:
         raise _to_generic_error(exc) from exc

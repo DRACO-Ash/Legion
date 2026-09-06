@@ -60,13 +60,22 @@ def _recent_elset(sat_no: str, days_ago: int) -> dict:
     )
 
 
+# Ranks 0 to 3 are the band the chart pulls for; make_settings' HRR window is
+# what the route asks the feed for.
+TRUSTED_RANK = 1
+
+
 @pytest.fixture
 def family_udl() -> FakeUDLClient:
     return FakeUDLClient(
         elset_history={
             "43874": [_recent_elset("43874", 3), _recent_elset("43874", 1)],
             "58204": [_recent_elset("58204", 2)],
-        }
+        },
+        hrr=[
+            {"commonName": "TJS-3", "satNo": "43874", "rank": TRUSTED_RANK},
+            {"commonName": "TJS-10", "satNo": "58204", "rank": TRUSTED_RANK},
+        ],
     )
 
 
@@ -167,3 +176,56 @@ def test_a_total_udl_outage_is_a_502(tmp_path, monkeypatch, auth_headers) -> Non
             PATH, params={"family_id": FAMILY_ID}, headers=auth_headers
         )
     assert response.status_code == 502
+
+
+def test_a_rank_outside_the_band_is_named_under_the_chart(
+    tmp_path, monkeypatch, auth_headers
+) -> None:
+    """The analyst sees why an object is missing, not just that it is."""
+    monkeypatch.setenv("STORAGE_MOUNT_PATH", str(tmp_path))
+    udl = FakeUDLClient(
+        elset_history={
+            "43874": [_recent_elset("43874", 1)],
+            "58204": [_recent_elset("58204", 1)],
+        },
+        hrr=[
+            {"commonName": "TJS-3", "satNo": "43874", "rank": TRUSTED_RANK},
+            {"commonName": "TJS-10", "satNo": "58204", "rank": 5},
+        ],
+    )
+    app = build_app(
+        settings=make_settings(),
+        udl_client=udl,
+        systems_store=TrackedSystemsStore(seed_records=FAMILY_MEMBERS),
+    )
+    with TestClient(app) as client:
+        body = client.get(
+            PATH, params={"family_id": FAMILY_ID}, headers=auth_headers
+        ).json()
+    charted = [s["catalogue_name"] for chart in body["charts"] for s in chart["series"]]
+    assert charted == ["TJS-3"]
+    assert body["skipped"] == [
+        {"catalogue_name": "TJS-10", "reason": "JCO HRR rank 5, outside the 0-3 band"}
+    ]
+
+
+def test_a_zero_window_reaches_udl_as_a_request_for_everything(
+    family_client, family_udl, auth_headers
+) -> None:
+    response = family_client.get(
+        PATH, params={"family_id": FAMILY_ID, "window_days": 0}, headers=auth_headers
+    )
+    assert response.status_code == 200
+    assert response.json()["window_days"] == 0
+    history_calls = [c for c in family_udl.calls if c["op"] == "get_elset_history"]
+    assert history_calls and all(call["since"] is None for call in history_calls)
+
+
+def test_the_series_carries_the_rank_that_let_it_through(
+    family_client, auth_headers
+) -> None:
+    body = family_client.get(
+        PATH, params={"family_id": FAMILY_ID}, headers=auth_headers
+    ).json()
+    ranks = {s["catalogue_name"]: s["hrr_rank"] for s in body["charts"][0]["series"]}
+    assert ranks == {"TJS-3": TRUSTED_RANK, "TJS-10": TRUSTED_RANK}

@@ -195,8 +195,16 @@ The job log itself says only "Quality Gate FAILED".
 
 ## The family movement charts: rules that must hold
 
-Added in 0.5.0. Four things are load-bearing and easy to undo by accident:
+Added in 0.5.0, tightened in 0.6.0. Five things are load-bearing and easy to
+undo by accident:
 
+● **Only JCO HRR rank 0 to 3 is ever pulled.** Ash's rule, 6 September 2026:
+  rank 4 and 5 entries are not trustworthy enough to plot, and a wrong line is
+  worse than a missing one. An object absent from the feed carries no rank and
+  is not pulled either. One feed call ranks a whole family, and the exclusions
+  are named under the chart. If the feed call fails, the whole request fails:
+  a gate that cannot be applied must stop the pull, never quietly open. Do not
+  "improve" this by falling back to pulling everything when the feed is down.
 ● **Mean longitude is an approximation, and the UI says so.** UDL has no
   longitude field; it is derived as `RAAN + argOfPerigee + meanAnomaly -
   GMST(epoch)`, which holds for a near-circular, near-equatorial orbit. It is

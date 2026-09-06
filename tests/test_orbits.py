@@ -236,3 +236,26 @@ def test_drift_rate_survives_the_antimeridian() -> None:
 )
 def test_drift_rate_needs_two_points_and_a_time_span(points) -> None:
     assert drift_rate_degrees_per_day(points) is None
+
+
+def test_drift_rate_survives_a_full_circuit_of_the_belt() -> None:
+    """A long history can carry an object right round.
+
+    Differencing the first and last points would report a small number, or the
+    wrong sign, for a satellite that has drifted several hundred degrees.
+    """
+    start = dt.datetime(2020, 1, 1, tzinfo=dt.UTC)
+    points = [
+        (start + dt.timedelta(days=day), wrap_longitude(20.0 + 0.25 * day))
+        for day in range(2000)
+    ]
+    assert drift_rate_degrees_per_day(points) == pytest.approx(0.25, abs=0.001)
+
+
+def test_drift_rate_reports_a_westward_circuit_as_negative() -> None:
+    start = dt.datetime(2020, 1, 1, tzinfo=dt.UTC)
+    points = [
+        (start + dt.timedelta(days=day), wrap_longitude(20.0 - 0.4 * day))
+        for day in range(1200)
+    ]
+    assert drift_rate_degrees_per_day(points) == pytest.approx(-0.4, abs=0.001)

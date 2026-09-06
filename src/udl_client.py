@@ -40,12 +40,17 @@ leaking upstream internals.
 from __future__ import annotations
 
 import logging
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 import httpx
 
+from src.orbits import parse_epoch
+
 logger = logging.getLogger("udl_tactics_app.udl_client")
+
+# Sort key for a record whose epoch will not parse: older than any real one.
+_EARLIEST = datetime.min.replace(tzinfo=UTC)
 
 ENDPOINT_NOTIFICATION = "/udl/notification"
 ENDPOINT_ELSET = "/udl/elset"
@@ -55,10 +60,11 @@ ENDPOINT_ELSET_HISTORY = "/udl/elset/history"
 # CONTEXT-001 Section 5.
 UDL_EPOCH_FORMAT = "%Y-%m-%dT%H:%M:%S.%fZ"
 
-# A bound on one satellite's history so a wide window cannot pull an
-# unbounded response into memory. Well above any realistic count: elsets are
-# published a few times a day, so 2000 covers well over a year.
-ELSET_HISTORY_CAP = 2000
+# An absurdity guard, not a window: with no epoch filter UDL returns
+# everything it holds, and at a few element sets a day 20,000 is decades. The
+# newest records are the ones kept when it bites, because a chart that stops
+# before today is worse than one that starts late.
+ELSET_HISTORY_CAP = 20_000
 
 # Named once: the platform's SonarQube gate allows no duplicated literal.
 UNEXPECTED_SHAPE = "UDL returned an unexpected response shape"
@@ -219,9 +225,12 @@ class UDLClient:
         raise UDLError(UNEXPECTED_SHAPE)
 
     async def get_elset_history(
-        self, sat_no: str, *, since: datetime
+        self, sat_no: str, *, since: datetime | None = None
     ) -> list[dict[str, Any]] | None:
-        """Fetch every element set for a satNo with an epoch after `since`.
+        """Fetch element sets for a satNo, oldest first.
+
+        `since` bounds the epoch. Passing None omits the filter entirely and
+        asks UDL for the full history it holds.
 
         INFERENCE, and the load-bearing one for the family movement charts:
         that UDL exposes `/udl/elset/history` and that it accepts `satNo` and
@@ -238,10 +247,9 @@ class UDLClient:
         failure still raises, because those are real outages worth showing.
         """
         self._require_configured()
-        params = {
-            "satNo": sat_no,
-            "epoch": f">{since.strftime(UDL_EPOCH_FORMAT)}",
-        }
+        params: dict[str, Any] = {"satNo": sat_no}
+        if since is not None:
+            params["epoch"] = f">{since.strftime(UDL_EPOCH_FORMAT)}"
         try:
             payload = await self._get_json(ENDPOINT_ELSET_HISTORY, params)
         except UDLError as exc:
@@ -261,4 +269,18 @@ class UDLClient:
                 type(payload).__name__,
             )
             raise UDLError(UNEXPECTED_SHAPE)
-        return [r for r in payload if isinstance(r, dict)][:ELSET_HISTORY_CAP]
+
+        records = [r for r in payload if isinstance(r, dict)]
+        # UDL's ordering is not documented, so sort rather than assume it. An
+        # unparsable epoch sorts oldest, which is where it will be dropped
+        # first if the cap bites and where it does no harm if it does not.
+        records.sort(key=lambda record: parse_epoch(record.get("epoch")) or _EARLIEST)
+        if len(records) > ELSET_HISTORY_CAP:
+            logger.warning(
+                "Element-set history for satNo %s capped at %d of %d records",
+                sat_no,
+                ELSET_HISTORY_CAP,
+                len(records),
+            )
+            records = records[-ELSET_HISTORY_CAP:]
+        return records

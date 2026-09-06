@@ -99,3 +99,22 @@ def test_each_chart_carries_a_table_view() -> None:
     """Every value on a chart must also be readable without colour or hover."""
     assert 'class="table-view"' in INDEX_HTML
     assert "Table view" in INDEX_HTML
+
+
+def test_the_window_control_offers_the_full_history() -> None:
+    """Zero is the sentinel the API reads as "no epoch filter"."""
+    assert '<option value="0">Full history</option>' in INDEX_HTML
+
+
+def test_the_rank_that_let_an_object_through_is_shown() -> None:
+    """The rank band is the reason an object is on the chart, so it is on the
+    chart too, not just in the API response."""
+    assert "series.hrr_rank" in INDEX_HTML
+    assert "legend-rank" in INDEX_HTML
+
+
+def test_the_axis_format_follows_the_span() -> None:
+    """A full history runs to years, and "29 Jul" on a four-year axis names
+    four different days."""
+    assert "SPAN_NEEDING_YEAR" in INDEX_HTML
+    assert 'year:"numeric"' in INDEX_HTML

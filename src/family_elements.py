@@ -65,6 +65,27 @@ MAX_CONCURRENT_FETCHES = 4
 
 CACHE_TTL_SECONDS = 120.0
 
+# The JCO HRR rank band this chart will pull element sets for. Ash's rule, 6
+# September 2026: rank 4 and 5 entries have proved unreliable enough that
+# pulling their history risks putting a wrong line on the chart, and a wrong
+# line is worse than a missing one. An object with no rank at all - absent
+# from the feed for the window - is not pulled either, because "only ranks 0
+# to 3" cannot be satisfied for an object that has no rank. Both cases are
+# listed under the chart rather than dropped silently.
+ALLOWED_HRR_RANKS = frozenset({0, 1, 2, 3})
+
+# window_days sentinel: no lower epoch bound, so UDL returns everything it
+# holds for the satellite.
+FULL_HISTORY = 0
+
+# A full history can run to thousands of element sets. Every one of them is
+# fetched and every one is used for the drift rate, but the series returned is
+# thinned to this many evenly spaced points, first and last always kept: past
+# roughly a thousand points a line is drawing more marks than the plot has
+# pixels, and the browser pays for all of them. The count it was thinned from
+# travels with the series so the chart can say so.
+MAX_POINTS_PER_SERIES = 1000
+
 SOURCE_HISTORY = "elset-history"
 SOURCE_LATEST = "elset-latest"
 SOURCE_MIXED = "mixed"
@@ -78,6 +99,9 @@ NOTE_NO_USABLE_POINTS = (
 )
 SKIP_NO_NORAD_ID = "No NORAD ID on the catalogue record"
 SKIP_OVER_PALETTE_LIMIT = f"Beyond the {MAX_SERIES}-series limit for one chart"
+SKIP_RANK_OUTSIDE_BAND = "JCO HRR rank {rank}, outside the 0-3 band"
+SKIP_NOT_IN_HRR_FEED = "Not in the JCO HRR feed for this window, so carries no rank"
+NOTE_THINNED = "Plotting {shown} of {total} element sets, evenly spaced"
 
 _CHART_META = {
     METRIC_MEAN_LONGITUDE: (
@@ -105,9 +129,61 @@ _METRIC_ORDER = (METRIC_MEAN_LONGITUDE, METRIC_MEAN_MOTION)
 
 
 def clamp_window_days(requested: int | None) -> int:
+    """Bound the requested window, with zero reserved for the full history.
+
+    A negative value is a typo, not a request for everything, so it clamps to
+    the minimum rather than opening the tap.
+    """
     if requested is None:
         return DEFAULT_WINDOW_DAYS
+    if requested == FULL_HISTORY:
+        return FULL_HISTORY
     return max(MIN_WINDOW_DAYS, min(MAX_WINDOW_DAYS, requested))
+
+
+def _as_rank(value: Any) -> int | None:
+    if isinstance(value, bool) or value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+async def hrr_ranks(client: Any, cache: Any, window_hours: int) -> dict[str, int]:
+    """satNo to JCO HRR rank, for every satellite in the feed's window.
+
+    Fetched once per request and cached, because the feed is one call that
+    answers the rank question for every satellite at once.
+
+    A failure here is not survivable and is deliberately not swallowed: the
+    rank band is a data-quality gate, and pulling element sets with the gate
+    silently open would produce exactly the chart the gate exists to prevent.
+    """
+    key = f"jco-hrr-ranks:{window_hours}"
+    cached = cache.get(key) if cache is not None else None
+    if cached is not None:
+        return cached
+
+    ranks: dict[str, int] = {}
+    for entry in await client.fetch_jco_hrr(window_hours=window_hours):
+        sat_no = entry.get("satNo")
+        rank = _as_rank(entry.get("rank"))
+        if sat_no is not None and rank is not None:
+            ranks[str(sat_no)] = rank
+
+    if cache is not None:
+        cache.set(key, ranks)
+    return ranks
+
+
+def thin(values: list[Any], limit: int) -> list[Any]:
+    """Evenly spaced sample, first and last always kept."""
+    if len(values) <= limit:
+        return values
+    last = len(values) - 1
+    indices = sorted({round(i * last / (limit - 1)) for i in range(limit)})
+    return [values[i] for i in indices]
 
 
 def order_members(members: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -163,6 +239,7 @@ def build_series(
     *,
     source: str,
     colour_index: int,
+    hrr_rank: int | None = None,
     note: str | None = None,
 ) -> tuple[str, FamilySeries]:
     """Reduce one satellite's element sets to a single plotted metric."""
@@ -189,9 +266,18 @@ def build_series(
         elif source == SOURCE_LATEST:
             note = NOTE_LATEST_ONLY
 
+    # Drift is measured across the whole history, then the series is thinned
+    # for the plot. Thinning after the measurement keeps a long history's
+    # answer exact rather than an artefact of which points survived.
     drift = (
         drift_rate_degrees_per_day(numeric) if metric == METRIC_MEAN_LONGITUDE else None
     )
+    total_points = len(points)
+    points = thin(points, MAX_POINTS_PER_SERIES)
+    if len(points) < total_points:
+        thinned_note = NOTE_THINNED.format(shown=len(points), total=total_points)
+        note = f"{note}. {thinned_note}" if note else thinned_note
+
     series = FamilySeries(
         catalogue_name=str(member.get("catalogue_name") or ""),
         norad_id=str(member.get("norad_id") or ""),
@@ -203,13 +289,15 @@ def build_series(
         points=points,
         latest_value=numeric[-1][1] if numeric else None,
         drift_deg_per_day=drift,
+        hrr_rank=hrr_rank,
+        point_count=total_points,
         note=note,
     )
     return metric, series
 
 
 async def _fetch_records(
-    client: Any, cache: Any, sat_no: str, window_days: int, since: dt.datetime
+    client: Any, cache: Any, sat_no: str, window_days: int, since: dt.datetime | None
 ) -> tuple[list[dict[str, Any]], str]:
     """One satellite's element sets, from the cache when it is still warm.
 
@@ -242,32 +330,54 @@ async def build_family_charts(
     family_title: str,
     members: list[dict[str, Any]],
     window_days: int,
+    hrr_window_hours: int,
     now: dt.datetime | None = None,
 ) -> FamilyElementsResponse:
     """Fetch and assemble every chart for one family.
+
+    Membership comes from the catalogue, which is what makes these objects
+    Red. Whether an object is pulled at all comes from its JCO HRR rank: only
+    ranks 0 to 3, one feed call for the whole family. Everything else is
+    listed under the chart with the rank that excluded it.
 
     A single satellite failing costs that satellite's line and a note beside
     its name, not the whole chart. Every satellite failing raises, because that
     is an outage rather than a gap and the analyst should be told so.
     """
     now = now or dt.datetime.now(dt.UTC)
-    since = now - dt.timedelta(days=window_days)
+    since = (
+        None if window_days == FULL_HISTORY else now - dt.timedelta(days=window_days)
+    )
     ordered = order_members(members)
+    ranks = await hrr_ranks(client, cache, hrr_window_hours)
 
     skipped: list[FamilyMemberSkipped] = []
-    eligible: list[tuple[int, dict[str, Any]]] = []
+    eligible: list[tuple[int, dict[str, Any], int]] = []
     for index, member in enumerate(ordered):
         name = str(member.get("catalogue_name") or "")
-        if not member.get("norad_id"):
+        norad_id = member.get("norad_id")
+        rank = ranks.get(str(norad_id)) if norad_id else None
+        if not norad_id:
             skipped.append(
                 FamilyMemberSkipped(catalogue_name=name, reason=SKIP_NO_NORAD_ID)
+            )
+        elif rank is None:
+            skipped.append(
+                FamilyMemberSkipped(catalogue_name=name, reason=SKIP_NOT_IN_HRR_FEED)
+            )
+        elif rank not in ALLOWED_HRR_RANKS:
+            skipped.append(
+                FamilyMemberSkipped(
+                    catalogue_name=name,
+                    reason=SKIP_RANK_OUTSIDE_BAND.format(rank=rank),
+                )
             )
         elif len(eligible) >= MAX_SERIES:
             skipped.append(
                 FamilyMemberSkipped(catalogue_name=name, reason=SKIP_OVER_PALETTE_LIMIT)
             )
         else:
-            eligible.append((index, member))
+            eligible.append((index, member, rank))
 
     semaphore = asyncio.Semaphore(MAX_CONCURRENT_FETCHES)
 
@@ -288,14 +398,14 @@ async def build_family_charts(
                 return [], SOURCE_NONE, NOTE_UDL_FAILED
             return records, source, None
 
-    fetched = await asyncio.gather(*(fetch(member) for _, member in eligible))
+    fetched = await asyncio.gather(*(fetch(member) for _, member, _rank in eligible))
 
     if eligible and all(result[2] == NOTE_UDL_FAILED for result in fetched):
         raise UDLError("Every element-set lookup in this family failed")
 
     grouped: dict[str, list[FamilySeries]] = {}
     sources: set[str] = set()
-    for (colour_index, member), (records, source, note) in zip(
+    for (colour_index, member, rank), (records, source, note) in zip(
         eligible, fetched, strict=True
     ):
         metric, series = build_series(
@@ -303,6 +413,7 @@ async def build_family_charts(
             records,
             source=source,
             colour_index=colour_index,
+            hrr_rank=rank,
             note=note,
         )
         grouped.setdefault(metric, []).append(series)

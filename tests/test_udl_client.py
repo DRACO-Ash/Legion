@@ -4,8 +4,8 @@ import httpx
 import pytest
 import respx
 
+from src import udl_client
 from src.udl_client import (
-    ELSET_HISTORY_CAP,
     ENDPOINT_ELSET,
     ENDPOINT_ELSET_HISTORY,
     ENDPOINT_NOTIFICATION,
@@ -249,14 +249,56 @@ async def test_get_elset_history_sends_satno_and_an_epoch_range(client):
 
 
 @pytest.mark.anyio
-async def test_get_elset_history_caps_a_runaway_response(client):
-    payload = [{"satNo": "43874", "epoch": str(index)} for index in range(3000)]
+async def test_get_elset_history_keeps_the_newest_when_the_cap_bites(
+    client, monkeypatch
+):
+    """The cap is an absurdity guard, not a window.
+
+    If it ever bites, the records it keeps must be the most recent ones: a
+    chart that stops years before today is worse than one that starts late.
+    """
+    monkeypatch.setattr(udl_client, "ELSET_HISTORY_CAP", 3)
+    payload = [
+        {"satNo": "43874", "epoch": f"2026-08-{day:02d}T00:00:00.000000Z"}
+        for day in range(1, 11)
+    ]
     with respx.mock(base_url=BASE_URL) as mock:
         mock.get(ENDPOINT_ELSET_HISTORY).mock(
             return_value=httpx.Response(200, json=payload)
         )
         records = await client.get_elset_history("43874", since=SINCE)
-    assert len(records) == ELSET_HISTORY_CAP
+    assert [r["epoch"][8:10] for r in records] == ["08", "09", "10"]
+    await client.aclose()
+
+
+@pytest.mark.anyio
+async def test_get_elset_history_returns_records_oldest_first(client):
+    """UDL's ordering is not documented, so the client establishes one."""
+    payload = [
+        {"satNo": "43874", "epoch": "2026-08-09T00:00:00.000000Z"},
+        {"satNo": "43874", "epoch": "2026-08-01T00:00:00.000000Z"},
+        {"satNo": "43874", "epoch": "2026-08-05T00:00:00.000000Z"},
+    ]
+    with respx.mock(base_url=BASE_URL) as mock:
+        mock.get(ENDPOINT_ELSET_HISTORY).mock(
+            return_value=httpx.Response(200, json=payload)
+        )
+        records = await client.get_elset_history("43874", since=SINCE)
+    assert [r["epoch"][8:10] for r in records] == ["01", "05", "09"]
+    await client.aclose()
+
+
+@pytest.mark.anyio
+async def test_no_since_asks_udl_for_the_whole_history(client):
+    """Full history is the absence of an epoch filter, not a very wide one."""
+    with respx.mock(base_url=BASE_URL) as mock:
+        route = mock.get(ENDPOINT_ELSET_HISTORY).mock(
+            return_value=httpx.Response(200, json=[])
+        )
+        await client.get_elset_history("43874")
+    params = route.calls[0].request.url.params
+    assert params["satNo"] == "43874"
+    assert "epoch" not in params
     await client.aclose()
 
 

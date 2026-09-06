@@ -126,6 +126,8 @@ svg.chart{ width:100%; height:auto; display:block; overflow:visible; }
 .legend-key{ width:16px; height:3px; border-radius:2px; flex:none; }
 .legend-value{ color:var(--text); font-variant-numeric:tabular-nums; }
 .legend-note{ color:var(--text-faint); font-style:italic; }
+.legend-rank{ font-size:10px; color:var(--text-faint); border:1px solid var(--line);
+  border-radius:10px; padding:1px 6px; }
 .tip{ position:absolute; pointer-events:none; z-index:5; background:var(--surface); border:1px solid var(--line);
   border-radius:var(--radius); padding:6px 9px; font-size:11.5px; color:var(--text); white-space:nowrap;
   opacity:0; transition:opacity var(--motion); }
@@ -236,6 +238,7 @@ svg.chart{ width:100%; height:auto; display:block; overflow:visible; }
           <option value="30" selected>Last 30 days</option>
           <option value="90">Last 90 days</option>
           <option value="180">Last 180 days</option>
+          <option value="0">Full history</option>
         </select>
         <label class="visually-hidden" for="cMode">Scale</label>
         <select id="cMode">
@@ -593,10 +596,18 @@ function niceTicks(lo, hi, target){
   return {ticks, step};
 }
 
-function formatDate(ms, withTime){
+// Axis tick format follows the span, because a full history runs to years and
+// "29 Jul" on a four-year axis names four different days.
+const SPAN_NEEDING_TIME = 2 * DAY_MS;
+const SPAN_NEEDING_YEAR = 300 * DAY_MS;
+
+function formatDate(ms, spanMs){
   const date = new Date(ms);
+  if(spanMs >= SPAN_NEEDING_YEAR){
+    return date.toLocaleDateString("en-GB", {month:"short", year:"numeric", timeZone:"UTC"});
+  }
   const day = date.toLocaleDateString("en-GB", {day:"numeric", month:"short", timeZone:"UTC"});
-  if(!withTime) return day;
+  if(spanMs >= SPAN_NEEDING_TIME) return day;
   const time = date.toLocaleTimeString("en-GB", {hour:"2-digit", minute:"2-digit", timeZone:"UTC"});
   return `${day} ${time}`;
 }
@@ -612,6 +623,10 @@ function withUnit(value, unit){
 
 function seriesSummary(series, decimals, unit){
   const parts = [];
+  // The rank is why this object was pulled at all, so it travels with it.
+  if(series.hrr_rank !== null && series.hrr_rank !== undefined){
+    parts.push(`<span class="legend-rank">rank ${esc(series.hrr_rank)}</span>`);
+  }
   if(series.latest_value !== null && series.latest_value !== undefined){
     parts.push(`<span class="legend-value">${esc(withUnit(series.latest_value.toFixed(decimals), unit))}</span>`);
   }
@@ -658,11 +673,11 @@ function chartMarkup(chart, index){
       <line x1="${PAD.left}" y1="${sy(value).toFixed(2)}" x2="${PAD.left + PLOT_W}" y2="${sy(value).toFixed(2)}" stroke="${GRID}" stroke-width="1"/>
       <text x="${PAD.left - 10}" y="${(sy(value) + 3.5).toFixed(2)}" text-anchor="end" font-size="10" fill="${AXIS_TEXT}" style="font-variant-numeric:tabular-nums">${esc(value.toFixed(tickDecimals))}</text>`).join("");
 
-    const withTime = (xMax - xMin) < 2 * DAY_MS;
+    const span = xMax - xMin;
     const xTicks = [0, 0.25, 0.5, 0.75, 1].map(fraction => {
-      const at = xMin + (xMax - xMin) * fraction;
+      const at = xMin + span * fraction;
       const anchor = fraction === 0 ? "start" : fraction === 1 ? "end" : "middle";
-      return `<text x="${sx(at).toFixed(2)}" y="${CHART_H - 14}" text-anchor="${anchor}" font-size="10" fill="${AXIS_TEXT}">${esc(formatDate(at, withTime))}</text>`;
+      return `<text x="${sx(at).toFixed(2)}" y="${CHART_H - 14}" text-anchor="${anchor}" font-size="10" fill="${AXIS_TEXT}">${esc(formatDate(at, span))}</text>`;
     }).join("");
 
     const ends = prepared.map(entry => ({
@@ -883,9 +898,11 @@ async function loadFamilyCharts(){
   const payload = lastPayload;
   renderCharts(payload);
   const depth = payload.source === "elset-history"
-    ? "full history"
+    ? "element-set history"
     : payload.source === "elset-latest" ? "latest element set only" : payload.source;
-  msg.textContent = `${payload.family_title} · last ${payload.window_days} days · ${depth} · generated ${formatEpoch(payload.generated_at)}`;
+  const span = payload.window_days === 0 ? "full history" : `last ${payload.window_days} days`;
+  const charted = payload.charts.reduce((total, chart) => total + chart.series.length, 0);
+  msg.textContent = `${payload.family_title} · ${span} · ${depth} · ${charted} object${charted === 1 ? "" : "s"} at JCO HRR rank 0-3 · generated ${formatEpoch(payload.generated_at)}`;
   msg.className = "msg";
 }
 

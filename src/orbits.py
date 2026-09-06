@@ -25,6 +25,7 @@ thing changed its orbit".
 from __future__ import annotations
 
 import datetime as dt
+import itertools
 import math
 
 # JD of the Unix epoch, 1970-01-01T00:00:00Z. FACT, standard constant.
@@ -165,15 +166,27 @@ def drift_rate_degrees_per_day(
 ) -> float | None:
     """East-west drift across a longitude series, in degrees per day.
 
-    Uses the unwrapped first-to-last difference so a series that crosses the
-    +/-180 seam reports a real rate rather than a 360-degree jump. Returns
-    None for fewer than two points or a zero time span.
+    Sums the step-by-step change, each step folded into one turn, rather than
+    differencing the first and last points. The difference matters over a long
+    history: an object drifting a quarter of a degree a day passes 180 degrees
+    of total displacement inside two years, and a first-to-last difference
+    then reports a small number, or the wrong sign, for a satellite that has
+    circled the belt. Summing steps telescopes to the true displacement and
+    handles the antimeridian on the way.
+
+    The one case it cannot resolve is a gap in the history wide enough for the
+    object to have moved more than 180 degrees between two consecutive element
+    sets, which no realistic elset cadence produces.
+
+    Returns None for fewer than two points or a zero time span.
     """
     if len(points) < 2:
         return None
-    first_epoch, first_value = points[0]
-    last_epoch, last_value = points[-1]
-    span_days = (last_epoch - first_epoch).total_seconds() / SECONDS_PER_DAY
+    span_days = (points[-1][0] - points[0][0]).total_seconds() / SECONDS_PER_DAY
     if math.isclose(span_days, 0.0):
         return None
-    return wrap_longitude(last_value - first_value) / span_days
+    displacement = sum(
+        wrap_longitude(later - earlier)
+        for (_, earlier), (_, later) in itertools.pairwise(points)
+    )
+    return displacement / span_days

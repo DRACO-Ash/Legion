@@ -79,7 +79,7 @@ dependency to `requirements-runtime.txt`; add a new test-only dependency to
 | `GET /api/udl/jco-hrr/{sat_no}?window_hours=` | Bearer team token | Look up one JCO HRR entry by satNo |
 | `GET /api/udl/elset/{sat_no}` | Bearer team token | Latest element set for a satNo |
 | `GET /api/udl/clash-check?window_hours=` | Bearer team token | Resolves the COSMOS-2612/2613/2614 NORAD 68762 clash against live UDL |
-| `GET /api/udl/family-elements?family_id=&window_days=` | Bearer team token | Element-set tracks for every catalogued member of one family, ready to chart |
+| `GET /api/udl/family-elements?family_id=&window_days=` | Bearer team token | Element-set tracks for every rank 0-3 member of one family, ready to chart. `window_days=0` means the full history |
 
 Auth is a shared bearer token (`TEAM_TOKEN`), compared in constant time. It
 fails closed: with no token configured, every write and every UDL route
@@ -103,12 +103,29 @@ The panel below the catalogue plots a whole family's element sets together,
 which is the only scale at which a class's behaviour is visible: one satellite
 drifting means little, six of them drifting the same way is a pattern.
 
+- **Only objects at JCO HRR rank 0 to 3 are pulled.** The catalogue decides
+  which objects are Red; the JCO HRR feed decides which are worth pulling
+  element sets for. Rank 4 and 5 entries are not fetched at all, and neither
+  is an object missing from the feed, because "ranks 0 to 3" cannot be
+  satisfied by an object carrying no rank. One feed call ranks the whole
+  family, and anything excluded is named under the chart with the rank that
+  excluded it, so a gap is never silent. If the feed itself fails the request
+  fails: a data-quality gate that cannot be applied must stop the pull rather
+  than wave it through.
+- **The window runs to the full history.** Seven, thirty, ninety or a hundred
+  and eighty days, or everything UDL holds. The full history is the absence of
+  an epoch filter, not a very wide one. A series longer than a thousand
+  element sets is thinned to a thousand evenly spaced points for the plot,
+  first and last always kept, and says so; the drift rate is measured on every
+  element set before any thinning.
 - **GEO members are charted on mean longitude**, derived from the element set
   as `RAAN + argOfPerigee + meanAnomaly - GMST(epoch)`. UDL carries no
   longitude field, so this is an approximation - sound for a near-circular,
   near-equatorial orbit, which is what station-keeping means in practice.
   Good for drift, station-keeping and one object closing on another; not for
-  conjunction assessment.
+  conjunction assessment. Drift is summed step by step rather than taken from
+  first to last, so an object that has drifted right round the belt over
+  several years still reports the rate it actually drifted at.
 - **Everything else is charted on mean motion**, in revolutions per day,
   exactly as UDL reports it. A step change is an orbit change; a steady slope
   is decay.

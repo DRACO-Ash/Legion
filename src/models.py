@@ -163,7 +163,11 @@ class FamilySeries(BaseModel):
     # filtered out. Colour follows the entity, never its rank in the result.
     colour_index: int
     source: str
+    # JCO HRR rank, 0 to 3. The chart pulls element sets for nothing else.
+    hrr_rank: int | None = None
     points: list[ElementPoint]
+    # Element sets behind the series before it was thinned for the plot.
+    point_count: int = 0
     latest_value: float | None = None
     drift_deg_per_day: float | None = None
     note: str | None = None
