@@ -5,6 +5,11 @@ All notable changes to this project are documented here. Format follows
 [Semantic Versioning](https://semver.org/). Pre-1.0: minor bumps may include
 breaking changes, since nothing has shipped to the App Store yet.
 
+## [0.6.0] - 2026-09-06
+
+Chart only JCO HRR rank 0-3 objects, and add the full element-set history
+
+
 ## [0.5.0] - 2026-09-05
 
 Sortable catalogue columns and family movement charts (mean longitude for GEO, mean motion for LEO)
