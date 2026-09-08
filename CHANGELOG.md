@@ -5,6 +5,11 @@ All notable changes to this project are documented here. Format follows
 [Semantic Versioning](https://semver.org/). Pre-1.0: minor bumps may include
 breaking changes, since nothing has shipped to the App Store yet.
 
+## [0.7.0] - 2026-09-08
+
+Page the catalogue at 15 rows a page with a Rows control
+
+
 ## [0.6.4] - 2026-09-08
 
 Name the browser tab Legion and add interface icons
