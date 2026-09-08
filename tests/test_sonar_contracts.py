@@ -221,3 +221,57 @@ def test_the_start_up_fetches_are_awaited() -> None:
     assert '<script type="module">' in html
     assert "await loadSystems();" in html
     assert "await loadFamilies();" in html
+
+
+# --- The CSS rules the gate raised, calibrated against the 0.7.0 upload -----
+#
+# The platform reported four duplicate selectors there: .pill, .btn,
+# .panel h2 and .token-bar button, each declared once in the original
+# stylesheet and again in the icon block added in 0.6.4. The detector below
+# finds exactly those four in that file and none in this one.
+
+
+def _stylesheet(html: str) -> str:
+    return html[html.index("<style>") : html.index("</style>")]
+
+
+def duplicate_selectors(html: str) -> dict[str, int]:
+    """Top-level selectors declared in more than one block.
+
+    Only top-level rules: a nested rule inside @media is a different context
+    and the platform does not raise it. Selectors are compared verbatim, since
+    that is what the rule reports.
+    """
+    seen: collections.Counter[str] = collections.Counter()
+    for match in re.finditer(r"(?m)^([^\s@/][^{}]*)\{", _stylesheet(html)):
+        seen[match.group(1).strip()] += 1
+    return {selector: count for selector, count in seen.items() if count > 1}
+
+
+def test_no_selector_is_declared_twice() -> None:
+    """SonarQube css:S4667 - a second block for the same selector.
+
+    Splitting one element's styling across two places is how the two drift,
+    and the rule fires whichever order they sit in.
+    """
+    offenders = duplicate_selectors(INDEX_HTML.read_text(encoding="utf-8"))
+    assert offenders == {}, (
+        f"Fold these into the block that already owns the selector: {offenders}"
+    )
+
+
+def test_a_membership_test_uses_a_set() -> None:
+    """SonarQube: a constant list used only for existence checks wants a Set.
+
+    A Set says what the collection is for, and says it in the type rather than
+    in a comment.
+    """
+    html = INDEX_HTML.read_text(encoding="utf-8")
+    offenders = [
+        name
+        for name in re.findall(r"const (\w+) = \[", html)
+        if f"{name}.includes(" in html
+    ]
+    assert offenders == [], (
+        f"Declare these as `new Set([...])` and use .has(): {offenders}"
+    )

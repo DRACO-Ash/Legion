@@ -159,6 +159,17 @@ The failed job uploads `sonar-quality-gate.json`, which names which condition
 failed, plus `sonar-issues.json` and `sonar-hotspots.json`. Read those first.
 The job log itself says only "Quality Gate FAILED".
 
+**The gate also reads `src/static/index.html` as CSS, JavaScript and HTML**,
+not just the Python. Rules that have fired there: nested ternaries, nested
+template literals, `getAttribute("data-...")` over `.dataset`, an unawaited
+async call at module top level, a duplicate CSS selector, and a constant array
+used for membership tests instead of a `Set`. Every one of those now has a
+local mirror, calibrated against the upload that reported it:
+`tests/test_sonar_contracts.py` for the CSS and JavaScript rules, and
+`tests/test_sonar_cognitive_complexity.py` for python:S3776, which reproduced
+the platform's 25 and 18 exactly. Run `pytest` before packaging and the gate
+has nothing left to find.
+
 ## Architecture, briefly
 
 - `src/app.py` — app factory (`build_app`), CORS, two-tier rate limiting.

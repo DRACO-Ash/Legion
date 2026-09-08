@@ -223,7 +223,7 @@ def test_the_stored_row_choice_is_validated_as_a_string() -> None:
     "All" sentinel, so parsing before validating made an absent preference
     mean "show everything" - the opposite of the default, on every first
     visit. Validate the raw string against the option list instead."""
-    assert "ROW_OPTIONS.includes(raw)" in INDEX_HTML
+    assert "ROW_OPTIONS.has(raw)" in INDEX_HTML
     assert "Number(localStorage.getItem" not in INDEX_HTML
 
 

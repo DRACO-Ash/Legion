@@ -44,8 +44,9 @@ h1{ font-size:24px; margin:4px 0 0; letter-spacing:.01em; }
   border-radius:var(--radius); padding:8px 12px; font-size:12.5px; }
 .token-bar input{ background:var(--surface-3); border:1px solid var(--line); color:var(--text); padding:6px 8px;
   border-radius:var(--radius); font-family:inherit; font-size:12.5px; width:220px; }
-.token-bar button{ background:var(--blue-1); border:none; color:#fff; padding:6px 12px; border-radius:var(--radius);
-  cursor:pointer; font-family:inherit; font-size:12.5px; }
+.token-bar button{ display:inline-flex; align-items:center; gap:6px; background:var(--blue-1); border:none;
+  color:#fff; padding:6px 12px; border-radius:var(--radius); cursor:pointer; font-family:inherit;
+  font-size:12.5px; }
 .token-status{ font-size:11px; color:var(--text-faint); }
 .token-status.set{ color:var(--green-bright); }
 
@@ -53,7 +54,8 @@ h1{ font-size:24px; margin:4px 0 0; letter-spacing:.01em; }
 @media (max-width:900px){ .layout{ grid-template-columns:1fr; } }
 
 .panel{ background:var(--surface-2); border:1px solid var(--line); border-radius:var(--radius); padding:16px; }
-.panel h2{ font-size:12px; text-transform:uppercase; letter-spacing:.08em; color:var(--text-dim); margin:0 0 12px; }
+.panel h2{ display:flex; align-items:center; gap:7px; font-size:12px; text-transform:uppercase;
+  letter-spacing:.08em; color:var(--text-dim); margin:0 0 12px; }
 
 .filters{ display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px; }
 .filters input, .filters select{ background:var(--surface-3); border:1px solid var(--line); color:var(--text);
@@ -72,7 +74,8 @@ tr.selected td{ background:rgba(56,95,175,.18); }
 .badge.rus{ color:var(--blue-2); border-color:var(--blue-2); }
 .badge.chn{ color:var(--china-bright); border-color:var(--china); }
 .badge.other{ color:var(--text-dim); border-color:var(--line); }
-.pill{ font-size:10.5px; padding:2px 8px; border-radius:10px; border:1px solid; white-space:nowrap; }
+.pill{ display:inline-flex; align-items:center; gap:5px; font-size:10.5px; padding:2px 8px;
+  border-radius:10px; border:1px solid; white-space:nowrap; }
 .pill.onorbit{ color:var(--amber-bright); border-color:var(--amber); }
 .pill.decayed{ color:var(--green-bright); border-color:var(--green); }
 .pill.decaying{ color:var(--amber-bright); border-color:var(--amber); opacity:.75; }
@@ -100,7 +103,8 @@ form input, form select, form textarea{ width:100%; background:var(--surface-3);
 form textarea{ min-height:56px; resize:vertical; }
 .field-row{ display:grid; grid-template-columns:1fr 1fr; gap:8px; }
 .form-actions{ display:flex; gap:8px; margin-top:14px; }
-.btn{ font-family:inherit; font-size:12.5px; padding:8px 14px; border-radius:var(--radius); cursor:pointer; border:1px solid; }
+.btn{ display:inline-flex; align-items:center; gap:6px; font-family:inherit; font-size:12.5px;
+  padding:8px 14px; border-radius:var(--radius); cursor:pointer; border:1px solid; }
 .btn-primary{ background:var(--blue-1); border-color:var(--blue-1); color:#fff; }
 .btn-primary:hover{ background:#4571c7; }
 .btn-ghost{ background:none; border-color:var(--line); color:var(--text-dim); }
@@ -128,17 +132,13 @@ form textarea{ min-height:56px; resize:vertical; }
   stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
 .mark{ width:34px; height:34px; flex:none; }
 .brand{ display:flex; align-items:center; gap:12px; }
-.panel h2{ display:flex; align-items:center; gap:7px; }
 .panel h2 .icon{ width:13px; height:13px; stroke-width:2; color:var(--blue-2); }
-.btn{ display:inline-flex; align-items:center; gap:6px; }
 .btn .icon{ width:13px; height:13px; }
 .token-bar label{ display:flex; align-items:center; gap:6px; }
 .token-bar label .icon{ width:13px; height:13px; color:var(--text-faint); }
-.token-bar button{ display:inline-flex; align-items:center; gap:6px; }
 .token-bar button .icon{ width:12px; height:12px; color:#fff; }
 /* A status shows its state as shape as well as colour: filled for on-orbit,
    open for decayed, dashed for anything unconfirmed. */
-.pill{ display:inline-flex; align-items:center; gap:5px; }
 .pill .icon{ width:9px; height:9px; stroke-width:2.4; }
 .pill.onorbit .icon{ fill:currentColor; }
 .pill.decaying .icon{ fill:currentColor; opacity:.55; }
@@ -451,12 +451,12 @@ const ROWS_KEY = "catalogueRows";
 // Number(null) and Number("") are both 0, which is the "All" sentinel, so
 // parsing first made an absent or empty preference mean "show everything" -
 // the opposite of the default, and exactly what a first visit hit.
-const ROW_OPTIONS = ["10", "15", "25", "50", "0"];
+const ROW_OPTIONS = new Set(["10", "15", "25", "50", "0"]);
 
 function storedRows(){
   try{
     const raw = localStorage.getItem(ROWS_KEY);
-    if(ROW_OPTIONS.includes(raw)) return Number(raw);
+    if(ROW_OPTIONS.has(raw)) return Number(raw);
   } catch { /* storage unavailable: fall through to the default */ }
   return DEFAULT_ROWS;
 }
