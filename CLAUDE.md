@@ -230,6 +230,15 @@ undo by accident:
   re-run the dataviz skill's `validate_palette.js` against the panel surface
   (`#152238`) first.
 
+● **The three token outcomes stay distinguishable.** No token configured on
+  the deployment is 503 with a reason; a wrong or missing bearer token is 401;
+  a match passes. The UI turns the 401 into different advice depending on
+  whether it sent a token at all, and compares the length it holds against the
+  `team_token_len` that `/readyz` publishes. Do not collapse the two 401
+  causes back into one message: "set the team token" is useless advice to
+  someone who has just set one, and it cost a round of live debugging to find
+  that out. Lengths only, never the value.
+
 `tests/test_ui_contracts.py` pins the parts of this that are checkable from
 Python, including that every path the UI fetches exists in the app's OpenAPI
 schema, and that catalogue values are escaped before reaching the markup.

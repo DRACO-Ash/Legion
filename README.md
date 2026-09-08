@@ -87,6 +87,18 @@ answers 503 rather than running open. Set it, together with `ALLOWED_ORIGIN`
 (the app refuses to start on a wildcard origin with a token set), before the
 app is of any use beyond reading the catalogue.
 
+Two separate places hold it, and both are needed. `TEAM_TOKEN` in the
+deployment's environment is what the server compares against; the box in the
+UI header is what the browser sends. That box lives in `sessionStorage`, so it
+is **per browser tab**: opening the app in a new tab means pasting it again.
+
+When a lookup is refused, the status distinguishes the causes. A **503** means
+the deployment has no token configured at all, and says so. A **401** means
+what the tab sent does not match. The chart panel then reports both lengths,
+its own and the deployment's from `/readyz`, which is enough to spot the usual
+causes: nothing pasted into this tab, a stray pair of quotes, or a different
+value altogether. Neither side ever shows the token itself.
+
 ## Reading the catalogue
 
 Every column in the catalogue table sorts: click a heading once for ascending,

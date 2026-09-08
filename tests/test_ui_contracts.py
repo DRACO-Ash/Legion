@@ -118,3 +118,29 @@ def test_the_axis_format_follows_the_span() -> None:
     four different days."""
     assert "SPAN_NEEDING_YEAR" in INDEX_HTML
     assert 'year:"numeric"' in INDEX_HTML
+
+
+def test_a_rejected_token_and_a_missing_one_read_differently() -> None:
+    """ "Set the team token" is useless advice to someone who just did.
+
+    A 401 has two causes: nothing in this tab, or a value that does not match
+    the deployment. The UI has to tell them apart, and it does it by comparing
+    the length it is sending against the length /readyz reports.
+    """
+    assert "NO_TOKEN_HERE" in INDEX_HTML
+    assert "TOKEN_REJECTED" in INDEX_HTML
+    assert "team_token_len" in INDEX_HTML
+    assert "tokenRejectedMessage" in INDEX_HTML
+    # The old single message mapped both causes onto the wrong advice.
+    assert "401:" not in INDEX_HTML
+
+
+def test_the_token_box_says_how_long_the_token_it_holds_is() -> None:
+    """The one number that identifies a mismatch without exposing a secret."""
+    assert "held.length" in INDEX_HTML
+
+
+def test_the_token_box_warns_that_it_is_per_tab() -> None:
+    """sessionStorage does not carry across tabs, and the App Store opens the
+    app in a new one."""
+    assert "per browser tab" in INDEX_HTML

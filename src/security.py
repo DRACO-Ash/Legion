@@ -75,6 +75,12 @@ def enforce_rate_limit(limiter: RateLimiter, request: Request) -> None:
 def enforce_team_token(request: Request, team_token: str | None) -> None:
     """Gate a state-changing or cost-incurring route.
 
+    Three outcomes, and they are deliberately distinguishable: no token
+    configured on the deployment is 503 with a reason, a wrong or missing
+    bearer token is 401, and a match passes. The UI turns the 401 into
+    different advice depending on whether it sent a token at all, because
+    "set the team token" is useless advice to someone who just did.
+
     Fails closed when no token is configured. This used to return early, so a
     deployment that never set TEAM_TOKEN accepted unauthenticated writes from
     anyone who could reach it, while the UI displayed "read only" and looked
@@ -84,7 +90,10 @@ def enforce_team_token(request: Request, team_token: str | None) -> None:
     if not team_token:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Writes are disabled: no team token is configured for this deployment",
+            detail=(
+                "Refused: no team token is configured for this deployment. "
+                "Set TEAM_TOKEN to enable writes and UDL lookups."
+            ),
         )
     given = extract_bearer_token(request)
     if not token_matches(given, team_token):

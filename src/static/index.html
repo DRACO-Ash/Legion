@@ -275,8 +275,14 @@ function authHeaders(){
 }
 function refreshTokenStatus(){
   const el = document.getElementById("tokenStatus");
-  if(token()){ el.textContent = "set — writes enabled"; el.classList.add("set"); }
-  else { el.textContent = "not set — read only"; el.classList.remove("set"); }
+  const held = token();
+  if(held){
+    el.textContent = `set, ${held.length} characters — writes enabled`;
+    el.classList.add("set");
+  } else {
+    el.textContent = "not set — read only";
+    el.classList.remove("set");
+  }
 }
 document.getElementById("tokenSave").addEventListener("click", () => {
   const v = document.getElementById("tokenInput").value.trim();
@@ -907,10 +913,41 @@ const SOURCE_LABELS = {
 };
 
 const CHART_ERRORS = {
-  401: "Set the team token above: element sets come from UDL and the lookup is gated.",
   429: "Too many requests just now. Wait a moment and reload.",
   502: "UDL did not answer. Try again, or check the UDL status.",
 };
+
+const NO_TOKEN_HERE =
+  "Set the team token above: element sets come from UDL and the lookup is gated. " +
+  "Note the box is per browser tab, so a token saved in another tab does not carry over.";
+const TOKEN_REJECTED =
+  "The team token was rejected. Re-paste it above, or check TEAM_TOKEN in the app's " +
+  "Configuration tab.";
+/* A 401 means one of two things, and telling an analyst to "set the team
+   token" when they have already set one is the less useful of the two. A
+   deployment with no token at all answers 503 with its own reason, so it does
+   not come through here.
+
+   /readyz is public and reports how long the configured token is, so the two
+   lengths together name the fault: nothing in this tab, or two values that do
+   not match. Lengths only - neither side ever exposes the value. */
+async function tokenRejectedMessage(){
+  const sent = token().length;
+  if(sent === 0) return NO_TOKEN_HERE;
+  try{
+    const res = await fetch("/readyz");
+    const body = await res.json();
+    return `${TOKEN_REJECTED} This tab is sending ${sent} characters; the deployment `
+      + `is configured with ${body.team_token_len}.`;
+  } catch {
+    return TOKEN_REJECTED;
+  }
+}
+
+async function chartErrorMessage(status, detail){
+  if(status === 401) return tokenRejectedMessage();
+  return CHART_ERRORS[status] || detail || `Could not load element sets (${status}).`;
+}
 
 async function loadFamilyCharts(){
   const familyId = document.getElementById("cFamily").value;
@@ -938,7 +975,7 @@ async function loadFamilyCharts(){
   host.classList.remove("stale");
   if(!res.ok){
     const body = await res.json().catch(() => ({}));
-    msg.textContent = CHART_ERRORS[res.status] || body.detail || `Could not load element sets (${res.status}).`;
+    msg.textContent = await chartErrorMessage(res.status, body.detail);
     msg.className = "msg error";
     return;
   }
