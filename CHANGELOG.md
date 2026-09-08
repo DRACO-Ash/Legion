@@ -5,6 +5,11 @@ All notable changes to this project are documented here. Format follows
 [Semantic Versioning](https://semver.org/). Pre-1.0: minor bumps may include
 breaking changes, since nothing has shipped to the App Store yet.
 
+## [0.7.2] - 2026-09-08
+
+Report worker start time and interpret an equal-length token mismatch
+
+
 ## [0.7.1] - 2026-09-08
 
 Clear four duplicate CSS selectors and use a Set for the row options
