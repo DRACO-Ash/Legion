@@ -1,3 +1,4 @@
+import datetime as dt
 import os
 
 import pytest
@@ -95,3 +96,15 @@ def test_app_metadata_version_matches_version_module():
 
     app = build_app()
     assert app.version == __version__
+
+
+def test_readyz_reports_when_this_worker_read_its_environment(client):
+    """A token or credential changed in the platform's configuration after
+    this timestamp is not in this process, and nothing else can tell you that
+    from outside. Without it a stale worker looks exactly like a mistyped
+    value, which cost a round of live debugging."""
+    body = client.get("/readyz").json()
+    started_at = dt.datetime.fromisoformat(body["started_at"])
+    assert started_at.tzinfo is not None
+    assert (dt.datetime.now(dt.UTC) - started_at).total_seconds() < 300
+    assert body["uptime_seconds"] >= 0

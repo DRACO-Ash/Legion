@@ -1130,22 +1130,47 @@ const NO_TOKEN_HERE =
 const TOKEN_REJECTED =
   "The team token was rejected. Re-paste it above, or check TEAM_TOKEN in the app's " +
   "Configuration tab.";
+
 /* A 401 means one of two things, and telling an analyst to "set the team
    token" when they have already set one is the less useful of the two. A
    deployment with no token at all answers 503 with its own reason, so it does
    not come through here.
 
    /readyz is public and reports how long the configured token is, so the two
-   lengths together name the fault: nothing in this tab, or two values that do
-   not match. Lengths only - neither side ever exposes the value. */
+   lengths together narrow the fault. Lengths only - neither side ever exposes
+   the value.
+
+   Equal lengths are weak evidence and the message says so: a token generated
+   the usual way is always the same length, so two different tokens both read
+   43 characters. When they match, the more likely fault is a worker that has
+   not restarted since the configuration changed, which is why /readyz reports
+   when this process read its environment. */
+function lengthMismatchMessage(sent, configured){
+  return `${TOKEN_REJECTED} This tab is sending ${sent} characters; the deployment `
+    + `is configured with ${configured}.`;
+}
+
+function sameLengthMessage(sent, startedAt){
+  let message = "The team token was rejected even though both are " + sent
+    + " characters. Equal lengths prove little: two tokens generated the usual way "
+    + "are always the same length. Either the values differ, or this app has not "
+    + "restarted since TEAM_TOKEN was changed";
+  if(startedAt){
+    message += ", and it has been running since " + formatEpoch(startedAt);
+  }
+  return message + ". Redeploy if the configuration changed after that.";
+}
+
 async function tokenRejectedMessage(){
   const sent = token().length;
   if(sent === 0) return NO_TOKEN_HERE;
   try{
     const res = await fetch("/readyz");
     const body = await res.json();
-    return `${TOKEN_REJECTED} This tab is sending ${sent} characters; the deployment `
-      + `is configured with ${body.team_token_len}.`;
+    if(sent !== body.team_token_len){
+      return lengthMismatchMessage(sent, body.team_token_len);
+    }
+    return sameLengthMessage(sent, body.started_at);
   } catch {
     return TOKEN_REJECTED;
   }

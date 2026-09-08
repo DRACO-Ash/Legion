@@ -15,11 +15,12 @@ import json
 import logging
 
 import pytest
+from fastapi.testclient import TestClient
 
-from src.app import _STDOUT_HANDLER_NAME, configure_logging
+from src.app import _STDOUT_HANDLER_NAME, build_app, configure_logging
 from src.store import APP_LOGGER_NAME, AUDIT_LOGGER_NAME, TrackedSystemsStore
 
-from .conftest import make_seed_record
+from .conftest import FakeUDLClient, make_seed_record, make_settings
 
 SEED = [
     make_seed_record(
@@ -163,3 +164,34 @@ def test_privileged_action_writes_one_parsable_audit_line(
     assert record["event"] == "system_created"
     assert record["actor"] == "203.0.113.5"
     assert record["record_id"] == created["id"]
+
+
+def test_a_rejected_token_is_logged_with_lengths_and_no_value(
+    logging_state, monkeypatch, tmp_path
+):
+    """The evidence that settles "but they are the same" lives in the log.
+
+    Asserted through a real handler, not caplog: this project has a documented
+    case of an observability test passing only because caplog installed its
+    own root handler while the application logged nowhere.
+    """
+    stream = _capture(monkeypatch)
+    monkeypatch.setenv("STORAGE_MOUNT_PATH", str(tmp_path))
+    secret = "a-token-nobody-should-see"
+    app = build_app(
+        settings=make_settings(team_token=secret), udl_client=FakeUDLClient()
+    )
+    with TestClient(app) as client:
+        response = client.get(
+            "/api/udl/family-elements",
+            params={"family_id": "chn-tjs"},
+            headers={"Authorization": "Bearer wrong-token-of-other-length"},
+        )
+    assert response.status_code == 401
+    written = stream.getvalue()
+    assert "Team token rejected" in written
+    assert f"configured with {len(secret)}" in written
+    assert f"caller sent {len('wrong-token-of-other-length')}" in written
+    # The point of logging lengths is that the values never appear.
+    assert secret not in written
+    assert "wrong-token-of-other-length" not in written

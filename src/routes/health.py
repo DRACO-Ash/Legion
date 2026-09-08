@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import datetime as dt
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
@@ -46,9 +47,18 @@ async def readyz(request: Request):
     except TimeoutError:
         storage_writable, storage_error = False, "probe timed out"
 
+    started_at = getattr(request.app.state, "started_at", None)
     body = {
         "status": "ok" if storage_writable else "not_ready",
         "version": __version__,
+        # A token or credential changed in the platform's configuration after
+        # this timestamp is not in this process. Nothing else can tell you
+        # that from outside, and without it a stale worker looks identical to
+        # a mistyped value.
+        "started_at": started_at.isoformat() if started_at else None,
+        "uptime_seconds": round((dt.datetime.now(dt.UTC) - started_at).total_seconds())
+        if started_at
+        else None,
         "udl_configured": udl_client.configured,
         "udl_username_len": len(settings.udl_username) if settings.udl_username else 0,
         "udl_password_len": len(settings.udl_password) if settings.udl_password else 0,

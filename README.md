@@ -92,6 +92,24 @@ deployment's environment is what the server compares against; the box in the
 UI header is what the browser sends. That box lives in `sessionStorage`, so it
 is **per browser tab**: opening the app in a new tab means pasting it again.
 
+Equal lengths on both sides prove less than they look. A token generated the
+usual way, `secrets.token_urlsafe(32)`, is always 43 characters, so two
+**different** tokens both read 43. When the lengths match and the compare
+still fails, the likelier fault is a worker that has not restarted since
+`TEAM_TOKEN` changed: the process reads its environment once, at start. That
+is why `/readyz` reports `started_at` and `uptime_seconds`. If the app has
+been up since before you changed the configuration, it does not have the new
+value, and no amount of re-pasting will help.
+
+The decisive check needs no new build: set a token of a deliberately
+**different** length, redeploy, and watch `team_token_len` change. If it stays
+where it was, the process never took the new configuration and the fault is
+deployment, not typing.
+
+A rejected token is also logged by the container, with both lengths and
+neither value: `Team token rejected: caller sent 43 characters, this process
+is configured with 43`.
+
 When a lookup is refused, the status distinguishes the causes. A **503** means
 the deployment has no token configured at all, and says so. A **401** means
 what the tab sent does not match. The chart panel then reports both lengths,

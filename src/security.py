@@ -15,11 +15,14 @@ first release, recorded here rather than left silent.
 from __future__ import annotations
 
 import hmac
+import logging
 import time
 from collections import defaultdict, deque
 from dataclasses import dataclass, field
 
 from fastapi import HTTPException, Request, status
+
+logger = logging.getLogger("udl_tactics_app.security")
 
 
 def token_matches(given: str | None, expected: str) -> bool:
@@ -97,6 +100,17 @@ def enforce_team_token(request: Request, team_token: str | None) -> None:
         )
     given = extract_bearer_token(request)
     if not token_matches(given, team_token):
+        # Lengths only, never the values, and server-side where the log is
+        # already privileged. Equal lengths with a failed compare is the
+        # useful case: two different tokens are usually the same length, so
+        # the log is what distinguishes a mistyped value from a worker that
+        # never picked up a configuration change.
+        logger.warning(
+            "Team token rejected: caller sent %d characters, this process is "
+            "configured with %d",
+            len(given or ""),
+            len(team_token),
+        )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or missing token"
         )

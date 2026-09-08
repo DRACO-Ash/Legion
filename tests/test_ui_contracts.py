@@ -244,3 +244,16 @@ def test_row_storage_is_wrapped_against_a_throwing_accessor() -> None:
     returning null, and the table must still render."""
     stored = INDEX_HTML[INDEX_HTML.index("function storedRows()") :]
     assert "try{" in stored[:200] and "catch" in stored[:400]
+
+
+def test_equal_token_lengths_are_not_reported_as_reassurance() -> None:
+    """Ash hit this live: both sides read 43 characters and the panel simply
+    printed the two numbers, which reads as "so they match". A token generated
+    the usual way is always 43 characters, so two different tokens both are.
+    The message has to interpret the comparison, not just report it."""
+    assert "sameLengthMessage" in INDEX_HTML
+    assert "Equal lengths prove little" in INDEX_HTML
+    # Matched on one fragment: the sentence is built by concatenation, so a
+    # substring spanning two fragments is not in the file.
+    assert "restarted since TEAM_TOKEN was changed" in INDEX_HTML
+    assert "body.started_at" in INDEX_HTML

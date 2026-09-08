@@ -7,6 +7,7 @@ testable in-process with a fake UDL client (testing-standards).
 
 from __future__ import annotations
 
+import datetime as dt
 import logging
 import os
 import sys
@@ -134,6 +135,11 @@ def build_app(
     app = FastAPI(title="UDL Tactics App", version=__version__, lifespan=lifespan)
 
     app.state.settings = settings
+    # When this worker read its environment. A configuration change made after
+    # this moment is not in this process: the platform has to restart it. That
+    # question came up in live debugging and could not be answered from
+    # outside, so /readyz reports it.
+    app.state.started_at = dt.datetime.now(dt.UTC)
     app.state.udl_client = udl_client or UDLClient(
         base_url=settings.udl_base_url,
         username=settings.udl_username,
