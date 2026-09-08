@@ -161,3 +161,49 @@ def test_the_empty_chart_state_does_not_invent_a_cause() -> None:
     gate is usually false: the real reasons are in the skipped list."""
     assert "No member of this family has a NORAD ID" not in INDEX_HTML
     assert "Nothing in this family cleared the checks" in INDEX_HTML
+
+
+def test_the_browser_tab_says_legion() -> None:
+    assert "<title>Legion · Tracked Systems</title>" in INDEX_HTML
+
+
+def test_the_favicon_needs_no_network_request() -> None:
+    """A data URI keeps the icon in the one file the app serves, works
+    offline, and stops the browser asking for /favicon.ico and getting a 404.
+
+    Plain SVG rather than base64 on purpose: a long base64 blob is the shape a
+    secret-detection scanner flags on entropy, and this app has to pass one.
+    """
+    assert 'rel="icon"' in INDEX_HTML
+    assert "data:image/svg+xml,%3Csvg" in INDEX_HTML
+    assert "base64" not in INDEX_HTML
+
+
+def test_every_icon_reference_resolves_to_a_defined_symbol() -> None:
+    """A typo in a sprite id fails silently: nothing renders, no error."""
+    defined = set(re.findall(r'<symbol id="(i-[\w-]+)"', INDEX_HTML))
+    used = set(re.findall(r'<use href="#(i-[\w-]+)"', INDEX_HTML))
+    assert used, "The UI should be using the sprite"
+    assert used <= defined, f"No symbol defined for: {used - defined}"
+    assert defined == used, f"Sprite carries unused symbols: {defined - used}"
+
+
+def test_icons_are_decorative_and_never_the_only_label() -> None:
+    """Each sits beside text that says the same thing, so a screen reader
+    should skip it rather than announce it twice."""
+    icons = re.findall(r"<svg class=\"(?:icon|mark)\"[^>]*>", INDEX_HTML)
+    assert icons
+    assert all('aria-hidden="true"' in icon for icon in icons)
+
+
+def test_the_submit_button_label_is_its_own_element() -> None:
+    """The button holds an icon as well as a label. Rewriting the button's
+    textContent, which is what the code used to do, would delete the icon."""
+    assert 'id="submitLabel"' in INDEX_HTML
+    assert 'getElementById("submitBtn").textContent' not in INDEX_HTML
+
+
+def test_status_reads_as_shape_as_well_as_colour() -> None:
+    """A status must not depend on colour alone."""
+    assert '<use href="#i-status"/>' in INDEX_HTML
+    assert ".pill.onorbit .icon{ fill:currentColor; }" in INDEX_HTML

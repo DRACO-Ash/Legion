@@ -99,6 +99,26 @@ its own and the deployment's from `/readyz`, which is enough to spot the usual
 causes: nothing pasted into this tab, a stray pair of quotes, or a different
 value altogether. Neither side ever shows the token itself.
 
+## Branding and icons
+
+The browser tab reads **Legion · Tracked Systems**. The favicon and every icon
+in the interface are inline SVG in `src/static/index.html`: the tab icon as a
+plain (not base64) data URI on the `<link rel="icon">`, and the rest as one
+`<symbol>` sprite referenced by `<use>`. Nothing is fetched, so it works
+offline, survives any content-security policy, and does not leave the browser
+asking for a `/favicon.ico` that is not there.
+
+The mark beside the title is a placeholder: an orbit motif in the Bluestaq
+palette, not the official Legion artwork. To swap in the real thing, replace
+the `i-mark` symbol's contents and the `rel="icon"` data URI with the supplied
+paths. Note the App Store listing icon is uploaded separately in the store's
+own interface and is not part of this package.
+
+Icons are decorative throughout: each sits beside text that already says the
+same thing and carries `aria-hidden="true"`. The one place an icon does work is
+the status pill, where a filled, dimmed, open or dashed dot means state is
+readable without relying on colour.
+
 ## Reading the catalogue
 
 Every column in the catalogue table sorts: click a heading once for ascending,

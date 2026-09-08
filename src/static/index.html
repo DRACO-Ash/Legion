@@ -3,7 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Tracked Systems — UDL Tactics App</title>
+<title>Legion · Tracked Systems</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23162646'/%3E%3Cellipse cx='16' cy='16' rx='12' ry='5.5' fill='none' stroke='%23739BCF' stroke-width='2.4' transform='rotate(-28 16 16)'/%3E%3Ccircle cx='16' cy='16' r='4.6' fill='%23385FAF'/%3E%3Ccircle cx='26.3' cy='11.1' r='2.5' fill='%23E8A33D'/%3E%3C/svg%3E">
 <style>
 :root{
   --navy:#162646; --blue-1:#385FAF; --blue-2:#739BCF;
@@ -37,7 +38,8 @@ html,body{ margin:0; background:var(--navy); color:var(--text); font-family:"Seg
 header{ display:flex; justify-content:space-between; align-items:flex-end; gap:16px; flex-wrap:wrap;
   border-bottom:1px solid var(--line); padding-bottom:16px; margin-bottom:18px; }
 .eyebrow{ font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--blue-2); font-weight:600; }
-h1{ font-size:24px; margin:4px 0 0; }
+h1{ font-size:24px; margin:4px 0 0; letter-spacing:.01em; }
+.subtitle{ font-size:12.5px; color:var(--text-dim); margin-top:2px; }
 .token-bar{ display:flex; gap:8px; align-items:center; background:var(--surface-2); border:1px solid var(--line);
   border-radius:var(--radius); padding:8px 12px; font-size:12.5px; }
 .token-bar input{ background:var(--surface-3); border:1px solid var(--line); color:var(--text); padding:6px 8px;
@@ -110,6 +112,31 @@ form textarea{ min-height:56px; resize:vertical; }
 .msg.ok{ color:var(--green-bright); }
 .empty{ text-align:center; padding:30px; color:var(--text-faint); font-size:13px; }
 
+/* Icons. One inline sprite, referenced by <use>, so there is no network
+   request and nothing to go missing offline. Every icon is decorative: it sits
+   beside a label that already says the same thing, so each is aria-hidden and
+   inherits the text colour rather than carrying meaning in colour. */
+.icon{ width:1em; height:1em; flex:none; fill:none; stroke:currentColor;
+  stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
+.mark{ width:34px; height:34px; flex:none; }
+.brand{ display:flex; align-items:center; gap:12px; }
+.panel h2{ display:flex; align-items:center; gap:7px; }
+.panel h2 .icon{ width:13px; height:13px; stroke-width:2; color:var(--blue-2); }
+.btn{ display:inline-flex; align-items:center; gap:6px; }
+.btn .icon{ width:13px; height:13px; }
+.token-bar label{ display:flex; align-items:center; gap:6px; }
+.token-bar label .icon{ width:13px; height:13px; color:var(--text-faint); }
+.token-bar button{ display:inline-flex; align-items:center; gap:6px; }
+.token-bar button .icon{ width:12px; height:12px; color:#fff; }
+/* A status shows its state as shape as well as colour: filled for on-orbit,
+   open for decayed, dashed for anything unconfirmed. */
+.pill{ display:inline-flex; align-items:center; gap:5px; }
+.pill .icon{ width:9px; height:9px; stroke-width:2.4; }
+.pill.onorbit .icon{ fill:currentColor; }
+.pill.decaying .icon{ fill:currentColor; opacity:.55; }
+.pill.decayed .icon{ fill:none; }
+.pill.unknown .icon{ fill:none; stroke-dasharray:2 2; }
+
 /* Family movement charts */
 .chart-panel{ grid-column:1 / -1; }
 .chart-controls{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:6px; }
@@ -145,24 +172,63 @@ svg.chart{ width:100%; height:auto; display:block; overflow:visible; }
 </style>
 </head>
 <body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <defs>
+    <symbol id="i-mark" viewBox="0 0 32 32">
+      <rect x="0.9" y="0.9" width="30.2" height="30.2" rx="6" fill="var(--surface-2)" stroke="var(--line)"/>
+      <ellipse cx="16" cy="16" rx="12" ry="5.5" fill="none" stroke="var(--blue-2)" stroke-width="2.2" transform="rotate(-28 16 16)"/>
+      <circle cx="16" cy="16" r="4.6" fill="var(--blue-1)" stroke="none"/>
+      <circle cx="26.3" cy="11.1" r="2.5" fill="var(--amber)" stroke="none"/>
+    </symbol>
+    <symbol id="i-catalogue" viewBox="0 0 24 24">
+      <path d="M8 6h13M8 12h13M8 18h13"/>
+      <circle cx="4" cy="6" r="1.1" fill="currentColor" stroke="none"/>
+      <circle cx="4" cy="12" r="1.1" fill="currentColor" stroke="none"/>
+      <circle cx="4" cy="18" r="1.1" fill="currentColor" stroke="none"/>
+    </symbol>
+    <symbol id="i-edit" viewBox="0 0 24 24">
+      <path d="M4 20h4l10-10-4-4L4 16v4z"/><path d="M14 6l4 4"/>
+    </symbol>
+    <symbol id="i-chart" viewBox="0 0 24 24">
+      <path d="M4 4v16h16"/><path d="M7 15l4-5 3 3 5-7"/>
+    </symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-save" viewBox="0 0 24 24"><path d="M4 12l5 5L20 6"/></symbol>
+    <symbol id="i-clear" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+    <symbol id="i-archive" viewBox="0 0 24 24">
+      <path d="M3 7h18v4H3zM5 11v9h14v-9"/><path d="M10 15h4"/>
+    </symbol>
+    <symbol id="i-reload" viewBox="0 0 24 24">
+      <path d="M20 12a8 8 0 1 1-2.6-5.9"/><path d="M20 4v4h-4"/>
+    </symbol>
+    <symbol id="i-key" viewBox="0 0 24 24">
+      <circle cx="8" cy="12" r="4"/><path d="M12 12h9M18 12v3"/>
+    </symbol>
+    <symbol id="i-status" viewBox="0 0 12 12"><circle cx="6" cy="6" r="4"/></symbol>
+  </defs>
+</svg>
 <a href="#main-content" class="skip-link">Skip to main content</a>
 <div class="wrap">
   <header>
-    <div>
-      <div class="eyebrow">Bluestaq Limited · JCO Reference</div>
-      <h1>Tracked Systems</h1>
+    <div class="brand">
+      <svg class="mark" aria-hidden="true" focusable="false"><use href="#i-mark"/></svg>
+      <div>
+        <div class="eyebrow">Bluestaq Limited · JCO Reference</div>
+        <h1>Legion</h1>
+        <div class="subtitle">Tracked Systems</div>
+      </div>
     </div>
     <div class="token-bar">
-      <label for="tokenInput">Team token</label>
+      <label for="tokenInput"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-key"/></svg>Team token</label>
       <input type="password" id="tokenInput" placeholder="paste to enable add/edit/archive">
-      <button id="tokenSave">Save</button>
+      <button id="tokenSave"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-save"/></svg>Save</button>
       <output class="token-status" id="tokenStatus">not set — read only</output>
     </div>
   </header>
 
   <main id="main-content" class="layout">
     <div class="panel">
-      <h2>Catalogue</h2>
+      <h2><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-catalogue"/></svg>Catalogue</h2>
       <div class="filters">
         <label class="visually-hidden" for="fSearch">Search catalogue</label>
         <input type="text" id="fSearch" placeholder="Search name, notes, NORAD ID…">
@@ -185,7 +251,7 @@ svg.chart{ width:100%; height:auto; display:block; overflow:visible; }
     </div>
 
     <div class="panel">
-      <h2 id="formTitle">New system</h2>
+      <h2><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-edit"/></svg><span id="formTitle">New system</span></h2>
       <form id="systemForm">
         <div class="field"><label for="f_catalogue_name">Catalogue name *</label><input type="text" id="f_catalogue_name" required></div>
         <div class="field-row">
@@ -219,16 +285,16 @@ svg.chart{ width:100%; height:auto; display:block; overflow:visible; }
         <div class="field"><label for="f_family_title">Family title *</label><input type="text" id="f_family_title" required></div>
         <div class="field"><label for="f_family_sub">Family sub *</label><input type="text" id="f_family_sub" required></div>
         <div class="form-actions">
-          <button type="submit" class="btn btn-primary" id="submitBtn">Add system</button>
-          <button type="button" class="btn btn-ghost" id="clearBtn">Clear</button>
-          <button type="button" class="btn btn-danger" id="archiveBtn" style="display:none">Archive</button>
+          <button type="submit" class="btn btn-primary" id="submitBtn"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-plus"/></svg><span id="submitLabel">Add system</span></button>
+          <button type="button" class="btn btn-ghost" id="clearBtn"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-clear"/></svg>Clear</button>
+          <button type="button" class="btn btn-danger" id="archiveBtn" style="display:none"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-archive"/></svg>Archive</button>
         </div>
         <output class="msg" id="formMsg"></output>
       </form>
     </div>
 
     <section class="panel chart-panel">
-      <h2>Family movement</h2>
+      <h2><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-chart"/></svg>Family movement</h2>
       <div class="chart-controls">
         <label class="visually-hidden" for="cFamily">Family</label>
         <select id="cFamily"><option value="">Select a family…</option></select>
@@ -245,7 +311,7 @@ svg.chart{ width:100%; height:auto; display:block; overflow:visible; }
           <option value="absolute">Absolute position</option>
           <option value="relative">Relative to window start</option>
         </select>
-        <button type="button" class="btn btn-ghost" id="cReload">Reload</button>
+        <button type="button" class="btn btn-ghost" id="cReload"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-reload"/></svg>Reload</button>
       </div>
       <output class="msg" id="chartMsg">Pick a family to plot its element sets. Reads live UDL data, so a team token is required.</output>
       <div id="charts"></div>
@@ -415,7 +481,7 @@ function renderTable(list){
         <td><span class="badge ${nationClass(s.nation)}">${esc(s.nation)}</span></td>
         <td>${esc(s.regime)}</td>
         <td>${esc(s.launch_year)}</td>
-        <td><span class="pill ${esc(s.status)}">${esc(STATUS_LABEL[s.status] || s.status)}</span></td>
+        <td><span class="pill ${esc(s.status)}"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-status"/></svg>${esc(STATUS_LABEL[s.status] || s.status)}</span></td>
         <td>${esc(s.norad_id || EM_DASH)}</td>
       </tr>`).join("")}
     </tbody>
@@ -439,7 +505,7 @@ function selectSystem(id){
   const record = currentList.find(s => s.id === id);
   if(!record) return;
   document.getElementById("formTitle").textContent = "Edit system";
-  document.getElementById("submitBtn").textContent = "Save changes";
+  document.getElementById("submitLabel").textContent = "Save changes";
   document.getElementById("archiveBtn").style.display = record.archived ? "none" : "inline-block";
   for(const key of ["catalogue_name","designator","norad_id","nation","regime","launch_year","launch_site",
                     "status","life","coplanar","delta_v","flag","notes","family_id","family_title","family_sub"]){
@@ -454,7 +520,7 @@ document.getElementById("clearBtn").addEventListener("click", () => {
   selectedId = null;
   document.getElementById("systemForm").reset();
   document.getElementById("formTitle").textContent = "New system";
-  document.getElementById("submitBtn").textContent = "Add system";
+  document.getElementById("submitLabel").textContent = "Add system";
   document.getElementById("archiveBtn").style.display = "none";
   document.getElementById("formMsg").textContent = "";
   renderTable(currentList);
