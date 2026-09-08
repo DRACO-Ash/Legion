@@ -112,6 +112,14 @@ form textarea{ min-height:56px; resize:vertical; }
 .msg.ok{ color:var(--green-bright); }
 .empty{ text-align:center; padding:30px; color:var(--text-faint); font-size:13px; }
 
+/* Rows per page is a view setting, not a filter, so it sits apart from them
+   at the right of the row. */
+.filters label[for="fRows"]{ margin-left:auto; }
+.pager{ display:flex; align-items:center; gap:10px; margin-top:12px; }
+.pager .btn{ padding:5px 10px; font-size:12px; }
+.pager .btn[disabled]{ opacity:.4; cursor:default; }
+.page-of{ font-size:11.5px; color:var(--text-faint); font-variant-numeric:tabular-nums; }
+
 /* Icons. One inline sprite, referenced by <use>, so there is no network
    request and nothing to go missing offline. Every icon is decorative: it sits
    beside a label that already says the same thing, so each is aria-hidden and
@@ -205,6 +213,8 @@ svg.chart{ width:100%; height:auto; display:block; overflow:visible; }
       <circle cx="8" cy="12" r="4"/><path d="M12 12h9M18 12v3"/>
     </symbol>
     <symbol id="i-status" viewBox="0 0 12 12"><circle cx="6" cy="6" r="4"/></symbol>
+    <symbol id="i-prev" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></symbol>
+    <symbol id="i-next" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></symbol>
   </defs>
 </svg>
 <a href="#main-content" class="skip-link">Skip to main content</a>
@@ -245,6 +255,15 @@ svg.chart{ width:100%; height:auto; display:block; overflow:visible; }
           <option value="unknown">Unconfirmed</option>
         </select>
         <label><input type="checkbox" id="fArchived"> Include archived</label>
+        <label for="fRows">Rows
+          <select id="fRows" aria-label="Rows per page">
+            <option value="10">10</option>
+            <option value="15" selected>15</option>
+            <option value="25">25</option>
+            <option value="50">50</option>
+            <option value="0">All</option>
+          </select>
+        </label>
       </div>
       <output class="count" id="resultCount"></output>
       <div id="tableWrap"></div>
@@ -377,7 +396,6 @@ async function loadSystems(){
   currentList = body.systems;
   renderNationRegimeOptions(currentList);
   renderTable(currentList);
-  document.getElementById("resultCount").textContent = `${body.count} system${body.count === 1 ? "" : "s"}`;
 }
 
 function renderNationRegimeOptions(list){
@@ -412,6 +430,77 @@ const NATION_CLASS = {RU:"rus", CN:"chn"};
 
 function nationClass(nation){ return NATION_CLASS[nation] || "other"; }
 let sortState = {key:null, direction:1};
+
+/* Pagination
+
+   Client-side, deliberately, and for one structural reason: sorting is
+   client-side too. Paginating on the server while sorting here would slice
+   page two out of the server's order and then sort only that slice, so the
+   rows on a page would be the wrong rows. Both belong on the same side, and
+   with a catalogue this size - hand-entered, tens of records - that side is
+   the browser. If the catalogue ever grows to thousands, sorting and paging
+   move to the server together, not one at a time.
+
+   The row count preference is a per-viewer convenience, so it lives in
+   localStorage, wrapped: a private window or blocked site data throws on
+   access rather than returning null. */
+const ALL_ROWS = 0;
+const DEFAULT_ROWS = 15;
+const ROWS_KEY = "catalogueRows";
+// Validated against the exact option strings rather than a parsed number.
+// Number(null) and Number("") are both 0, which is the "All" sentinel, so
+// parsing first made an absent or empty preference mean "show everything" -
+// the opposite of the default, and exactly what a first visit hit.
+const ROW_OPTIONS = ["10", "15", "25", "50", "0"];
+
+function storedRows(){
+  try{
+    const raw = localStorage.getItem(ROWS_KEY);
+    if(ROW_OPTIONS.includes(raw)) return Number(raw);
+  } catch { /* storage unavailable: fall through to the default */ }
+  return DEFAULT_ROWS;
+}
+
+function rememberRows(value){
+  try{ localStorage.setItem(ROWS_KEY, String(value)); }
+  catch { /* nothing to do: the choice simply will not persist */ }
+}
+
+let rowsPerPage = storedRows();
+let currentPage = 1;
+
+function pageCount(total){
+  if(rowsPerPage === ALL_ROWS) return 1;
+  return Math.max(1, Math.ceil(total / rowsPerPage));
+}
+
+function visibleSlice(rows){
+  if(rowsPerPage === ALL_ROWS) return rows;
+  const start = (currentPage - 1) * rowsPerPage;
+  return rows.slice(start, start + rowsPerPage);
+}
+
+function rangeLabel(total, shown){
+  if(total === 0) return "No systems match the current filters";
+  const suffix = total === 1 ? "" : "s";
+  if(rowsPerPage === ALL_ROWS || total <= rowsPerPage){
+    return `${total} system${suffix}`;
+  }
+  const first = (currentPage - 1) * rowsPerPage + 1;
+  return `Showing ${first} to ${first + shown - 1} of ${total} system${suffix}`;
+}
+
+function pagerMarkup(total){
+  const pages = pageCount(total);
+  if(pages < 2) return "";
+  const back = currentPage > 1 ? "" : " disabled";
+  const forward = currentPage < pages ? "" : " disabled";
+  return `<div class="pager">
+    <button type="button" class="btn btn-ghost" data-page="prev" aria-label="Previous page"${back}><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-prev"/></svg>Previous</button>
+    <span class="page-of">Page ${currentPage} of ${pages}</span>
+    <button type="button" class="btn btn-ghost" data-page="next" aria-label="Next page"${forward}>Next<svg class="icon" aria-hidden="true" focusable="false"><use href="#i-next"/></svg></button>
+  </div>`;
+}
 
 function sortValue(record, column){
   const raw = record[column.key];
@@ -468,11 +557,18 @@ function sortHeader(){
 
 function renderTable(list){
   const wrap = document.getElementById("tableWrap");
+  const count = document.getElementById("resultCount");
   if(list.length === 0){
     wrap.innerHTML = '<div class="empty">No systems match the current filters.</div>';
+    count.textContent = rangeLabel(0, 0);
     return;
   }
-  const rows = sortRows(list);
+  const sorted = sortRows(list);
+  // A filter can shrink the list under the page you were on, and a page past
+  // the end renders empty with no clue why. Clamp before slicing.
+  currentPage = Math.min(Math.max(1, currentPage), pageCount(sorted.length));
+  const rows = visibleSlice(sorted);
+  count.textContent = rangeLabel(sorted.length, rows.length);
   wrap.innerHTML = `<table>
     <thead><tr>${sortHeader()}</tr></thead>
     <tbody>${rows.map(s => `
@@ -485,7 +581,14 @@ function renderTable(list){
         <td>${esc(s.norad_id || EM_DASH)}</td>
       </tr>`).join("")}
     </tbody>
-  </table>`;
+  </table>` + pagerMarkup(sorted.length);
+  wrap.querySelectorAll("button[data-page]").forEach(button => {
+    button.addEventListener("click", () => {
+      currentPage += button.dataset.page === "next" ? 1 : -1;
+      renderTable(currentList);
+      wrap.scrollIntoView({block: "nearest"});
+    });
+  });
   wrap.querySelectorAll("tr.row").forEach(tr => {
     tr.addEventListener("click", () => selectSystem(tr.dataset.id));
   });
@@ -495,6 +598,7 @@ function renderTable(list){
       sortState = sortState.key === key
         ? {key, direction: -sortState.direction}
         : {key, direction: 1};
+      currentPage = 1;
       renderTable(currentList);
     });
   });
@@ -600,9 +704,22 @@ document.getElementById("archiveBtn").addEventListener("click", async () => {
   }
 });
 
+function reloadFromFirstPage(){
+  currentPage = 1;
+  return loadSystems();
+}
+
 ["fSearch","fNation","fRegime","fStatus","fArchived"].forEach(id => {
-  document.getElementById(id).addEventListener("input", loadSystems);
-  document.getElementById(id).addEventListener("change", loadSystems);
+  document.getElementById(id).addEventListener("input", reloadFromFirstPage);
+  document.getElementById(id).addEventListener("change", reloadFromFirstPage);
+});
+
+document.getElementById("fRows").value = String(rowsPerPage);
+document.getElementById("fRows").addEventListener("change", event => {
+  rowsPerPage = Number(event.target.value);
+  rememberRows(rowsPerPage);
+  currentPage = 1;
+  renderTable(currentList);
 });
 
 /* ---------------------------------------------------------------------------

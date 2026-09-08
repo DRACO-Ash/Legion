@@ -207,3 +207,40 @@ def test_status_reads_as_shape_as_well_as_colour() -> None:
     """A status must not depend on colour alone."""
     assert '<use href="#i-status"/>' in INDEX_HTML
     assert ".pill.onorbit .icon{ fill:currentColor; }" in INDEX_HTML
+
+
+def test_the_catalogue_pages_rather_than_scrolling() -> None:
+    """Forty-nine rows in one scroll was the complaint."""
+    assert 'id="fRows"' in INDEX_HTML
+    assert "DEFAULT_ROWS = 15" in INDEX_HTML
+    assert 'data-page="next"' in INDEX_HTML
+    assert 'data-page="prev"' in INDEX_HTML
+    assert 'aria-label="Previous page"' in INDEX_HTML
+
+
+def test_the_stored_row_choice_is_validated_as_a_string() -> None:
+    """The bug this pins: Number(null) and Number("") are both 0, which is the
+    "All" sentinel, so parsing before validating made an absent preference
+    mean "show everything" - the opposite of the default, on every first
+    visit. Validate the raw string against the option list instead."""
+    assert "ROW_OPTIONS.includes(raw)" in INDEX_HTML
+    assert "Number(localStorage.getItem" not in INDEX_HTML
+
+
+def test_the_page_number_is_clamped_before_slicing() -> None:
+    """A filter can shrink the list under the page you are on, and a page past
+    the end renders an empty table with no clue why."""
+    assert "currentPage = Math.min(Math.max(1, currentPage), pageCount(" in INDEX_HTML
+
+
+def test_reordering_or_refiltering_returns_to_the_first_page() -> None:
+    """Page 3 of a different ordering is a different set of rows."""
+    assert "reloadFromFirstPage" in INDEX_HTML
+    assert INDEX_HTML.count("currentPage = 1;") >= 3
+
+
+def test_row_storage_is_wrapped_against_a_throwing_accessor() -> None:
+    """A private window or blocked site data throws on access rather than
+    returning null, and the table must still render."""
+    stored = INDEX_HTML[INDEX_HTML.index("function storedRows()") :]
+    assert "try{" in stored[:200] and "catch" in stored[:400]

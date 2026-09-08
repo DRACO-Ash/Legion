@@ -121,6 +121,20 @@ readable without relying on colour.
 
 ## Reading the catalogue
 
+The table shows **15 rows a page** by default, with Previous and Next below it
+and a "Showing 16 to 30 of 49 systems" line above. The Rows control offers 10,
+15, 25, 50 or All, and the choice is remembered per browser. Filtering or
+reordering returns you to the first page, since page three of a different
+ordering is a different set of rows, and a filter that shrinks the list past
+your current page clamps rather than rendering an empty table.
+
+Paging is client-side, and deliberately so: sorting is client-side too, and
+splitting them would slice page two out of the server's order and then sort
+only that slice, so a page would show the wrong rows. At this scale, tens of
+hand-entered records, the browser is the right place for both. If the
+catalogue ever runs to thousands, sorting and paging move to the server
+together, not one at a time.
+
 Every column in the catalogue table sorts: click a heading once for ascending,
 again for descending. Launch year and NORAD ID sort numerically, status sorts
 by operational order (on-orbit, decaying, decayed, unconfirmed) rather than
