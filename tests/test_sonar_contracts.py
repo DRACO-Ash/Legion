@@ -30,6 +30,10 @@ INDEX_HTML = SRC / "static" / "index.html"
 MIN_OCCURRENCES = 3
 
 
+def _python_files() -> list[pathlib.Path]:
+    return [path for tree in SCANNED_TREES for path in sorted(tree.rglob("*.py"))]
+
+
 def _duplicated_literals(path: pathlib.Path) -> dict[str, list[int]]:
     tree = ast.parse(path.read_text(encoding="utf-8"))
     seen: dict[str, list[int]] = collections.defaultdict(list)
@@ -81,6 +85,19 @@ def test_dev_entrypoint_does_not_hardcode_all_interfaces() -> None:
         assert "0.0.0.0" not in literals, f"{path} hardcodes an all-interfaces bind"
 
 
+def _logger_error_calls(node: ast.AST) -> list[ast.Call]:
+    """`logger.error(...)` calls anywhere under this node."""
+    return [
+        call
+        for call in ast.walk(node)
+        if isinstance(call, ast.Call)
+        and isinstance(call.func, ast.Attribute)
+        and call.func.attr == "error"
+        and isinstance(call.func.value, ast.Name)
+        and "log" in call.func.value.id
+    ]
+
+
 def test_error_logging_inside_a_handler_uses_exception() -> None:
     """SonarQube: "Use logging.exception() instead."
 
@@ -89,22 +106,118 @@ def test_error_logging_inside_a_handler_uses_exception() -> None:
     rounds of fixing other conditions changed nothing. Inside an except block,
     `logger.error` discards the traceback that makes the record worth having.
     """
-    offenders = []
-    for tree in SCANNED_TREES:
-        for path in sorted(tree.rglob("*.py")):
-            parsed = ast.parse(path.read_text(encoding="utf-8"))
-            for node in ast.walk(parsed):
-                if not isinstance(node, ast.ExceptHandler):
-                    continue
-                for call in ast.walk(node):
-                    if (
-                        isinstance(call, ast.Call)
-                        and isinstance(call.func, ast.Attribute)
-                        and call.func.attr == "error"
-                        and isinstance(call.func.value, ast.Name)
-                        and "log" in call.func.value.id
-                    ):
-                        offenders.append(f"{path.relative_to(ROOT)}:{call.lineno}")
+    offenders = [
+        f"{path.relative_to(ROOT)}:{call.lineno}"
+        for path in _python_files()
+        for handler in ast.walk(ast.parse(path.read_text(encoding="utf-8")))
+        if isinstance(handler, ast.ExceptHandler)
+        for call in _logger_error_calls(handler)
+    ]
     assert offenders == [], (
         f"Use logger.exception() inside an except block, not logger.error(): {offenders}"
     )
+
+
+# --- The JavaScript rules the gate raised against src/static/index.html -----
+#
+# These are heuristics on the source text, not a parse: there is no JavaScript
+# parser in this project's dependencies and adding one to satisfy a lint mirror
+# would be a poor trade against the Dependency Scanning gate. They were
+# calibrated against the 0.6.0 upload, where the platform reported nested
+# ternaries at lines 376, 377, 396, 591 (twice), 679 and 902, a nested template
+# literal at 835 and a getAttribute at 409. The detectors below found every one
+# of those, plus one further getAttribute at 405 that the platform did not
+# raise because it was not new code. Over-reporting is the safe direction.
+
+NESTED_TERNARY_PATTERNS = (
+    # A second ? inside the condition-to-colon span: a ? (b ? c : d) : e
+    r"\?[^?:;{}]*\?",
+    # A second ? in the else branch: a ? b : c ? d : e
+    r"\?[^?:;]*:[^?:;{}]*\?",
+)
+
+
+def _statements(text: str) -> list[tuple[int, str]]:
+    """Fold continuation lines back onto their statement.
+
+    A ternary is often written across three lines, with the ? and the : each
+    opening a line. Reading line by line would miss it.
+    """
+    folded: list[tuple[int, str]] = []
+    for number, line in enumerate(text.splitlines(), 1):
+        stripped = line.strip()
+        if folded and stripped.startswith(("?", ":")):
+            first, joined = folded[-1]
+            folded[-1] = (first, f"{joined} {stripped}")
+        else:
+            folded.append((number, stripped))
+    return folded
+
+
+def test_no_nested_ternary_operations() -> None:
+    """SonarQube typescript:S3358."""
+    offenders = []
+    for number, statement in _statements(INDEX_HTML.read_text(encoding="utf-8")):
+        if statement.startswith(("//", "*")):
+            continue
+        # ?? and ?. are not ternaries.
+        plain = statement.replace("??", "").replace("?.", "")
+        if any(re.search(pattern, plain) for pattern in NESTED_TERNARY_PATTERNS):
+            offenders.append(number)
+    assert offenders == [], (
+        f"Extract these nested ternaries into named helpers: lines {offenders}"
+    )
+
+
+def _nests_a_template(line: str) -> bool:
+    """True when a backtick opens inside another template literal's slot."""
+    depth = 0
+    inside = False
+    position = 0
+    while position < len(line):
+        character = line[position]
+        if character == "`":
+            if inside and depth > 0:
+                return True
+            inside = not inside
+        elif inside and line.startswith("${", position):
+            depth += 1
+            position += 1
+        elif inside and character == "}" and depth > 0:
+            depth -= 1
+        position += 1
+    return False
+
+
+def test_no_nested_template_literals() -> None:
+    """SonarQube typescript:S4624 - a backtick inside another template's slot."""
+    offenders = [
+        number
+        for number, line in enumerate(
+            INDEX_HTML.read_text(encoding="utf-8").splitlines(), 1
+        )
+        if _nests_a_template(line)
+    ]
+    assert offenders == [], (
+        f"Build the inner string in its own statement: lines {offenders}"
+    )
+
+
+def test_data_attributes_are_read_through_dataset() -> None:
+    """SonarQube typescript:S6754 - prefer .dataset over getAttribute."""
+    html = INDEX_HTML.read_text(encoding="utf-8")
+    assert 'getAttribute("data-' not in html
+    assert "getAttribute('data-" not in html
+
+
+def test_the_start_up_fetches_are_awaited() -> None:
+    """SonarQube: prefer top-level await over calling an async function.
+
+    A module script is deferred, so the DOM is already parsed by the time it
+    runs, and awaiting means a failed first load surfaces rather than becoming
+    an unhandled rejection.
+    """
+    html = INDEX_HTML.read_text(encoding="utf-8")
+    assert '<script type="module">' in html
+    assert "await loadSystems();" in html
+    assert "await loadFamilies();" in html

@@ -28,6 +28,7 @@ from src.family_elements import (
     SOURCE_HISTORY,
     SOURCE_LATEST,
     SOURCE_MIXED,
+    _joined,
     build_family_charts,
     clamp_window_days,
     order_members,
@@ -525,3 +526,17 @@ def test_a_short_history_is_left_alone() -> None:
     series = _build(_geo_client(), GEO_MEMBERS[:1]).charts[0].series[0]
     assert series.point_count == len(series.points)
     assert series.note is None
+
+
+@pytest.mark.parametrize(
+    ("first", "second", "expected"),
+    [
+        ("held", "thinned", "held. thinned"),
+        ("held", None, "held"),
+        (None, "thinned", "thinned"),
+        (None, None, None),
+    ],
+)
+def test_two_notes_about_one_series_read_as_one_sentence(first, second, expected):
+    """A satellite can have something to say about both its data and its plot."""
+    assert _joined(first, second) == expected

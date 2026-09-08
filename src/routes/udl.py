@@ -38,6 +38,9 @@ def _gate(request: Request) -> None:
 
 
 def _to_generic_error(exc: Exception) -> HTTPException:
+    # UDLNotConfigured subclasses UDLError, so catching UDLError catches both;
+    # naming both in an except tuple is redundant. The distinction is made
+    # here instead, where it decides the status code.
     if isinstance(exc, UDLNotConfigured):
         return HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -76,7 +79,7 @@ async def search_jco_hrr(
         raw_results = await client.search_by_common_name(
             common_name, window_hours=window_hours
         )
-    except (UDLError, UDLNotConfigured) as exc:
+    except UDLError as exc:
         raise _to_generic_error(exc) from exc
 
     results = [JCOHRRRecord.from_udl(r) for r in raw_results]
@@ -100,7 +103,7 @@ async def get_jco_hrr_by_sat_no(
     client = request.app.state.udl_client
     try:
         satellites = await client.fetch_jco_hrr(window_hours=window_hours)
-    except (UDLError, UDLNotConfigured) as exc:
+    except UDLError as exc:
         raise _to_generic_error(exc) from exc
 
     for entry in satellites:
@@ -117,7 +120,7 @@ async def get_elset(request: Request, sat_no: str):
     client = request.app.state.udl_client
     try:
         raw = await client.get_elset(sat_no)
-    except (UDLError, UDLNotConfigured) as exc:
+    except UDLError as exc:
         raise _to_generic_error(exc) from exc
 
     if raw is None:
@@ -145,7 +148,7 @@ async def clash_check(request: Request, window_hours: int | None = None):
     for name in CLASH_CANDIDATES:
         try:
             record = await client.find_by_common_name(name, window_hours=window_hours)
-        except (UDLError, UDLNotConfigured) as exc:
+        except UDLError as exc:
             raise _to_generic_error(exc) from exc
 
         if record is None:
@@ -237,5 +240,5 @@ async def family_elements(
             window_days=clamp_window_days(window_days),
             hrr_window_hours=request.app.state.settings.udl_jco_hrr_window_hours,
         )
-    except (UDLError, UDLNotConfigured) as exc:
+    except UDLError as exc:
         raise _to_generic_error(exc) from exc

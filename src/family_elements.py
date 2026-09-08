@@ -233,6 +233,40 @@ def _value_for(metric: str, epoch: dt.datetime, record: dict[str, Any]) -> float
     )
 
 
+def _plot_points(
+    readings: list[tuple[dt.datetime, dict[str, Any]]], metric: str
+) -> tuple[list[ElementPoint], list[tuple[dt.datetime, float]]]:
+    """Element sets reduced to the plotted metric, dropping any that lack it."""
+    points: list[ElementPoint] = []
+    numeric: list[tuple[dt.datetime, float]] = []
+    for epoch, record in readings:
+        value = _value_for(metric, epoch, record)
+        if value is None:
+            continue
+        points.append(ElementPoint(epoch=epoch.isoformat(), value=value))
+        numeric.append((epoch, value))
+    return points, numeric
+
+
+def _fetch_note(
+    records: list[dict[str, Any]], points: list[ElementPoint], source: str
+) -> str | None:
+    """What to say beside a satellite's name about the data behind its line."""
+    if not records:
+        return NOTE_NO_ELEMENT_SET
+    if not points:
+        return NOTE_NO_USABLE_POINTS
+    if source == SOURCE_LATEST:
+        return NOTE_LATEST_ONLY
+    return None
+
+
+def _joined(first: str | None, second: str | None) -> str | None:
+    if first and second:
+        return f"{first}. {second}"
+    return first or second
+
+
 def build_series(
     member: dict[str, Any],
     records: list[dict[str, Any]],
@@ -248,23 +282,7 @@ def build_series(
         _as_float(readings[-1][1].get("meanMotion")) if readings else None
     )
     metric = metric_for(member.get("regime"), latest_mean_motion)
-
-    points: list[ElementPoint] = []
-    numeric: list[tuple[dt.datetime, float]] = []
-    for epoch, record in readings:
-        value = _value_for(metric, epoch, record)
-        if value is None:
-            continue
-        points.append(ElementPoint(epoch=epoch.isoformat(), value=value))
-        numeric.append((epoch, value))
-
-    if note is None:
-        if not records:
-            note = NOTE_NO_ELEMENT_SET
-        elif not points:
-            note = NOTE_NO_USABLE_POINTS
-        elif source == SOURCE_LATEST:
-            note = NOTE_LATEST_ONLY
+    points, numeric = _plot_points(readings, metric)
 
     # Drift is measured across the whole history, then the series is thinned
     # for the plot. Thinning after the measurement keeps a long history's
@@ -273,10 +291,12 @@ def build_series(
         drift_rate_degrees_per_day(numeric) if metric == METRIC_MEAN_LONGITUDE else None
     )
     total_points = len(points)
-    points = thin(points, MAX_POINTS_PER_SERIES)
-    if len(points) < total_points:
-        thinned_note = NOTE_THINNED.format(shown=len(points), total=total_points)
-        note = f"{note}. {thinned_note}" if note else thinned_note
+    plotted = thin(points, MAX_POINTS_PER_SERIES)
+    thinned_note = (
+        NOTE_THINNED.format(shown=len(plotted), total=total_points)
+        if len(plotted) < total_points
+        else None
+    )
 
     series = FamilySeries(
         catalogue_name=str(member.get("catalogue_name") or ""),
@@ -286,12 +306,12 @@ def build_series(
         archived=bool(member.get("archived")),
         colour_index=colour_index,
         source=source,
-        points=points,
+        points=plotted,
         latest_value=numeric[-1][1] if numeric else None,
         drift_deg_per_day=drift,
         hrr_rank=hrr_rank,
         point_count=total_points,
-        note=note,
+        note=_joined(note or _fetch_note(records, points, source), thinned_note),
     )
     return metric, series
 
@@ -322,6 +342,85 @@ async def _fetch_records(
     return result
 
 
+def _skip_reason(
+    member: dict[str, Any], rank: int | None, charted_so_far: int
+) -> str | None:
+    """Why this member is not charted, or None if it is.
+
+    The order matters: a member is reported against the first gate it fails,
+    which is the one an analyst can act on.
+    """
+    if not member.get("norad_id"):
+        return SKIP_NO_NORAD_ID
+    if rank is None:
+        return SKIP_NOT_IN_HRR_FEED
+    if rank not in ALLOWED_HRR_RANKS:
+        return SKIP_RANK_OUTSIDE_BAND.format(rank=rank)
+    if charted_so_far >= MAX_SERIES:
+        return SKIP_OVER_PALETTE_LIMIT
+    return None
+
+
+def partition_members(
+    members: list[dict[str, Any]], ranks: dict[str, int]
+) -> tuple[list[tuple[int, dict[str, Any], int]], list[FamilyMemberSkipped]]:
+    """Split a family into what will be charted and what will not.
+
+    The index carried alongside each eligible member is its position in the
+    whole family, which becomes its colour: a satellite keeps its colour
+    whoever else is excluded.
+    """
+    eligible: list[tuple[int, dict[str, Any], int]] = []
+    skipped: list[FamilyMemberSkipped] = []
+    for index, member in enumerate(order_members(members)):
+        rank = ranks.get(str(member.get("norad_id") or ""))
+        reason = _skip_reason(member, rank, len(eligible))
+        if reason is not None:
+            skipped.append(
+                FamilyMemberSkipped(
+                    catalogue_name=str(member.get("catalogue_name") or ""),
+                    reason=reason,
+                )
+            )
+        elif rank is not None:
+            eligible.append((index, member, rank))
+    return eligible, skipped
+
+
+def _charts_from(grouped: dict[str, list[FamilySeries]]) -> list[FamilyChart]:
+    """One chart per metric present, longitude first."""
+    charts = []
+    for metric in _METRIC_ORDER:
+        series_list = grouped.get(metric)
+        if not series_list:
+            continue
+        title, unit, description = _CHART_META[metric]
+        charts.append(
+            FamilyChart(
+                metric=metric,
+                title=title,
+                unit=unit,
+                description=description,
+                series=series_list,
+            )
+        )
+    return charts
+
+
+def _overall_source(sources: set[str]) -> str:
+    """How deep the data behind this family is, in one word.
+
+    Mixed is its own answer rather than the more flattering of the two: a
+    family where one satellite has years of history and another has a single
+    element set is not uniform, and the chart should not imply it is.
+    """
+    if len(sources) > 1:
+        return SOURCE_MIXED
+    if sources:
+        return next(iter(sources))
+    return SOURCE_NONE
+
+
 async def build_family_charts(
     *,
     client: Any,
@@ -348,36 +447,8 @@ async def build_family_charts(
     since = (
         None if window_days == FULL_HISTORY else now - dt.timedelta(days=window_days)
     )
-    ordered = order_members(members)
     ranks = await hrr_ranks(client, cache, hrr_window_hours)
-
-    skipped: list[FamilyMemberSkipped] = []
-    eligible: list[tuple[int, dict[str, Any], int]] = []
-    for index, member in enumerate(ordered):
-        name = str(member.get("catalogue_name") or "")
-        norad_id = member.get("norad_id")
-        rank = ranks.get(str(norad_id)) if norad_id else None
-        if not norad_id:
-            skipped.append(
-                FamilyMemberSkipped(catalogue_name=name, reason=SKIP_NO_NORAD_ID)
-            )
-        elif rank is None:
-            skipped.append(
-                FamilyMemberSkipped(catalogue_name=name, reason=SKIP_NOT_IN_HRR_FEED)
-            )
-        elif rank not in ALLOWED_HRR_RANKS:
-            skipped.append(
-                FamilyMemberSkipped(
-                    catalogue_name=name,
-                    reason=SKIP_RANK_OUTSIDE_BAND.format(rank=rank),
-                )
-            )
-        elif len(eligible) >= MAX_SERIES:
-            skipped.append(
-                FamilyMemberSkipped(catalogue_name=name, reason=SKIP_OVER_PALETTE_LIMIT)
-            )
-        else:
-            eligible.append((index, member, rank))
+    eligible, skipped = partition_members(members, ranks)
 
     semaphore = asyncio.Semaphore(MAX_CONCURRENT_FETCHES)
 
@@ -399,8 +470,8 @@ async def build_family_charts(
             return records, source, None
 
     fetched = await asyncio.gather(*(fetch(member) for _, member, _rank in eligible))
-
-    if eligible and all(result[2] == NOTE_UDL_FAILED for result in fetched):
+    failures = [result for result in fetched if result[2] == NOTE_UDL_FAILED]
+    if eligible and len(failures) == len(fetched):
         raise UDLError("Every element-set lookup in this family failed")
 
     grouped: dict[str, list[FamilySeries]] = {}
@@ -417,31 +488,10 @@ async def build_family_charts(
             note=note,
         )
         grouped.setdefault(metric, []).append(series)
-        if source in (SOURCE_HISTORY, SOURCE_LATEST):
-            sources.add(source)
+        sources.update({source} & {SOURCE_HISTORY, SOURCE_LATEST})
 
-    charts = []
-    for metric in _METRIC_ORDER:
-        series_list = grouped.get(metric)
-        if not series_list:
-            continue
-        title, unit, description = _CHART_META[metric]
-        charts.append(
-            FamilyChart(
-                metric=metric,
-                title=title,
-                unit=unit,
-                description=description,
-                series=series_list,
-            )
-        )
-
-    if len(sources) > 1:
-        overall = SOURCE_MIXED
-    elif sources:
-        overall = sources.pop()
-    else:
-        overall = SOURCE_NONE
+    charts = _charts_from(grouped)
+    overall = _overall_source(sources)
 
     return FamilyElementsResponse(
         family_id=family_id,

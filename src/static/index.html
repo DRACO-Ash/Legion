@@ -253,7 +253,7 @@ svg.chart{ width:100%; height:auto; display:block; overflow:visible; }
   </main>
 </div>
 
-<script>
+<script type="module">
 const STATUS_LABEL = {onorbit:"On-orbit", decayed:"Decayed/Deorbited", decaying:"Decaying", unknown:"Unconfirmed"};
 // Operational order, not alphabetical: sorting by status is a question about
 // what is still flying, so on-orbit leads and unconfirmed trails.
@@ -336,6 +336,9 @@ const SORT_COLUMNS = [
   {key:"norad_id",       label:"NORAD ID", type:"number"},
 ];
 const COLLATOR = new Intl.Collator("en-GB", {numeric:true, sensitivity:"base"});
+const NATION_CLASS = {RU:"rus", CN:"chn"};
+
+function nationClass(nation){ return NATION_CLASS[nation] || "other"; }
 let sortState = {key:null, direction:1};
 
 function sortValue(record, column){
@@ -370,11 +373,21 @@ function sortRows(list){
   });
 }
 
+function ariaSortFor(active){
+  if(!active) return "none";
+  return sortState.direction === 1 ? "ascending" : "descending";
+}
+
+function sortMarkFor(active){
+  if(!active) return "↕";
+  return sortState.direction === 1 ? "▲" : "▼";
+}
+
 function sortHeader(){
   return SORT_COLUMNS.map(column => {
     const active = sortState.key === column.key;
-    const ariaSort = active ? (sortState.direction === 1 ? "ascending" : "descending") : "none";
-    const mark = active ? (sortState.direction === 1 ? "▲" : "▼") : "↕";
+    const ariaSort = ariaSortFor(active);
+    const mark = sortMarkFor(active);
     return `<th class="sortable" aria-sort="${ariaSort}">
       <button type="button" data-sort="${column.key}">${esc(column.label)}<span class="sort-mark" aria-hidden="true">${mark}</span></button>
     </th>`;
@@ -393,7 +406,7 @@ function renderTable(list){
     <tbody>${rows.map(s => `
       <tr class="row ${s.id === selectedId ? "selected" : ""}" data-id="${esc(s.id)}">
         <td>${esc(s.catalogue_name)}${s.archived ? " <em>(archived)</em>" : ""}</td>
-        <td><span class="badge ${s.nation === "RU" ? "rus" : s.nation === "CN" ? "chn" : "other"}">${esc(s.nation)}</span></td>
+        <td><span class="badge ${nationClass(s.nation)}">${esc(s.nation)}</span></td>
         <td>${esc(s.regime)}</td>
         <td>${esc(s.launch_year)}</td>
         <td><span class="pill ${esc(s.status)}">${esc(STATUS_LABEL[s.status] || s.status)}</span></td>
@@ -402,11 +415,11 @@ function renderTable(list){
     </tbody>
   </table>`;
   wrap.querySelectorAll("tr.row").forEach(tr => {
-    tr.addEventListener("click", () => selectSystem(tr.getAttribute("data-id")));
+    tr.addEventListener("click", () => selectSystem(tr.dataset.id));
   });
   wrap.querySelectorAll("button[data-sort]").forEach(button => {
     button.addEventListener("click", () => {
-      const key = button.getAttribute("data-sort");
+      const key = button.dataset.sort;
       sortState = sortState.key === key
         ? {key, direction: -sortState.direction}
         : {key, direction: 1};
@@ -502,9 +515,11 @@ document.getElementById("archiveBtn").addEventListener("click", async () => {
   const res = await fetch(`/api/systems/${selectedId}`, {method:"DELETE", headers: authHeaders()});
   const msg = document.getElementById("formMsg");
   if(res.ok){
+    // Clear first: the clear handler blanks this message, so setting it
+    // beforehand meant the confirmation never reached the screen.
+    document.getElementById("clearBtn").click();
     msg.textContent = "Archived.";
     msg.className = "msg ok";
-    document.getElementById("clearBtn").click();
     await loadSystems();
     await loadFamilies();
   } else {
@@ -565,8 +580,16 @@ let lastPayload = null;
 function plotted(series, isLongitude){
   const values = series.points.map(point => point.value);
   if(chartMode !== "relative" || values.length === 0) return values;
-  const base = values[0];
-  return values.map(value => isLongitude ? wrapDegrees(value - base) : value - base);
+  if(!isLongitude) return values.map(value => value - values[0]);
+  // Sum the step-by-step change rather than differencing against the first
+  // point. Over a full history an object can drift right round the belt, and
+  // a wrapped difference would report that as -160 degrees instead of +200.
+  // Same reasoning as the drift rate on the server.
+  const cumulative = [0];
+  for(let i = 1; i < values.length; i++){
+    cumulative.push(cumulative[i - 1] + wrapDegrees(values[i] - values[i - 1]));
+  }
+  return cumulative;
 }
 
 function wrapDegrees(value){ return ((value + 180) % 360 + 360) % 360 - 180; }
@@ -584,11 +607,19 @@ function decimalsForStep(step){
   return Math.min(6, Math.ceil(-Math.log10(step)));
 }
 
+// The 1-2-5-10 ladder that keeps axis ticks on round numbers.
+function stepMultiplier(normalised){
+  if(normalised >= 5) return 10;
+  if(normalised >= 2) return 5;
+  if(normalised >= 1) return 2;
+  return 1;
+}
+
 function niceTicks(lo, hi, target){
   const raw = (hi - lo) / target;
   const magnitude = Math.pow(10, Math.floor(Math.log10(raw)));
   const normalised = raw / magnitude;
-  const step = (normalised >= 5 ? 10 : normalised >= 2 ? 5 : normalised >= 1 ? 2 : 1) * magnitude;
+  const step = stepMultiplier(normalised) * magnitude;
   const ticks = [];
   for(let value = Math.ceil(lo / step) * step; value <= hi + step * 1e-9; value += step){
     ticks.push(Number(value.toFixed(10)));
@@ -610,6 +641,12 @@ function formatDate(ms, spanMs){
   if(spanMs >= SPAN_NEEDING_TIME) return day;
   const time = date.toLocaleTimeString("en-GB", {hour:"2-digit", minute:"2-digit", timeZone:"UTC"});
   return `${day} ${time}`;
+}
+
+function tickAnchor(fraction){
+  if(fraction === 0) return "start";
+  if(fraction === 1) return "end";
+  return "middle";
 }
 
 function formatEpoch(iso){
@@ -676,7 +713,7 @@ function chartMarkup(chart, index){
     const span = xMax - xMin;
     const xTicks = [0, 0.25, 0.5, 0.75, 1].map(fraction => {
       const at = xMin + span * fraction;
-      const anchor = fraction === 0 ? "start" : fraction === 1 ? "end" : "middle";
+      const anchor = tickAnchor(fraction);
       return `<text x="${sx(at).toFixed(2)}" y="${CHART_H - 14}" text-anchor="${anchor}" font-size="10" fill="${AXIS_TEXT}">${esc(formatDate(at, span))}</text>`;
     }).join("");
 
@@ -824,6 +861,14 @@ function attachHover(block, index, absoluteUnit){
   svg.addEventListener("mouseleave", hide);
 }
 
+function skippedLine(skipped){
+  if(skipped.length === 0) return "";
+  const named = skipped
+    .map(entry => esc(entry.catalogue_name) + " (" + esc(entry.reason) + ")")
+    .join("; ");
+  return `<p class="skipped">Not charted: ${named}.</p>`;
+}
+
 function renderCharts(payload){
   const host = document.getElementById("charts");
   if(payload.charts.length === 0){
@@ -831,9 +876,7 @@ function renderCharts(payload){
     return;
   }
   const blocks = payload.charts.map((chart, index) => chartMarkup(chart, index));
-  const skipped = payload.skipped.length
-    ? `<p class="skipped">Not charted: ${payload.skipped.map(entry => `${esc(entry.catalogue_name)} (${esc(entry.reason)})`).join("; ")}.</p>`
-    : "";
+  const skipped = skippedLine(payload.skipped);
   host.innerHTML = blocks.map(block => block.html).join("") + skipped;
   blocks.forEach((block, index) => attachHover(block, index, payload.charts[index].unit));
 }
@@ -857,6 +900,11 @@ async function loadFamilies(){
   select.innerHTML = '<option value="">Select a family…</option>' + options;
   select.value = keep;
 }
+
+const SOURCE_LABELS = {
+  "elset-history": "element-set history",
+  "elset-latest": "latest element set only",
+};
 
 const CHART_ERRORS = {
   401: "Set the team token above: element sets come from UDL and the lookup is gated.",
@@ -897,9 +945,7 @@ async function loadFamilyCharts(){
   lastPayload = await res.json();
   const payload = lastPayload;
   renderCharts(payload);
-  const depth = payload.source === "elset-history"
-    ? "element-set history"
-    : payload.source === "elset-latest" ? "latest element set only" : payload.source;
+  const depth = SOURCE_LABELS[payload.source] || payload.source;
   const span = payload.window_days === 0 ? "full history" : `last ${payload.window_days} days`;
   const charted = payload.charts.reduce((total, chart) => total + chart.series.length, 0);
   msg.textContent = `${payload.family_title} · ${span} · ${depth} · ${charted} object${charted === 1 ? "" : "s"} at JCO HRR rank 0-3 · generated ${formatEpoch(payload.generated_at)}`;
@@ -916,8 +962,11 @@ document.getElementById("cMode").addEventListener("change", () => {
 });
 
 refreshTokenStatus();
-loadSystems();
-loadFamilies();
+// Top-level await: a module script is deferred, so the DOM is already parsed,
+// and awaiting means a failed first load surfaces rather than becoming an
+// unhandled rejection.
+await loadSystems();
+await loadFamilies();
 </script>
 </body>
 </html>
