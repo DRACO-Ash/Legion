@@ -92,6 +92,12 @@ deployment's environment is what the server compares against; the box in the
 UI header is what the browser sends. That box lives in `sessionStorage`, so it
 is **per browser tab**: opening the app in a new tab means pasting it again.
 
+The token box compares what it holds against the deployment's length as soon
+as you save it, so a truncated or wrong paste shows in the header
+immediately: "set, 22 characters, but the deployment expects 43: check the
+paste is complete". The field is also hidden from password managers, since a
+saved entry autofilled later would quietly replace a correct paste.
+
 Equal lengths on both sides prove less than they look. A token generated the
 usual way, `secrets.token_urlsafe(32)`, is always 43 characters, so two
 **different** tokens both read 43. When the lengths match and the compare

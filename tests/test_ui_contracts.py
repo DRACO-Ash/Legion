@@ -257,3 +257,22 @@ def test_equal_token_lengths_are_not_reported_as_reassurance() -> None:
     # substring spanning two fragments is not in the file.
     assert "restarted since TEAM_TOKEN was changed" in INDEX_HTML
     assert "body.started_at" in INDEX_HTML
+
+
+def test_a_wrong_length_token_is_flagged_where_it_was_pasted() -> None:
+    """Ash hit this live: 22 characters pasted against a deployment expecting
+    43. The app only said so on the chart panel, three clicks later. A
+    truncated paste is invisible in a password field, so the status line reads
+    /readyz once and compares at the point of entry."""
+    assert "readExpectedTokenLength" in INDEX_HTML
+    assert "expectedTokenLength" in INDEX_HTML
+    assert "check the paste is complete" in INDEX_HTML
+    assert ".token-status.mismatch" in INDEX_HTML
+
+
+def test_the_token_field_is_hidden_from_password_managers() -> None:
+    """It is a shared token pasted per tab, not a password. A manager offering
+    to save it would later autofill a stale value over a correct paste."""
+    field = INDEX_HTML[INDEX_HTML.index('id="tokenInput"') :][:400]
+    assert 'autocomplete="off"' in field
+    assert 'spellcheck="false"' in field

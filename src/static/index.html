@@ -49,6 +49,7 @@ h1{ font-size:24px; margin:4px 0 0; letter-spacing:.01em; }
   font-size:12.5px; }
 .token-status{ font-size:11px; color:var(--text-faint); }
 .token-status.set{ color:var(--green-bright); }
+.token-status.mismatch{ color:var(--china-bright); }
 
 .layout{ display:grid; grid-template-columns:1fr 380px; gap:20px; align-items:start; }
 @media (max-width:900px){ .layout{ grid-template-columns:1fr; } }
@@ -230,7 +231,8 @@ svg.chart{ width:100%; height:auto; display:block; overflow:visible; }
     </div>
     <div class="token-bar">
       <label for="tokenInput"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-key"/></svg>Team token</label>
-      <input type="password" id="tokenInput" placeholder="paste to enable add/edit/archive">
+      <input type="password" id="tokenInput" placeholder="paste to enable add/edit/archive"
+        autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">
       <button id="tokenSave"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-save"/></svg>Save</button>
       <output class="token-status" id="tokenStatus">not set — read only</output>
     </div>
@@ -358,16 +360,38 @@ function authHeaders(){
   const t = token();
   return t ? {"Authorization": "Bearer " + t} : {};
 }
+/* The length the deployment is configured with, read once from /readyz.
+   Comparing against it here is the point: a token that does not match shows
+   as wrong the moment it is saved, in the field where it was pasted, rather
+   than three clicks later on a chart that will not load. A truncated paste is
+   the common case and it is invisible in a password field. */
+let expectedTokenLength = null;
+
+async function readExpectedTokenLength(){
+  try{
+    const res = await fetch("/readyz");
+    const body = await res.json();
+    if(body.team_token_configured) expectedTokenLength = body.team_token_len;
+  } catch { /* leave it unknown: the status line simply says less */ }
+  refreshTokenStatus();
+}
+
 function refreshTokenStatus(){
   const el = document.getElementById("tokenStatus");
   const held = token();
-  if(held){
-    el.textContent = `set, ${held.length} characters — writes enabled`;
-    el.classList.add("set");
-  } else {
+  el.classList.remove("set", "mismatch");
+  if(!held){
     el.textContent = "not set — read only";
-    el.classList.remove("set");
+    return;
   }
+  if(expectedTokenLength !== null && held.length !== expectedTokenLength){
+    el.textContent = `set, ${held.length} characters, but the deployment expects `
+      + `${expectedTokenLength}: check the paste is complete`;
+    el.classList.add("mismatch");
+    return;
+  }
+  el.textContent = `set, ${held.length} characters — writes enabled`;
+  el.classList.add("set");
 }
 document.getElementById("tokenSave").addEventListener("click", () => {
   const v = document.getElementById("tokenInput").value.trim();
@@ -1236,6 +1260,8 @@ refreshTokenStatus();
 // unhandled rejection.
 await loadSystems();
 await loadFamilies();
+
+await readExpectedTokenLength();
 
 const configurationGap = await missingConfiguration();
 if(configurationGap){
