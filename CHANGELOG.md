@@ -5,6 +5,11 @@ All notable changes to this project are documented here. Format follows
 [Semantic Versioning](https://semver.org/). Pre-1.0: minor bumps may include
 breaking changes, since nothing has shipped to the App Store yet.
 
+## [0.6.3] - 2026-09-08
+
+Name the gate stopping a chart, on load rather than after a 503
+
+
 ## [0.6.2] - 2026-09-08
 
 Distinguish a rejected team token from a missing one
