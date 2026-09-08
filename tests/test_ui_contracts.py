@@ -144,3 +144,20 @@ def test_the_token_box_warns_that_it_is_per_tab() -> None:
     """sessionStorage does not carry across tabs, and the App Store opens the
     app in a new one."""
     assert "per browser tab" in INDEX_HTML
+
+
+def test_the_panel_names_missing_deployment_configuration_on_load() -> None:
+    """Three gates stand between an analyst and a chart: the team token, the
+    UDL credentials, and the rank band. Two of them are deployment
+    configuration, and /readyz reports both, so the panel says what is missing
+    rather than waiting for the analyst to pick a family and get a 503."""
+    assert "missingConfiguration" in INDEX_HTML
+    assert "udl_configured" in INDEX_HTML
+    assert "UDL_USERNAME and UDL_PASSWORD" in INDEX_HTML
+
+
+def test_the_empty_chart_state_does_not_invent_a_cause() -> None:
+    """It used to say every member lacked a NORAD ID, which since the rank
+    gate is usually false: the real reasons are in the skipped list."""
+    assert "No member of this family has a NORAD ID" not in INDEX_HTML
+    assert "Nothing in this family cleared the checks" in INDEX_HTML

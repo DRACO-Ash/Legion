@@ -878,7 +878,10 @@ function skippedLine(skipped){
 function renderCharts(payload){
   const host = document.getElementById("charts");
   if(payload.charts.length === 0){
-    host.innerHTML = '<div class="empty">No member of this family has a NORAD ID to look up.</div>';
+    const reason = payload.skipped.length > 0
+      ? "Nothing in this family cleared the checks. See below for each object."
+      : "This family has no catalogued members to chart.";
+    host.innerHTML = `<div class="empty">${esc(reason)}</div>` + skippedLine(payload.skipped);
     return;
   }
   const blocks = payload.charts.map((chart, index) => chartMarkup(chart, index));
@@ -905,6 +908,27 @@ async function loadFamilies(){
     .join("");
   select.innerHTML = '<option value="">Select a family…</option>' + options;
   select.value = keep;
+}
+
+/* The chart panel depends on two pieces of deployment configuration that the
+   catalogue does not: UDL credentials to fetch element sets at all, and a team
+   token to authorise the lookup. /readyz reports both, so the panel can name
+   what is missing on load instead of answering with a 503 after the analyst
+   picks a family. */
+async function missingConfiguration(){
+  try{
+    const res = await fetch("/readyz");
+    const body = await res.json();
+    const missing = [];
+    if(!body.udl_configured) missing.push("UDL_USERNAME and UDL_PASSWORD");
+    if(!body.team_token_configured) missing.push("TEAM_TOKEN");
+    if(missing.length === 0) return null;
+    return `No charts are possible yet: this deployment needs ${missing.join(", and ")} `
+      + "set in its Configuration tab. Element sets come from live UDL. "
+      + "The catalogue above works without them.";
+  } catch {
+    return null;
+  }
 }
 
 const SOURCE_LABELS = {
@@ -1004,6 +1028,13 @@ refreshTokenStatus();
 // unhandled rejection.
 await loadSystems();
 await loadFamilies();
+
+const configurationGap = await missingConfiguration();
+if(configurationGap){
+  const msg = document.getElementById("chartMsg");
+  msg.textContent = configurationGap;
+  msg.className = "msg error";
+}
 </script>
 </body>
 </html>

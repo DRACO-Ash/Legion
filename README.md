@@ -111,7 +111,22 @@ through filtering.
 
 ## Family movement charts
 
-The panel below the catalogue plots a whole family's element sets together,
+**Three gates stand between an analyst and a chart, and all three have to be
+open.** The panel names the ones it can see on load rather than making you
+guess:
+
+1. `UDL_USERNAME` and `UDL_PASSWORD` in the deployment's Configuration tab.
+   Element sets come from live UDL; without them every chart route answers 503
+   "UDL is not configured".
+2. `TEAM_TOKEN` in the same place, **and** the same value pasted into the
+   token box in the UI header. The box is per browser tab.
+3. A JCO HRR rank of 0 to 3 on the object itself. A family whose members are
+   all rank 4 or 5, or all absent from the feed, produces no chart and lists
+   each object with the reason.
+
+The catalogue works without any of them; only the charts need them.
+
+The panel plots a whole family's element sets together,
 which is the only scale at which a class's behaviour is visible: one satellite
 drifting means little, six of them drifting the same way is a pattern.
 
