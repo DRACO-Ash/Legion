@@ -135,10 +135,10 @@ keeps its version in step with `src/VERSION`; do not edit that line by hand.
   build environment's egress policy and the `|| true` swallowed it, so the
   upgrade applied nothing in that build.
 
-## The Code Quality gate has four conditions, not one
+## The Code Quality gate has five conditions, not one
 
-Learned the hard way across 0.4.7 and 0.4.8. The SonarQube gate fails on any
-of these, and only the first produces anything resembling an error message:
+Learned the hard way across 0.4.7, 0.4.8 and 0.8.2. The SonarQube gate fails on
+any of these, and only the first produces anything resembling an error message:
 
 ● New issues = 0. The local mirror in `tests/test_sonar_contracts.py` covers
   the rules that have actually fired, including "Use logging.exception()
@@ -154,6 +154,26 @@ of these, and only the first produces anything resembling an error message:
   `tests/conftest.py` (`make_seed_record`) for exactly this reason.
 ● Security hotspots reviewed. If this is the failing condition, no upload will
   ever fix it: a human must review them in the SonarQube user interface.
+● **Coverage must be measurable at all, which means the release has to change
+  a Python file inside `sonar.sources` (`src`).** This is a separate job,
+  `code-quality-verify`, and it fails a build where SonarQube measured no
+  coverage: "Code coverage was not measured for this build, so the coverage
+  requirement was not applied." A docs-only or Dockerfile-only release trips it
+  every time, and retrying cannot help because there is nothing to measure. A
+  change under `tests/` does not count either: `sonar.tests=tests`, and
+  coverage on new code is measured on sources, not tests. `bump_version.sh`
+  warns when a release would land in this state. The route out is to bundle the
+  change with a real source change, or to have the platform treat "nothing
+  analysed" as a pass, which its own message already says it is.
+
+**Do not "fix" this one by reconfiguring coverage.** The theory that the report
+does not line up with the analysed sources was tested at 0.8.2 and is wrong: the
+pipeline's bare `pytest --cov` emits `<source>` at the repository root with
+`filename="src/app.py"`, which matches `sonar.sources=src` exactly. Adding
+`relative_files = True`, the usual internet advice, makes it strictly worse: the
+report becomes `<source>src</source>` with `filename="app.py"`, which resolves
+to a path that does not exist. Setting `source = src` alone drops the repository
+root from the paths for no gain. Leave the coverage configuration alone.
 
 The failed job uploads `sonar-quality-gate.json`, which names which condition
 failed, plus `sonar-issues.json` and `sonar-hotspots.json`. Read those first.
@@ -172,8 +192,11 @@ has nothing left to find.
 
 ## The container image: three rules that are easy to undo
 
-Set in 0.8.2 after a Container Scan failure. Full account in `READINESS.md`,
-"Container Scan, worked 9 September 2026".
+Set in 0.8.2 after a Container Scan failure, and **confirmed by the platform:
+Container Scan passes on 0.8.2**, along with Secret Detection, Dependencies,
+SAST, Dependency Scanning, Test, Container Build and the Code Quality scan
+itself. Full account in `READINESS.md`, "Container Scan, worked 9 September
+2026".
 
 ● **The base image is pinned by digest, in both `FROM` lines, and the two must
   always match.** The tag drifted between the build that passed Container Scan

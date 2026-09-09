@@ -231,6 +231,65 @@ beginning.
   is independent of the container base, and the suite is now known to pass on
   both.
 
+## Code Quality, `code-quality-verify`, 9 September 2026
+
+**Container Scan passes on 0.8.2.** So do Secret Detection, Dependencies, SAST,
+Dependency Scanning, Test, Container Build and the Code Quality scan itself. The
+digest pin, the 3.13 base and the removed installer toolchain are confirmed by
+the platform, not just by local inspection. One job fails: `code-quality-verify`.
+
+**Its message.** "Code coverage was not measured for this build, so the coverage
+requirement was not applied. Either the coverage report did not line up with the
+source files that were analysed, or none of the changed files contain testable
+code." The platform labels it retryable and says "this is not a problem with
+your code". Two retries failed identically.
+
+**It is the second branch, and it is proven from the repository rather than
+inferred.** `sonar.sources=src`, and 0.8.2 changes no Python file under `src`:
+
+● Against 0.8.1, the whole diff is `CHANGELOG.md`, `CLAUDE.md`, `Dockerfile`,
+  `READINESS.md`, `pyproject.toml` and `src/VERSION`. Zero Python.
+● Against 0.8.0, it adds `README.md`, `src/static/index.html` and
+  `tests/test_ui_contracts.py`. Still zero Python under `src`, and a change
+  under `tests/` cannot help: `sonar.tests=tests`, so coverage on new code is
+  measured on sources, not tests.
+
+So SonarQube had nothing to measure, and no number of retries changes that.
+
+**The first branch was tested and is wrong.** The pipeline's exact command,
+`pytest --cov --cov-report=xml:coverage.xml` with no coverage configuration,
+produces `<source>` at the repository root and `filename="src/app.py"`, which
+matches `sonar.sources=src` exactly. Two "fixes" were tried and both are
+regressions:
+
+● `relative_files = True`, the usual advice for this symptom, produces
+  `<source>src</source>` with `filename="app.py"`. That resolves to
+  `<root>/app.py`, which does not exist. Strictly worse.
+● `source = src` alone produces `<source>/<root>/src</source>` with
+  `filename="app.py"`. Correct only via the absolute path, and it drops the
+  repository-relative form that currently matches Sonar's own file keys.
+
+The coverage configuration is therefore left alone, and `CLAUDE.md` records why
+so the theory does not get retried.
+
+**What unblocks it.** Two routes, and the choice is not ours alone:
+
+1. **Platform.** `code-quality-verify` should pass, not fail, when there is no
+   new code to analyse. Its own message already says nothing was analysed and
+   that this is not a code problem. This is the correct fix and it needs the
+   same direct GitLab access the `.gitlab-ci.yml` path fix needed.
+2. **Us.** Bundle the 0.8.2 container hardening with the next real change under
+   `src`. Uploading a 0.8.3 that adds only documentation, a script guard or a
+   test would fail identically, so it should not be uploaded on its own.
+
+`scripts/bump_version.sh` now warns when a release changes nothing under
+`src/**.py`, naming the consequence, so this costs a warning rather than an
+upload cycle next time.
+
+**Still unread, and it would confirm rather than change the above:** the
+`code-quality-verify` job log and the `sonar-quality-gate.json` it uploads,
+which names the failing condition directly.
+
 ## Skills consulted for this pass
 
 `app-store-readiness` (this report), `toolchain-adapters` (Python command mapping), `dependencies` (lockfile standard), `testing-standards` (environment-scoped assertions), `observability-and-audit` (audit line, readiness probe), `accessibility` (audit checklist, contrast computation), `security-hardening`, `app-store-deployment`, `deploy-recipes`, `code-architecture`, `packaging`, `data-layer`, `api-and-integration`.

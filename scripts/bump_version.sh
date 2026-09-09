@@ -38,6 +38,25 @@ fi
 CURRENT_VERSION="$(cat "$VERSION_FILE" 2>/dev/null || echo "none")"
 TODAY="$(date -u +%Y-%m-%d)"
 
+# Warn when a release changes nothing under sonar.sources. The App Store's
+# code-quality-verify job fails a build for which SonarQube measured no
+# coverage, and it measures coverage only on changed files inside
+# sonar.sources (src). A docs-only or Dockerfile-only release therefore fails
+# that job every time and no number of retries changes it, because there is
+# nothing to measure. This is a warning, not a block: such a release is
+# legitimate, but it needs to be bundled with a source change or held until
+# the platform treats "nothing analysed" as a pass. See CLAUDE.md, "The Code
+# Quality gate has five conditions".
+PREV_TAG="v$CURRENT_VERSION"
+if git -C "$REPO_ROOT" rev-parse -q --verify "$PREV_TAG" >/dev/null 2>&1; then
+  if [ -z "$(git -C "$REPO_ROOT" diff --name-only "$PREV_TAG" HEAD -- 'src/**.py' 'src/*.py')" ]; then
+    echo "WARNING: no Python file under src/ has changed since $PREV_TAG." >&2
+    echo "         SonarQube will measure no coverage on new code, and the" >&2
+    echo "         App Store's code-quality-verify job fails on that. Bundle" >&2
+    echo "         this with a source change before uploading." >&2
+  fi
+fi
+
 echo -n "$NEW_VERSION" > "$VERSION_FILE"
 
 TMP_CHANGELOG="$(mktemp)"
