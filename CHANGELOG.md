@@ -5,6 +5,11 @@ All notable changes to this project are documented here. Format follows
 [Semantic Versioning](https://semver.org/). Pre-1.0: minor bumps may include
 breaking changes, since nothing has shipped to the App Store yet.
 
+## [0.8.1] - 2026-09-09
+
+Check the token in the box, and check automatically on Save
+
+
 ## [0.8.0] - 2026-09-09
 
 Add /api/token-check, which names how two tokens differ without revealing either
