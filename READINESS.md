@@ -279,8 +279,25 @@ so the theory does not get retried.
    that this is not a code problem. This is the correct fix and it needs the
    same direct GitLab access the `.gitlab-ci.yml` path fix needed.
 2. **Us.** Bundle the 0.8.2 container hardening with the next real change under
-   `src`. Uploading a 0.8.3 that adds only documentation, a script guard or a
-   test would fail identically, so it should not be uploaded on its own.
+   `src`. A release that adds only documentation, a script guard or a test would
+   fail identically, so it must not be uploaded on its own.
+
+**Route 2 was taken, in 0.8.3.** The change is `src/routes/health.py` publishing
+`team_token_bytes`, which closes the character-versus-byte gap that hid a
+non-breaking space through three releases. It is worth making on its own merits;
+it also gives the gate something to measure. Confirmed on the built package,
+running the platform's own `pytest --cov --cov-report=xml:coverage.xml` in a
+`python:3.12-slim` container: 282 passed, and `coverage.xml` carries
+`filename="src/routes/health.py"`, the exact key `sonar.sources=src` resolves.
+The changed lines are covered; the only uncovered lines in that file, 57 and 58,
+are the pre-existing `except TimeoutError` branch.
+
+The job log for the 0.8.2 failure also confirms the mechanism rather than
+changing the diagnosis. `code-quality-verify` checks `.scannerwork/`
+`report-task.txt` exists, finds `sonar-quality-gate.json`, strips its whitespace
+and tests it for the coverage condition. Every step succeeded: the scan ran and
+the gate file was there. Only the coverage value was missing, which also rules
+out the coverage report never reaching the scanner.
 
 `scripts/bump_version.sh` now warns when a release changes nothing under
 `src/**.py`, naming the consequence, so this costs a warning rather than an
