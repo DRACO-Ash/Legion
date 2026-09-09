@@ -5,6 +5,11 @@ All notable changes to this project are documented here. Format follows
 [Semantic Versioning](https://semver.org/). Pre-1.0: minor bumps may include
 breaking changes, since nothing has shipped to the App Store yet.
 
+## [0.8.2] - 2026-09-09
+
+Digest-pin the base image, move it to Python 3.13.15, and remove pip, setuptools and wheel from the runtime image. No package version moved and no lock file regenerated.
+
+
 ## [0.8.1] - 2026-09-09
 
 Check the token in the box, and check automatically on Save
