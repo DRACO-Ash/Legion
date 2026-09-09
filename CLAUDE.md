@@ -170,6 +170,36 @@ local mirror, calibrated against the upload that reported it:
 the platform's 25 and 18 exactly. Run `pytest` before packaging and the gate
 has nothing left to find.
 
+## The container image: three rules that are easy to undo
+
+Set in 0.8.2 after a Container Scan failure. Full account in `READINESS.md`,
+"Container Scan, worked 9 September 2026".
+
+● **The base image is pinned by digest, in both `FROM` lines, and the two must
+  always match.** The tag drifted between the build that passed Container Scan
+  in August and the one that failed in September, so two builds of the identical
+  archive scanned differently with nothing in the repository recording which was
+  which. To refresh: pull the tag, read the digest, change both lines, rebuild,
+  re-verify. Never change one of the two.
+● **pip, setuptools and wheel are deleted from the runtime image, and the build
+  fails if any survive.** Three copies ship by default and a cataloguer reads
+  all three: the interpreter's site-packages, the wheel bundled in `ensurepip`,
+  and the copy `python -m venv` puts in `/opt/venv`. Do not "fix" an installer
+  advisory by upgrading pip; the image does not need pip at all.
+● **A base image move must not move a package version.** 3.12 to 3.13 was done
+  without regenerating a lock file, because the lock files are what Dependency
+  Scanning reads and that gate cost six upload cycles. It worked because the
+  existing hashes already covered the cp313 wheels, which was proven by
+  installing `requirements-runtime.txt` under 3.13 with `--require-hashes`
+  before the change was made. Prove it again the same way next time; if the
+  hashes do not cover the new interpreter, that is a much larger change.
+
+One standing caution: a Container Scan failure names vulnerable packages in its
+advice text whatever the real cause. An Anchore policy fails only on a `STOP`
+action, so read the policy evaluation and find the `STOP` row before changing a
+version. A breakdown that says "90 findings, all WARN" and "the scan failed" is
+describing two different things.
+
 ## Architecture, briefly
 
 - `src/app.py` — app factory (`build_app`), CORS, two-tier rate limiting.

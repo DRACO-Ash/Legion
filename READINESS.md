@@ -136,6 +136,101 @@ The comparison also killed two theories outright:
 
 **Tooling.** `scripts/verify-dependency-scan.sh` builds the analyser and runs it against a built package, printing the swallowed message and failing if no SBOM is produced. `DS_ANALYZER_BIN` reuses a prebuilt binary. Read its caveat header before treating a pass as a guarantee.
 
+## Container Scan, worked 9 September 2026
+
+**The stage failed with "Container image policy check failed" and the advice
+"Update the affected packages or use a patched base image."** The breakdown
+supplied alongside it lists 90 findings, all at action `WARN`, and concludes
+"your scan passed overall". Those two statements cannot both be true: an
+Anchore policy evaluation fails only on a `STOP` action, so if every finding
+were `WARN` the gate would be green. One of three things holds and none is
+established from here: there is a `STOP`-level finding the breakdown omits, a
+non-vulnerability policy rule fired (Anchore policies also gate Dockerfile
+directives, effective user, exposed ports and secrets), or the breakdown was
+read from a different scan. **What would settle it is the policy evaluation
+output showing the row whose action is `STOP`**, which is behind the failed
+stage's "More Details".
+
+**The breakdown does describe this image, though.** Pulled and checked: the
+`python:3.12-slim` tag resolved to Python 3.12.14 with pip 25.0.1 at
+`/usr/local/lib`, and a venv copy of pip 25.0.1 at `/opt/venv/lib`, exactly the
+three package findings named. So the finding data is ours, whatever the verdict
+line says.
+
+**Base image drift is confirmed, and it is the standing reproducibility hole.**
+The tag now resolves to `sha256:78387bc3881b8273120a12ebe6c1ab22b018ccc2c9adf565ae1ac9b536e184ea`.
+The image that passed Container Scan on 20 August was
+`sha256:2c941e860699f878900b0edc2403613c234d4b32eda3cc9fa7036991a2a63c4a`. Two
+builds of the identical archive produced different images, so a scan result
+from one says nothing about the other. `preflight.py` has flagged this from the
+beginning.
+
+**Three changes made in 0.8.2, each verified against a real build, not asserted.**
+
+● **Base image pinned by digest.** Both `FROM` lines now carry
+  `@sha256:...`. `preflight.py` reports "Every base image is digest-pinned",
+  and the advisory count drops from 2 to 1 (the remaining one is the
+  `.gitlab-ci.yml` false positive, since `.gitattributes` keeps it out of the
+  archive).
+● **Base moved to `python:3.13-slim`,
+  `sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285`,
+  Python 3.13.15.** This is the "patched base image" the failure message asks
+  for, and it closes the interpreter findings (2 HIGH, 9 MEDIUM, 3 LOW) whose
+  only published fix is on 3.13 or later. **No package version moved and no
+  lock file was regenerated**, which matters: the lock files are what
+  Dependency Scanning reads, and that gate cost six upload cycles. Proven
+  before the change was made, not after: `pip install --require-hashes
+  --no-deps -r requirements-runtime.txt` under 3.13-slim installs all 26
+  packages unaltered, because the existing hashes already cover the cp313
+  wheels, and the full suite run under 3.13 with the unmodified
+  `requirements.txt` gives 279 passed, 1 skipped.
+● **The installer toolchain is removed from the runtime image.** Nothing the
+  container runs needs pip, setuptools or wheel. Three copies shipped by
+  default and a package cataloguer reads all three: the interpreter's
+  site-packages, the wheel bundled in `ensurepip`, and the venv copy. Deleting
+  them removes the whole class of installer advisories rather than chasing
+  versions, and removes the ability to pull a package into a running container.
+  The step is fail-closed: the build stops if any copy survives the purge or if
+  the application can no longer be imported without it.
+
+**Verified in the built 3.13 image, live.**
+
+● `find / -xdev \( -name "pip" -o -name "pip-*" -o -name "setuptools*" -o -name
+  "ensurepip" -o -name "wheel" -o -name "pkg_resources" \)` as root returns
+  nothing. `python -m pip` and `python -m ensurepip` both report "No module
+  named".
+● Zero setuid or setgid entries, two layers, `USER 10001:10001`, 54.7 MB
+  (down from 58 MB).
+● Serves live: `/healthz` 200, `/readyz` 200 with `storage_writable: true`,
+  `/api/systems` 49 records, `/` 200 with the Legion title.
+● Writes still gated: PATCH with no token 401, with the token 200.
+● Persistence across a container restart confirmed by reading the patched note
+  back.
+● One audit line per write on stdout, parsable as bare JSON. The team token
+  appears zero times in the container log.
+
+**What is still not verified, and what was not done.**
+
+● **The actual gate.** No container scanner could be run here: installing syft
+  returned 403 from the organisation proxy, which is a policy denial and was
+  not retried. The evidence above is filesystem evidence, which is what a
+  package cataloguer reads, not a scan result.
+● **No package was upgraded**, on purpose. The skill's first rule is that the
+  gate reports the wrong cause by design, and the pasted recommendation to
+  `pip install --upgrade pip>=26.2` would have added a package to an image that
+  is better off without pip at all.
+● **The zlib1g HIGH (CVE-2026-85091) is unfixed upstream** and is unchanged by
+  any of this. If it turns out to be the `STOP`, no upload will clear it: it
+  needs a policy allowlist entry with a stated expiry, the same mechanism
+  already used for CVE-2026-7210.
+● **The `prep` stage's OS patch layer still applied nothing**, `apt-get update`
+  being blocked by this sandbox's egress policy. `/etc/os-patch-status` reads
+  `unpatched` in the local build, which is the fail-open path working as
+  designed and recording itself.
+● The TEST stage in the GitLab pipeline still runs on `python:3.12-slim`. That
+  is independent of the container base, and the suite is now known to pass on
+  both.
+
 ## Skills consulted for this pass
 
 `app-store-readiness` (this report), `toolchain-adapters` (Python command mapping), `dependencies` (lockfile standard), `testing-standards` (environment-scoped assertions), `observability-and-audit` (audit line, readiness probe), `accessibility` (audit checklist, contrast computation), `security-hardening`, `app-store-deployment`, `deploy-recipes`, `code-architecture`, `packaging`, `data-layer`, `api-and-integration`.
