@@ -166,6 +166,12 @@ any of these, and only the first produces anything resembling an error message:
   change with a real source change, or to have the platform treat "nothing
   analysed" as a pass, which its own message already says it is.
 
+  The job log confirms the mechanism. `code-quality-verify` checks that
+  `.scannerwork/report-task.txt` exists, finds `sonar-quality-gate.json`,
+  strips its whitespace and then tests it for the coverage condition. On the
+  0.8.2 upload every one of those steps succeeded: the scan ran and the gate
+  file was there. Only the coverage value was absent.
+
 **Do not "fix" this one by reconfiguring coverage.** The theory that the report
 does not line up with the analysed sources was tested at 0.8.2 and is wrong: the
 pipeline's bare `pytest --cov` emits `<source>` at the repository root with
@@ -314,11 +320,22 @@ undo by accident:
 ● **The three token outcomes stay distinguishable.** No token configured on
   the deployment is 503 with a reason; a wrong or missing bearer token is 401;
   a match passes. The UI turns the 401 into different advice depending on
-  whether it sent a token at all, and compares the length it holds against the
-  `team_token_len` that `/readyz` publishes. Do not collapse the two 401
-  causes back into one message: "set the team token" is useless advice to
-  someone who has just set one, and it cost a round of live debugging to find
-  that out. Lengths only, never the value.
+  whether it sent a token at all, and compares both the character count and the
+  UTF-8 byte count it holds against the `team_token_len` and `team_token_bytes`
+  that `/readyz` publishes. Do not collapse the two 401 causes back into one
+  message: "set the team token" is useless advice to someone who has just set
+  one, and it cost a round of live debugging to find that out. Lengths only,
+  never the value.
+
+  **Both units, always, added in 0.8.3.** The write guard rejects on byte
+  length while `len()` counts characters, so publishing characters alone made
+  the one failure that actually happened invisible: equal counts on both sides
+  and a refusal anyway. `/readyz` now carries `team_token_bytes` beside
+  `team_token_len`, and the status line names the case where the characters
+  agree and the bytes do not. It must not say which side carries the non-ASCII
+  character, because neither end can know: verified in a real browser where the
+  deployment held the non-breaking space and an earlier draft blamed the tab.
+  `tests/test_ui_contracts.py` pins both.
 
 `tests/test_ui_contracts.py` pins the parts of this that are checkable from
 Python, including that every path the UI fetches exists in the app's OpenAPI

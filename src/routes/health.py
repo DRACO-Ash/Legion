@@ -73,7 +73,17 @@ async def readyz(request: Request):
         "udl_username_len": len(settings.udl_username) if settings.udl_username else 0,
         "udl_password_len": len(settings.udl_password) if settings.udl_password else 0,
         "team_token_configured": bool(settings.team_token),
+        # Characters and bytes both, because the two disagree exactly when it
+        # matters. The write guard rejects on UTF-8 byte length, while len()
+        # counts characters: a non-breaking space is one character and two
+        # bytes, so a token carrying one reports the same team_token_len as a
+        # clean one and is still refused. Publishing only characters is what
+        # let that sit undiagnosed through three releases. Lengths only,
+        # never the value, never a position.
         "team_token_len": len(settings.team_token) if settings.team_token else 0,
+        "team_token_bytes": (
+            len(settings.team_token.encode("utf-8")) if settings.team_token else 0
+        ),
         "storage_writable": storage_writable,
     }
     if not storage_writable:

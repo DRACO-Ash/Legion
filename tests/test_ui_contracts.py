@@ -140,6 +140,27 @@ def test_the_token_box_says_how_long_the_token_it_holds_is() -> None:
     assert "held.length" in INDEX_HTML
 
 
+def test_the_token_box_compares_bytes_as_well_as_characters() -> None:
+    """Characters alone cannot see the failure that cost three releases.
+
+    The write guard rejects on UTF-8 byte length. A non-breaking space is one
+    character and two bytes, so a bad paste matches on characters and is still
+    refused. The UI has to measure both and /readyz has to publish both.
+    """
+    assert "TextEncoder" in INDEX_HTML
+    assert "team_token_bytes" in INDEX_HTML
+    assert "team_token_bytes" in (ROOT / "src" / "routes" / "health.py").read_text(
+        encoding="utf-8"
+    )
+
+
+def test_the_byte_mismatch_message_does_not_blame_a_side() -> None:
+    """Which side carries the non-ASCII character is not knowable from either
+    end, and a message that guesses sends the reader to the wrong token."""
+    assert "one side carries a" in INDEX_HTML
+    assert "this token carries a" not in INDEX_HTML
+
+
 def test_the_token_box_warns_that_it_is_per_tab() -> None:
     """sessionStorage does not carry across tabs, and the App Store opens the
     app in a new one."""

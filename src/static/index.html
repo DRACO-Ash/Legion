@@ -371,12 +371,24 @@ function authHeaders(){
    than three clicks later on a chart that will not load. A truncated paste is
    the common case and it is invisible in a password field. */
 let expectedTokenLength = null;
+let expectedTokenBytes = null;
+
+/* The app rejects on UTF-8 byte length, not character count, and the two
+   differ exactly when the paste carries a non-ASCII character. A non-breaking
+   space is one character and two bytes, so a bad token can match on characters
+   and still be refused. Measuring both here is what makes that visible. */
+function byteLength(value){
+  return new TextEncoder().encode(value).length;
+}
 
 async function readExpectedTokenLength(){
   try{
     const res = await fetch("/readyz");
     const body = await res.json();
-    if(body.team_token_configured) expectedTokenLength = body.team_token_len;
+    if(body.team_token_configured){
+      expectedTokenLength = body.team_token_len;
+      expectedTokenBytes = body.team_token_bytes ?? null;
+    }
   } catch { /* leave it unknown: the status line simply says less */ }
   refreshTokenStatus();
 }
@@ -392,6 +404,14 @@ function refreshTokenStatus(){
   if(expectedTokenLength !== null && held.length !== expectedTokenLength){
     el.textContent = `set, ${held.length} characters, but the deployment expects `
       + `${expectedTokenLength}: check the paste is complete`;
+    el.classList.add("mismatch");
+    return;
+  }
+  const heldBytes = byteLength(held);
+  if(expectedTokenBytes !== null && heldBytes !== expectedTokenBytes){
+    el.textContent = `set, ${held.length} characters like the deployment, but `
+      + `${heldBytes} bytes against its ${expectedTokenBytes}: one side carries a `
+      + `non-ASCII character. Retype rather than paste, on whichever side you can change`;
     el.classList.add("mismatch");
     return;
   }
@@ -1233,6 +1253,14 @@ function lengthMismatchMessage(sent, configured){
     + `is configured with ${configured}.`;
 }
 
+function byteMismatchMessage(sent, sentBytes, configuredBytes){
+  return `${TOKEN_REJECTED} Both are ${sent} characters, but this tab is sending `
+    + `${sentBytes} bytes against the deployment's ${configuredBytes}. One side `
+    + "carries a non-ASCII character, most often a non-breaking space or a "
+    + "look-alike hyphen picked up from a copy. Retype the token rather than "
+    + "pasting it.";
+}
+
 function sameLengthMessage(sent, startedAt){
   let message = "The team token was rejected even though both are " + sent
     + " characters. Equal lengths prove little: two tokens generated the usual way "
@@ -1245,15 +1273,19 @@ function sameLengthMessage(sent, startedAt){
 }
 
 async function tokenRejectedMessage(){
-  const sent = token().length;
-  if(sent === 0) return NO_TOKEN_HERE;
+  const held = token();
+  if(held.length === 0) return NO_TOKEN_HERE;
   try{
     const res = await fetch("/readyz");
     const body = await res.json();
-    if(sent !== body.team_token_len){
-      return lengthMismatchMessage(sent, body.team_token_len);
+    if(held.length !== body.team_token_len){
+      return lengthMismatchMessage(held.length, body.team_token_len);
     }
-    return sameLengthMessage(sent, body.started_at);
+    const sentBytes = byteLength(held);
+    if(body.team_token_bytes != null && sentBytes !== body.team_token_bytes){
+      return byteMismatchMessage(held.length, sentBytes, body.team_token_bytes);
+    }
+    return sameLengthMessage(held.length, body.started_at);
   } catch {
     return TOKEN_REJECTED;
   }
