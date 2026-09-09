@@ -98,6 +98,12 @@ immediately: "set, 22 characters, but the deployment expects 43: check the
 paste is complete". The field is also hidden from password managers, since a
 saved entry autofilled later would quietly replace a correct paste.
 
+Saving a token checks it straight away, and Check tests whatever is in the
+box if there is anything there, falling back to what is saved. That matters
+because the commonest moment to click Check is with a token pasted but not yet
+saved, and checking only the saved value reported "no bearer token reached the
+app", which reads as a network fault when in fact nothing had been sent.
+
 **The Check button beside Save is the end of this road.** It asks
 `GET /api/token-check` how the token the app received differs from the one it
 holds, and names the kind of difference: a match, a length difference, letter

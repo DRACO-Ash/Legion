@@ -285,3 +285,19 @@ def test_the_token_can_be_checked_from_the_interface() -> None:
     assert 'id="tokenCheck"' in INDEX_HTML
     assert "/api/token-check" in INDEX_HTML
     assert 'id="tokenMsg"' in INDEX_HTML
+
+
+def test_check_uses_the_value_in_the_box_before_the_saved_one() -> None:
+    """A token pasted but not yet saved is the commonest state to click Check
+    in, and checking only the saved value reported "no bearer token reached
+    the app" - which reads as a network fault when nothing had been sent at
+    all. Never name a cause without first reading the state this side knows."""
+    assert "tokenCandidate" in INDEX_HTML
+    assert "NOTHING_TO_CHECK" in INDEX_HTML
+    assert "UNSAVED_PREFIX" in INDEX_HTML
+
+
+def test_saving_a_token_checks_it_immediately() -> None:
+    """Saving is the moment the answer is wanted; do not make them ask twice."""
+    saved = INDEX_HTML[INDEX_HTML.index('getElementById("tokenSave")') :][:700]
+    assert "await checkToken();" in saved

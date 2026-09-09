@@ -403,27 +403,61 @@ function refreshTokenStatus(){
    look-alike hyphen is one character and reads identically, so two values can
    both be 43 characters and still be different. The app compares shapes and
    names the kind of difference; neither side ever sends a value back. */
-document.getElementById("tokenCheck").addEventListener("click", async () => {
+/* Ask the app how the token it received differs from the one it holds.
+   Lengths stopped being able to answer this: a non-breaking space or a
+   look-alike hyphen is one character and reads identically, so two values can
+   both be 43 characters and still be different. The app compares shapes and
+   names the kind of difference; neither side ever sends a value back.
+
+   The candidate is whatever is in the box, falling back to what is saved.
+   Checking only the saved value made the commonest case - a token pasted but
+   not yet saved - report "no bearer token reached the app", which reads as a
+   network fault when nothing had been sent at all. Never diagnose a cause
+   without first looking at the state this side already knows. */
+const NOTHING_TO_CHECK = "Nothing to check yet: paste the team token above first.";
+const UNSAVED_PREFIX = "Checking the value in the box, which is not saved yet. ";
+
+function tokenCandidate(){
+  const typed = document.getElementById("tokenInput").value.trim();
+  if(typed) return {value: typed, saved: false};
+  return {value: token(), saved: true};
+}
+
+async function checkToken(){
   const msg = document.getElementById("tokenMsg");
+  const candidate = tokenCandidate();
+  if(!candidate.value){
+    msg.textContent = NOTHING_TO_CHECK;
+    msg.className = "msg error";
+    return;
+  }
   msg.textContent = "Checking…";
   msg.className = "msg";
   try{
-    const res = await fetch("/api/token-check", {headers: authHeaders()});
+    const res = await fetch("/api/token-check", {
+      headers: {"Authorization": "Bearer " + candidate.value},
+    });
     const body = await res.json();
-    msg.textContent = body.verdict;
+    const prefix = candidate.saved ? "" : UNSAVED_PREFIX;
+    msg.textContent = prefix + body.verdict;
     msg.className = body.matches ? "msg ok" : "msg error";
   } catch {
     msg.textContent = "Could not reach the app to check the token.";
     msg.className = "msg error";
   }
-});
+}
 
-document.getElementById("tokenSave").addEventListener("click", () => {
-  const v = document.getElementById("tokenInput").value.trim();
-  if(v) sessionStorage.setItem("teamToken", v);
+document.getElementById("tokenCheck").addEventListener("click", checkToken);
+
+document.getElementById("tokenSave").addEventListener("click", async () => {
+  const typed = document.getElementById("tokenInput").value.trim();
+  if(typed) sessionStorage.setItem("teamToken", typed);
   else sessionStorage.removeItem("teamToken");
   document.getElementById("tokenInput").value = "";
   refreshTokenStatus();
+  // Saving is the moment the answer is wanted, so do not make them ask twice.
+  if(typed) await checkToken();
+  else document.getElementById("tokenMsg").textContent = "";
 });
 
 function qs(params){
