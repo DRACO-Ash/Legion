@@ -241,6 +241,23 @@ undo by accident:
   re-run the dataviz skill's `validate_palette.js` against the panel surface
   (`#152238`) first.
 
+● **Length is not enough to diagnose a token, and `/api/token-check` is why
+  it exists.** A live deployment sat at "both are 43 characters" through three
+  releases. The cause class is a single non-ASCII character in the pasted
+  value: a non-breaking space is one character and two bytes, so both sides
+  report 43 and `token_matches` still fails on its byte-length guard. The
+  endpoint compares shapes, never values, and names which kind of difference
+  it is. It is not gated by the token, on purpose. Do not add the value, a
+  position or a digest of either side to that response; the tests assert that
+  neither token appears in it.
+
+  Two facts worth keeping: a browser refuses to send a header value outside
+  Latin-1, so a look-alike hyphen surfaces as a failed request rather than a
+  401, while a non-breaking space or an accented letter is sent and reaches
+  the app. And httpx, which the tests use, is stricter still and rejects
+  anything non-ASCII, so that path cannot be tested through TestClient - it
+  was verified in a real browser instead.
+
 ● **The three token outcomes stay distinguishable.** No token configured on
   the deployment is 503 with a reason; a wrong or missing bearer token is 401;
   a match passes. The UI turns the 401 into different advice depending on

@@ -17,6 +17,7 @@ from __future__ import annotations
 import hmac
 import logging
 import time
+import unicodedata
 from collections import defaultdict, deque
 from dataclasses import dataclass, field
 
@@ -39,6 +40,112 @@ def extract_bearer_token(request: Request) -> str | None:
     if not header.lower().startswith("bearer "):
         return None
     return header[7:].strip()
+
+
+# Characters that a copy through a document, a chat client or a PDF quietly
+# substitutes for their ASCII originals. Every one of them is a single
+# character, so a value carrying them still reports the same length as the
+# real token: length stops being able to tell them apart, which is exactly the
+# case this describes.
+LOOK_ALIKES = {
+    "\u2010": "-",
+    "\u2011": "-",
+    "\u2012": "-",
+    "\u2013": "-",
+    "\u2014": "-",
+    "\u2212": "-",
+    "\u2018": "'",
+    "\u2019": "'",
+    "\u201c": '"',
+    "\u201d": '"',
+    "\u00a0": " ",
+    "\u202f": " ",
+}
+_ZERO_WIDTH = dict.fromkeys(map(ord, "\u200b\u200c\u200d\ufeff"), None)
+_LOOK_ALIKE_TABLE = str.maketrans(LOOK_ALIKES)
+
+NO_TOKEN_RECEIVED = (
+    "No bearer token reached the app. If this tab has one saved, something "
+    "between the browser and the app is removing the Authorization header."
+)
+TOKEN_MATCHES = "The token matches. Anything still failing is not the token."
+TOKEN_LOOK_ALIKES = (
+    "The two values differ only by invisible or look-alike characters, the "
+    "kind a copy through a document or chat client introduces. Re-copy the "
+    "token from a plain-text source."
+)
+TOKEN_CASE_ONLY = "The two values differ only in letter case."
+TOKEN_NON_ASCII = (
+    "Same number of characters but a different number of bytes: the value "
+    "sent here contains at least one non-ASCII character. Re-copy it from a "
+    "plain-text source."
+)
+TOKEN_LENGTH_DIFFERS = (
+    "Different lengths. If this tab shows the right number, the header was "
+    "altered between the browser and the app; if not, the paste is incomplete."
+)
+TOKEN_GENUINELY_DIFFERENT = (
+    "Same shape, different values. Re-copy TEAM_TOKEN from the Configuration "
+    "tab, and check the app has restarted since it was last changed."
+)
+
+
+def _repair(value: str) -> str:
+    """Undo the substitutions a copy-paste makes, so a comparison can say
+    whether that is all that differs."""
+    repaired = unicodedata.normalize("NFKC", value)
+    return repaired.translate(_ZERO_WIDTH).translate(_LOOK_ALIKE_TABLE).strip()
+
+
+def _shape(value: str) -> dict[str, object]:
+    """What a value looks like, never what it is."""
+    return {
+        "characters": len(value),
+        "utf8_bytes": len(value.encode("utf-8")),
+        "ascii_only": value.isascii(),
+        "has_whitespace": any(character.isspace() for character in value),
+    }
+
+
+def _verdict(given: str, expected: str) -> str:
+    if _repair(given) == _repair(expected):
+        return TOKEN_LOOK_ALIKES
+    if given.casefold() == expected.casefold():
+        return TOKEN_CASE_ONLY
+    if len(given) != len(expected):
+        return TOKEN_LENGTH_DIFFERS
+    if len(given.encode("utf-8")) != len(expected.encode("utf-8")):
+        return TOKEN_NON_ASCII
+    return TOKEN_GENUINELY_DIFFERENT
+
+
+def describe_token_difference(given: str | None, expected: str) -> dict[str, object]:
+    """Say how two tokens differ without revealing either.
+
+    Lengths, byte counts and a handful of booleans, and never a character, a
+    position or a digest. The caller already holds the value it sent, so the
+    only new information is the shape of the difference, which is the thing
+    that two equal lengths cannot express.
+
+    This exists because a live deployment sat at "both are 43 characters" with
+    no way to get further: a look-alike hyphen or a non-breaking space is one
+    character and reads identically.
+    """
+    if given is None:
+        return {"matches": False, "received": None, "verdict": NO_TOKEN_RECEIVED}
+    if token_matches(given, expected):
+        return {
+            "matches": True,
+            "received": _shape(given),
+            "configured": _shape(expected),
+            "verdict": TOKEN_MATCHES,
+        }
+    return {
+        "matches": False,
+        "received": _shape(given),
+        "configured": _shape(expected),
+        "verdict": _verdict(given, expected),
+    }
 
 
 @dataclass

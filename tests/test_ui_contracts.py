@@ -276,3 +276,12 @@ def test_the_token_field_is_hidden_from_password_managers() -> None:
     field = INDEX_HTML[INDEX_HTML.index('id="tokenInput"') :][:400]
     assert 'autocomplete="off"' in field
     assert 'spellcheck="false"' in field
+
+
+def test_the_token_can_be_checked_from_the_interface() -> None:
+    """Length ran out of diagnostic power on a live deployment. The Check
+    button asks the app how the two values differ, which is the question
+    lengths cannot answer."""
+    assert 'id="tokenCheck"' in INDEX_HTML
+    assert "/api/token-check" in INDEX_HTML
+    assert 'id="tokenMsg"' in INDEX_HTML

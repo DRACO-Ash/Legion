@@ -7,6 +7,16 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
 from src._version import __version__
+from src.security import (
+    describe_token_difference,
+    enforce_rate_limit,
+    extract_bearer_token,
+)
+
+NO_TOKEN_CONFIGURED_VERDICT = (
+    "This deployment has no TEAM_TOKEN configured, so nothing can match. Set "
+    "one in the Configuration tab and restart the app."
+)
 
 router = APIRouter()
 
@@ -73,3 +83,28 @@ async def readyz(request: Request):
         body["storage_error"] = storage_error
         return JSONResponse(status_code=503, content=body)
     return body
+
+
+@router.get("/api/token-check")
+async def token_check(request: Request):
+    """Say how the caller's token differs from the configured one.
+
+    Shapes and booleans only: lengths, byte counts, whether the value is
+    ASCII, and which kind of difference it is. Never a character, a position
+    or a digest of either value.
+
+    Deliberately not gated by the token, because it exists for the case where
+    the token is refused. It tells a caller nothing it does not already know
+    about the value it just sent - a 401 from any gated route already reveals
+    "this does not match" - and the strict rate limit applies so it cannot be
+    driven quickly.
+
+    This exists because a live deployment sat at "both are 43 characters" with
+    nowhere to go. A look-alike hyphen from a copy through a document is one
+    character and reads identically, and no length comparison can see it.
+    """
+    enforce_rate_limit(request.app.state.strict_limiter, request)
+    configured = request.app.state.settings.team_token
+    if not configured:
+        return {"matches": False, "verdict": NO_TOKEN_CONFIGURED_VERDICT}
+    return describe_token_difference(extract_bearer_token(request), configured)

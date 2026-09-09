@@ -214,6 +214,9 @@ svg.chart{ width:100%; height:auto; display:block; overflow:visible; }
       <circle cx="8" cy="12" r="4"/><path d="M12 12h9M18 12v3"/>
     </symbol>
     <symbol id="i-status" viewBox="0 0 12 12"><circle cx="6" cy="6" r="4"/></symbol>
+    <symbol id="i-inspect" viewBox="0 0 24 24">
+      <circle cx="11" cy="11" r="6"/><path d="M15.5 15.5L21 21"/>
+    </symbol>
     <symbol id="i-prev" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></symbol>
     <symbol id="i-next" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></symbol>
   </defs>
@@ -234,9 +237,11 @@ svg.chart{ width:100%; height:auto; display:block; overflow:visible; }
       <input type="password" id="tokenInput" placeholder="paste to enable add/edit/archive"
         autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">
       <button id="tokenSave"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-save"/></svg>Save</button>
+      <button id="tokenCheck" class="btn btn-ghost"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-inspect"/></svg>Check</button>
       <output class="token-status" id="tokenStatus">not set — read only</output>
     </div>
   </header>
+  <output class="msg" id="tokenMsg"></output>
 
   <main id="main-content" class="layout">
     <div class="panel">
@@ -393,6 +398,26 @@ function refreshTokenStatus(){
   el.textContent = `set, ${held.length} characters — writes enabled`;
   el.classList.add("set");
 }
+/* Ask the app how the token it received differs from the one it holds.
+   Lengths stopped being able to answer this: a non-breaking space or a
+   look-alike hyphen is one character and reads identically, so two values can
+   both be 43 characters and still be different. The app compares shapes and
+   names the kind of difference; neither side ever sends a value back. */
+document.getElementById("tokenCheck").addEventListener("click", async () => {
+  const msg = document.getElementById("tokenMsg");
+  msg.textContent = "Checking…";
+  msg.className = "msg";
+  try{
+    const res = await fetch("/api/token-check", {headers: authHeaders()});
+    const body = await res.json();
+    msg.textContent = body.verdict;
+    msg.className = body.matches ? "msg ok" : "msg error";
+  } catch {
+    msg.textContent = "Could not reach the app to check the token.";
+    msg.className = "msg error";
+  }
+});
+
 document.getElementById("tokenSave").addEventListener("click", () => {
   const v = document.getElementById("tokenInput").value.trim();
   if(v) sessionStorage.setItem("teamToken", v);

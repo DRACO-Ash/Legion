@@ -98,6 +98,20 @@ immediately: "set, 22 characters, but the deployment expects 43: check the
 paste is complete". The field is also hidden from password managers, since a
 saved entry autofilled later would quietly replace a correct paste.
 
+**The Check button beside Save is the end of this road.** It asks
+`GET /api/token-check` how the token the app received differs from the one it
+holds, and names the kind of difference: a match, a length difference, letter
+case, invisible or look-alike characters, or "same characters, different
+bytes", which means a non-ASCII character got in. Shapes and booleans only:
+neither value, no positions, no digest, and never a character of either. It is
+deliberately not gated by the token, because it exists for the case where the
+token is refused, and it tells a caller nothing a 401 does not already.
+
+That last verdict is the one that closed a real case. A single non-breaking
+space inside a pasted token reads identically, counts as one character, and
+takes two bytes: both sides report 43 characters and the compare still fails.
+Copying through a document, a chat client or a PDF is how it gets in.
+
 Equal lengths on both sides prove less than they look. A token generated the
 usual way, `secrets.token_urlsafe(32)`, is always 43 characters, so two
 **different** tokens both read 43. When the lengths match and the compare
