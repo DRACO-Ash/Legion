@@ -5,6 +5,11 @@ All notable changes to this project are documented here. Format follows
 [Semantic Versioning](https://semver.org/). Pre-1.0: minor bumps may include
 breaking changes, since nothing has shipped to the App Store yet.
 
+## [0.9.0] - 2026-09-10
+
+Remove the team token completely: no application-level authentication, UDL credentials are the only secrets. Charts now plot on selection, a family or a single object, sharing one loader and one server-side assembler.
+
+
 ## [0.8.3] - 2026-09-09
 
 Publish team_token_bytes from /readyz and compare bytes as well as characters in the UI, so a non-ASCII character in a pasted token is visible rather than silent.
