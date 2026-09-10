@@ -15,6 +15,7 @@ from src.models import (
 )
 from src.security import enforce_rate_limit
 from src.udl_client import UDLError, UDLNotConfigured
+from src.udl_diagnostics import run_diagnostics, safe_detail
 
 logger = logging.getLogger("udl_tactics_app.routes.udl")
 
@@ -51,8 +52,14 @@ def _to_generic_error(exc: Exception) -> HTTPException:
             detail=UDL_NOT_CONFIGURED_DETAIL,
         )
     if isinstance(exc, UDLError):
+        # Name the cause, without echoing the exception's own text. A flat
+        # "UDL request failed" threw away the only thing that separates a
+        # wrong password from a blocked network path, and left that visible
+        # solely in a container log nobody trying to use the app is reading.
+        # safe_detail builds the sentence from the fault kind and the status
+        # code, so "never echo the upstream message" still holds.
         return HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY, detail="UDL request failed"
+            status_code=status.HTTP_502_BAD_GATEWAY, detail=safe_detail(exc)
         )
     logger.exception("Unexpected error handling UDL route")
     return HTTPException(
@@ -314,3 +321,46 @@ async def object_elements(
         )
     except UDLError as exc:
         raise _to_generic_error(exc) from exc
+
+
+@router.get("/diagnostics")
+async def diagnostics(request: Request, sat_no: str | None = None):
+    """Probe every UDL call the charts depend on and report all of them.
+
+    Built after a deployment sat on "UDL did not answer" with no way to tell a
+    wrong password from a blocked egress path. Each probe reports the endpoint,
+    the HTTP status, the elapsed time and the kind of fault, and every probe
+    runs even when an earlier one fails, so one response is the whole picture
+    rather than the first thing to break.
+
+    It reports credential lengths and never a credential. That is the same
+    discipline the token diagnostics used, and the same reason: the length
+    separates "nothing configured" from "configured and refused", which is the
+    only question worth answering here.
+
+    `sat_no` defaults to the first catalogued object carrying a NORAD ID, so
+    the probe exercises a satellite this deployment actually tracks.
+    """
+    _gate(request)
+    client = request.app.state.udl_client
+    settings = request.app.state.settings
+
+    if sat_no is None:
+        store = request.app.state.systems_store
+        sat_no = next(
+            (
+                str(record["norad_id"])
+                for record in store.list(include_archived=False)
+                if record.get("norad_id")
+            ),
+            "",
+        )
+
+    return await run_diagnostics(
+        client,
+        sat_no=sat_no,
+        hrr_window_hours=settings.udl_jco_hrr_window_hours,
+        base_url=settings.udl_base_url,
+        username=settings.udl_username,
+        password=settings.udl_password,
+    )

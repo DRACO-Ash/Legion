@@ -128,8 +128,30 @@ def test_udl_upstream_error_returns_502():
             params={"common_name": "COSMOS-2612"},
         )
     assert response.status_code == 502
-    # Never leak the raw upstream error message
+    # Never leak the raw upstream error message. The detail is built from the
+    # fault kind, not from the exception's text, so this holds even though the
+    # response now names the cause.
     assert "boom" not in response.text
+    detail = response.json()["detail"]
+    assert "connection to UDL failed" in detail
+    assert "/api/udl/diagnostics" in detail
+
+
+def test_a_502_names_the_kind_of_fault():
+    """A deployment sat on "UDL did not answer" with no way to tell a wrong
+    password from a blocked egress path. The status is the discriminator and
+    it now reaches the caller."""
+    fake = FakeUDLClient(raise_error=UDLError("nope", status_code=401))
+    app = build_app(settings=make_settings(), udl_client=fake)
+    with TestClient(app) as test_client:
+        response = test_client.get(
+            "/api/udl/jco-hrr", params={"common_name": "COSMOS-2612"}
+        )
+    assert response.status_code == 502
+    detail = response.json()["detail"]
+    assert "rejected the credentials" in detail
+    assert "HTTP 401" in detail
+    assert "nope" not in detail
 
 
 def test_udl_not_configured_returns_503():
