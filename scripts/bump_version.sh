@@ -51,9 +51,16 @@ PREV_TAG="v$CURRENT_VERSION"
 if git -C "$REPO_ROOT" rev-parse -q --verify "$PREV_TAG" >/dev/null 2>&1; then
   if [ -z "$(git -C "$REPO_ROOT" diff --name-only "$PREV_TAG" HEAD -- 'src/**.py' 'src/*.py')" ]; then
     echo "WARNING: no Python file under src/ has changed since $PREV_TAG." >&2
-    echo "         SonarQube will measure no coverage on new code, and the" >&2
-    echo "         App Store's code-quality-verify job fails on that. Bundle" >&2
-    echo "         this with a source change before uploading." >&2
+    echo "         SonarQube measures coverage on new code, so if $PREV_TAG is" >&2
+    echo "         what the App Store already holds, code-quality-verify will" >&2
+    echo "         fail with 'coverage was not measured for this build'." >&2
+    echo "         Baseline caveat: this compares against the last LOCAL tag." >&2
+    echo "         The gate compares against the deployment repository's main." >&2
+    echo "         If $PREV_TAG never merged, its source changes are still in" >&2
+    echo "         the diff the gate sees and this warning does not apply." >&2
+    echo "         Check what actually merged before acting on it." >&2
+    echo "         Do not pipe this script through head or tail: that is how" >&2
+    echo "         this warning got lost once already." >&2
   fi
 fi
 
