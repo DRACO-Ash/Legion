@@ -134,6 +134,13 @@ NESTED_TERNARY_PATTERNS = (
     r"\?[^?:;{}]*\?",
     # A second ? in the else branch: a ? b : c ? d : e
     r"\?[^?:;]*:[^?:;{}]*\?",
+    # A ternary inside a template-literal slot in a ternary's branch:
+    #   a ? `x ${b ? c : d}` : `y`
+    # The two patterns above exclude { and } so they cannot cross a template
+    # boundary, which is exactly how the platform caught two of these at 0.9.0
+    # while this mirror stayed green. Sonar reads the syntax tree, where a
+    # template slot is nested all the same.
+    r"\?[^?;]*\$\{[^{}]*\?",
 )
 
 

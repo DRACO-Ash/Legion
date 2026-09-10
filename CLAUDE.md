@@ -196,6 +196,17 @@ local mirror, calibrated against the upload that reported it:
 the platform's 25 and 18 exactly. Run `pytest` before packaging and the gate
 has nothing left to find.
 
+**A mirror is only as good as its last miss.** The nested-ternary mirror went
+green through 0.9.0 while the platform reported two nested ternaries, because
+its two regexes exclude `{` and `}` so they cannot cross a template-literal
+boundary, and the nesting was inside a `${...}` slot:
+`a ? \`x ${b ? c : d}\` : \`y\``. Sonar reads the syntax tree, where a template
+slot nests like anything else. A third pattern now covers that shape, and it
+was calibrated the same way as the others: added first, confirmed to fire on
+the unfixed file at the exact statement the platform named and on nothing
+else, and only then was the code changed. Do that in that order every time,
+or you have a test that passes rather than a mirror that works.
+
 ## The container image: three rules that are easy to undo
 
 Set in 0.8.2 after a Container Scan failure, and **confirmed by the platform:

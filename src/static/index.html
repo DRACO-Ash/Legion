@@ -1112,13 +1112,26 @@ function chartRequest(){
   };
 }
 
+/* Each branch is its own statement rather than a ternary inside a template
+   slot inside another ternary. SonarQube reads that as nested and fails the
+   gate on it, and it is genuinely harder to read. */
+function objectSubject(payload, charted){
+  const state = charted === 0 ? "not charted" : "one object";
+  return `${payload.family_title} · ${state}`;
+}
+
+function familySubject(payload, charted){
+  const plural = charted === 1 ? "" : "s";
+  return `${payload.family_title} · ${charted} object${plural}`;
+}
+
 function describeChart(payload){
   const depth = SOURCE_LABELS[payload.source] || payload.source;
   const span = payload.window_days === 0 ? "full history" : `last ${payload.window_days} days`;
   const charted = payload.charts.reduce((total, chart) => total + chart.series.length, 0);
   const subject = chartView.kind === "object"
-    ? `${payload.family_title} · ${charted === 0 ? "not charted" : "one object"}`
-    : `${payload.family_title} · ${charted} object${charted === 1 ? "" : "s"}`;
+    ? objectSubject(payload, charted)
+    : familySubject(payload, charted);
   return `${subject} · ${span} · ${depth} · JCO HRR rank 0-3 · generated ${formatEpoch(payload.generated_at)}`;
 }
 
