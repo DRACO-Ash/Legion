@@ -203,6 +203,28 @@ def test_the_empty_state_follows_the_scope_on_screen() -> None:
     assert "Nothing in this family cleared the checks." in INDEX_HTML
 
 
+def test_relative_mode_anchors_on_the_latest_state() -> None:
+    """Ash's rule, 10 September 2026: the reference point for an object is its
+    most recent element set, not the first one pulled in.
+
+    Anchoring on the first point in the window made the baseline move whenever
+    the window changed, so the same object at the same moment read differently
+    at 30 days and at 90. The latest state does not move.
+    """
+    assert "values[values.length - 1]" in INDEX_HTML
+    assert "cumulative[cumulative.length - 1]" in INDEX_HTML
+    assert "Relative to latest state" in INDEX_HTML
+    assert "most recent element set" in INDEX_HTML
+
+
+def test_relative_mode_never_differences_against_the_first_point() -> None:
+    """The old anchor, so a revert shows up as a failing test rather than a
+    quietly different chart."""
+    assert "value - values[0]" not in INDEX_HTML
+    assert "Relative to window start" not in INDEX_HTML
+    assert "first element set in this window" not in INDEX_HTML
+
+
 def test_the_empty_chart_state_does_not_invent_a_cause() -> None:
     """It used to say every member lacked a NORAD ID, which since the rank
     gate is usually false: the real reasons are in the skipped list."""

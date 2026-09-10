@@ -308,7 +308,7 @@ svg.chart{ width:100%; height:auto; display:block; overflow:visible; }
         <label class="visually-hidden" for="cMode">Scale</label>
         <select id="cMode">
           <option value="absolute">Absolute position</option>
-          <option value="relative">Relative to window start</option>
+          <option value="relative">Relative to latest state</option>
         </select>
         <button type="button" class="btn btn-ghost" id="cWholeFamily" hidden><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-prev"/></svg>Whole family</button>
         <button type="button" class="btn btn-ghost" id="cReload"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-reload"/></svg>Reload</button>
@@ -709,27 +709,39 @@ function colourFor(index){ return SERIES_COLOURS[index % SERIES_COLOURS.length];
 
    A GEO family can be spread across 200 degrees of the belt, and on that
    scale a satellite's three degrees of drift is a flat line. Re-basing every
-   series to its own first value in the window puts them on one comparable
-   scale - the standard move for series of different offsets, and the only
-   way the class's *movement* is legible. Absolute stays the default because
-   it is the un-transformed truth and answers the other question: where is
-   this class parked. */
+   series onto a common zero puts them on one comparable scale, and is the
+   only way the class's *movement* is legible. Absolute stays the default
+   because it is the un-transformed truth and answers the other question:
+   where is this class parked.
+
+   The anchor is each object's MOST RECENT element set, not its first. Ash's
+   rule, 10 September 2026. The question an analyst is asking is "where has
+   this thing come from to get where it is now", so now is the fixed point
+   and history reads backwards from zero. Anchoring on the first point in the
+   window made the baseline move every time the window changed, which meant
+   the same object at the same moment read differently at 30 days and at 90.
+   The latest state does not move, so the right-hand edge of every series
+   sits on zero whatever window is selected. */
 let chartMode = "absolute";
 let lastPayload = null;
 
 function plotted(series, isLongitude){
   const values = series.points.map(point => point.value);
   if(chartMode !== "relative" || values.length === 0) return values;
-  if(!isLongitude) return values.map(value => value - values[0]);
-  // Sum the step-by-step change rather than differencing against the first
-  // point. Over a full history an object can drift right round the belt, and
-  // a wrapped difference would report that as -160 degrees instead of +200.
-  // Same reasoning as the drift rate on the server.
+  // The server returns points oldest first, so the last one is the object's
+  // most recent state and that is the anchor.
+  if(!isLongitude) return values.map(value => value - values[values.length - 1]);
+  // Sum the step-by-step change rather than differencing against the anchor
+  // directly. Over a full history an object can drift right round the belt,
+  // and a wrapped difference would report that as -160 degrees instead of
+  // +200. Same reasoning as the drift rate on the server. Unwrap first, then
+  // shift so the most recent point sits on zero.
   const cumulative = [0];
   for(let i = 1; i < values.length; i++){
     cumulative.push(cumulative[i - 1] + wrapDegrees(values[i] - values[i - 1]));
   }
-  return cumulative;
+  const anchor = cumulative[cumulative.length - 1];
+  return cumulative.map(value => value - anchor);
 }
 
 function wrapDegrees(value){ return ((value + 180) % 360 + 360) % 360 - 180; }
@@ -906,7 +918,7 @@ function chartMarkup(chart, index){
     }).join("");
 
     const caption = relative
-      ? `${chart.title} relative to each satellite's first element set in this window`
+      ? `${chart.title} relative to each satellite's most recent element set`
       : chart.title;
     svg = `<svg class="chart" viewBox="0 0 ${CHART_W} ${CHART_H}" role="img" aria-label="${esc(caption)}, one line per family member. The table below carries the same values.">
       ${grid}
@@ -940,14 +952,14 @@ function chartMarkup(chart, index){
           <thead><tr>
             <th>Satellite</th><th>NORAD ID</th><th>Epoch (UTC)</th>
             <th>${esc(chart.title)} (${esc(chart.unit)})</th>
-            ${relative ? `<th>Change (${esc(unit)})</th>` : ""}
+            ${relative ? `<th>From latest (${esc(unit)})</th>` : ""}
           </tr></thead>
           <tbody>${rows.join("")}</tbody>
         </table>
       </div>
     </details>`;
 
-  const subtitle = relative ? " · change since the start of the window" : "";
+  const subtitle = relative ? " · change from the latest state, which sits at zero" : "";
   return {
     html: `<div class="chart-block">
       <h3>${esc(chart.title)} <span class="chart-unit">${esc(unit)}${esc(subtitle)}</span></h3>

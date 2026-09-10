@@ -216,9 +216,14 @@ drifting means little, six of them drifting the same way is a pattern.
   still reads like a position.
 - The two never share an axis. A family holding both kinds of object gets two
   charts stacked.
-- **Absolute** shows where the class is parked. **Relative to window start**
-  re-bases each satellite to its own first element set, which is what makes
-  drift legible when a family is spread across 200 degrees of the belt.
+- **Absolute** shows where the class is parked. **Relative to latest state**
+  re-bases each satellite onto its own most recent element set, which is what
+  makes drift legible when a family is spread across 200 degrees of the belt.
+  The anchor is the latest state rather than the first point in the window, so
+  the right-hand edge of every series sits on zero and history reads backwards
+  from now. That also keeps the baseline still: anchoring on the first point
+  meant the same object at the same moment read differently at 30 days and at
+  90, because the baseline moved with the window.
   Switching between them redraws data already fetched; it costs no UDL call.
 - Each chart carries a legend with each satellite's latest value and drift
   rate, a hover tooltip, and a table view holding every plotted value.

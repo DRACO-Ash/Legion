@@ -330,6 +330,17 @@ undo by accident:
   therefore treats a 4xx as "not available here" and falls back to the latest
   element set, while a 5xx or a timeout still raises. Confirm the endpoint
   against a live pull before trusting a chart's history depth.
+● **Relative mode anchors on each object's latest element set, never its
+  first.** Ash's rule, 10 September 2026. The question is "where has this come
+  from to get where it is now", so now is the fixed point and history reads
+  backwards from zero. It also keeps the baseline still: anchoring on the
+  first point in the window made the same object at the same moment read
+  differently at 30 days and at 90, because the baseline moved with the
+  window. For longitude the wrapped step deltas are still summed first and
+  the series is shifted afterwards, so a full-history drift right round the
+  belt still reads +200 rather than -160. Verified in a browser against the
+  table view: the last row is zero in every window, and the latest absolute
+  value is identical across windows.
 ● **One metric, one axis, always.** GEO objects are charted on mean
   longitude, everything else on mean motion, and the two never share a plot.
   A dual-axis chart invents a correlation that is not in the data. A family
