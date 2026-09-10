@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from src.store import TrackedSystemsStore
+from src.store import SCHEMA_VERSION, TrackedSystemsStore
 
 
 @pytest.fixture
@@ -186,8 +186,11 @@ def test_store_file_is_valid_json_after_write(store, tmp_path):
     path = tmp_path / "tracked_systems.json"
     with open(path) as fh:
         data = json.load(fh)
-    assert data["schema_version"] == 1
+    assert data["schema_version"] == SCHEMA_VERSION
     assert len(data["systems"]) == 2
+    # A newly created system gets its compendium layer in the same write, so a
+    # record can never exist without somewhere to hang its provenance.
+    assert set(data["compendium"]["objects"]) == set(data["systems"])
 
 
 def test_probe_writable_true_on_a_real_writable_dir(store):

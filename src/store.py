@@ -33,8 +33,27 @@ AUDIT_LOGGER_NAME = f"{APP_LOGGER_NAME}.audit"
 logger = logging.getLogger(f"{APP_LOGGER_NAME}.store")
 audit_logger = logging.getLogger(AUDIT_LOGGER_NAME)
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 STORE_FILENAME = "tracked_systems.json"
+
+# The compendium layer, added at schema_version 2. Held beside `systems`, never
+# inside it: the shipped catalogue records are not touched by any of this.
+# `objects` is keyed by system_id because there is exactly one compendium
+# object per catalogued system, which makes the migration idempotent by
+# construction. The rest are keyed by their own entity id.
+# Inside the class body the name `list` resolves to the store's own list()
+# method, so a return annotation of list[...] there is not the builtin. Alias
+# it once at module scope, where `list` still means what it says.
+Records = list[dict[str, Any]]
+
+COMPENDIUM_OBJECTS = "objects"
+COMPENDIUM_COLLECTIONS = (
+    "tactics",
+    "targets",
+    "events",
+    "relationships",
+    "family_assessments",
+)
 BACKUP_DIR = "backups"
 MAX_BACKUPS = 10
 
@@ -73,6 +92,50 @@ def _emit_audit(event: str, actor: str, **fields: Any) -> None:
     audit_logger.info(json.dumps(record, default=str))
 
 
+def _blank_compendium_object(system_id: str, stamp: str) -> dict[str, Any]:
+    """An empty compendium layer for one catalogued system."""
+    return {
+        "id": str(uuid.uuid4()),
+        "system_id": system_id,
+        "capabilities": [],
+        "pol_segments": [],
+        "events": [],
+        "claims": [],
+        "created_at": stamp,
+        "updated_at": stamp,
+    }
+
+
+def _ensure_compendium_object(data: dict[str, Any], system_id: str) -> dict[str, Any]:
+    """Give a system its companion compendium object, once.
+
+    Returns the existing one untouched if it is already there, which is what
+    makes both the migration and repeated writes idempotent.
+    """
+    objects = data["compendium"][COMPENDIUM_OBJECTS]
+    existing = objects.get(system_id)
+    if existing is not None:
+        return existing
+    created = _blank_compendium_object(system_id, _now_iso())
+    objects[system_id] = created
+    return created
+
+
+def _add_compendium_layer(data: dict[str, Any]) -> None:
+    """Schema 1 to 2: add the compendium layer, additively.
+
+    Every existing record gains an empty compendium object and keeps every
+    field it had. Nothing under `systems` is read for anything other than its
+    key, so a record cannot be altered by this even accidentally.
+    """
+    compendium = data.setdefault("compendium", {})
+    compendium.setdefault(COMPENDIUM_OBJECTS, {})
+    for name in COMPENDIUM_COLLECTIONS:
+        compendium.setdefault(name, {})
+    for system_id in data.get("systems", {}):
+        _ensure_compendium_object(data, system_id)
+
+
 class StoreValidationError(Exception):
     """Raised when a record fails boundary validation before being written."""
 
@@ -104,6 +167,9 @@ class TrackedSystemsStore:
         if version < 1:
             data.setdefault("systems", {})
             data["schema_version"] = 1
+        if version < 2:
+            _add_compendium_layer(data)
+            data["schema_version"] = 2
         return data
 
     def _seed(self) -> dict[str, Any]:
@@ -120,7 +186,8 @@ class TrackedSystemsStore:
                 "created_at": now,
                 "updated_at": now,
             }
-        data = {"schema_version": SCHEMA_VERSION, "systems": systems}
+        data: dict[str, Any] = {"schema_version": SCHEMA_VERSION, "systems": systems}
+        _add_compendium_layer(data)
         self._write_atomic(data)
         logger.info("Seeded tracked-systems store with %d records", len(systems))
         return data
@@ -281,6 +348,7 @@ class TrackedSystemsStore:
             "updated_at": now,
         }
         data["systems"][record_id] = stored
+        _ensure_compendium_object(data, record_id)
         self._write_atomic(data)
         _emit_audit(
             "system_created",
@@ -328,4 +396,136 @@ class TrackedSystemsStore:
             record_id=record_id,
             catalogue_name=existing.get("catalogue_name"),
         )
+        return existing
+
+    # ------------------------------------------------------------------
+    # Compendium layer
+    # ------------------------------------------------------------------
+    #
+    # One generic, collection-keyed API rather than six near-identical sets of
+    # methods. Six copies would be six places for the anti-shrink merge and the
+    # archive-not-delete rule to drift apart, and the platform measures
+    # duplicated lines on new code as its own gate condition.
+
+    def _require_collection(self, collection: str) -> str:
+        if collection not in COMPENDIUM_COLLECTIONS:
+            raise StoreValidationError(
+                f"Unknown compendium collection '{collection}'. "
+                f"Known: {', '.join(COMPENDIUM_COLLECTIONS)}."
+            )
+        return collection
+
+    def compendium_object(self, system_id: str) -> dict[str, Any] | None:
+        """The compendium layer for one catalogued system, or None."""
+        data = self._read_raw()
+        return data["compendium"][COMPENDIUM_OBJECTS].get(system_id)
+
+    def update_compendium_object(
+        self, system_id: str, patch: dict[str, Any], actor: str = "unknown"
+    ) -> dict[str, Any] | None:
+        """Anti-shrink merge onto one system's compendium layer.
+
+        Returns None when the system itself is unknown, so a caller cannot
+        create an orphan compendium object for a system that does not exist.
+        """
+        data = self._read_raw()
+        if system_id not in data["systems"]:
+            return None
+        existing = _ensure_compendium_object(data, system_id)
+        merged = {**existing, **patch}
+        merged["system_id"] = system_id
+        merged["updated_at"] = _now_iso()
+        data["compendium"][COMPENDIUM_OBJECTS][system_id] = merged
+        self._write_atomic(data)
+        _emit_audit(
+            "compendium_object_updated",
+            actor,
+            system_id=system_id,
+            fields_changed=sorted(patch.keys()),
+        )
+        return merged
+
+    def list_compendium(
+        self, collection: str, *, include_archived: bool = False
+    ) -> Records:
+        data = self._read_raw()
+        records = list(
+            data["compendium"][self._require_collection(collection)].values()
+        )
+        if not include_archived:
+            records = [r for r in records if not r.get("archived")]
+        return records
+
+    def get_compendium(self, collection: str, entity_id: str) -> dict[str, Any] | None:
+        data = self._read_raw()
+        return data["compendium"][self._require_collection(collection)].get(entity_id)
+
+    def create_compendium(
+        self, collection: str, record: dict[str, Any], actor: str = "unknown"
+    ) -> dict[str, Any]:
+        """Store one compendium entity, keyed by its own id.
+
+        The caller has already validated the record against its Pydantic model,
+        so the id it carries is kept rather than reissued. That matters because
+        relationships reference entities by id and a store-side reissue would
+        silently break every edge pointing at the record.
+        """
+        data = self._read_raw()
+        name = self._require_collection(collection)
+        entity_id = str(record.get("id") or uuid.uuid4())
+        now = _now_iso()
+        stored = {
+            **record,
+            "id": entity_id,
+            "archived": False,
+            "created_at": record.get("created_at") or now,
+            "updated_at": now,
+        }
+        data["compendium"][name][entity_id] = stored
+        self._write_atomic(data)
+        _emit_audit(f"{name}_created", actor, entity_id=entity_id)
+        return stored
+
+    def update_compendium(
+        self,
+        collection: str,
+        entity_id: str,
+        patch: dict[str, Any],
+        actor: str = "unknown",
+    ) -> dict[str, Any] | None:
+        """Anti-shrink merge, the same contract the catalogue already uses."""
+        data = self._read_raw()
+        name = self._require_collection(collection)
+        existing = data["compendium"][name].get(entity_id)
+        if existing is None:
+            return None
+        merged = {**existing, **patch}
+        merged["id"] = entity_id
+        merged["updated_at"] = _now_iso()
+        data["compendium"][name][entity_id] = merged
+        self._write_atomic(data)
+        _emit_audit(
+            f"{name}_updated",
+            actor,
+            entity_id=entity_id,
+            fields_changed=sorted(patch.keys()),
+        )
+        return merged
+
+    def archive_compendium(
+        self, collection: str, entity_id: str, actor: str = "unknown"
+    ) -> dict[str, Any] | None:
+        """Archive, never delete. A withdrawn claim stays auditable: an analyst
+        needs to be able to see that an assessment was made and later pulled."""
+        data = self._read_raw()
+        name = self._require_collection(collection)
+        existing = data["compendium"][name].get(entity_id)
+        if existing is None:
+            return None
+        self._backup()
+        existing["archived"] = True
+        existing["updated_at"] = _now_iso()
+        data["compendium"][name][entity_id] = existing
+        self._write_atomic(data)
+        _emit_audit(f"{name}_archived", actor, entity_id=entity_id)
         return existing

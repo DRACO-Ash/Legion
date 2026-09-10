@@ -153,6 +153,27 @@ def make_seed_record(**overrides) -> dict:
     return record
 
 
+def make_claim(**overrides) -> dict:
+    """One canonical, valid Claim payload for tests.
+
+    Shared here for the same reason as make_seed_record: the platform measures
+    duplicated lines on new code, and a provenance-carrying claim literal is
+    long enough that a second copy in another test file is a duplicated block
+    large enough to fail the gate on its own.
+    """
+    payload = {
+        "statement": "SJ-21 moved a defunct Beidou satellite to a graveyard orbit.",
+        "marker": "FACT",
+        "confidence": "high",
+        "source_class": "think_tank",
+        "asserted_by": "seed-loader",
+        "source_citation": "CSIS Space Threat Assessment 2025",
+        "as_of": "2022-01-22",
+    }
+    payload.update(overrides)
+    return payload
+
+
 def make_elset(**overrides) -> dict:
     """One canonical UDL element set for tests.
 

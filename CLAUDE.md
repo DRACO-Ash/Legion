@@ -273,6 +273,57 @@ a shared string pasted into a browser tab was the wrong control for the job.
 If authentication is ever needed here again, it needs identity from the
 platform.
 
+## The compendium layer: provenance is a schema, not a convention
+
+Added in Phase 1 of the compendium upgrade (`deliverable/`, which carries the
+research and the full specification). The catalogue holds static attributes.
+This layer holds what behaviour data cannot supply, because the same manoeuvre
+signature serves inspection, servicing and attack, and what resolves the
+ambiguity is capability plus context plus pattern-of-life. That is the whole
+analytical reason the tool exists.
+
+`src/compendium_models.py` is the schema. Five things are load-bearing:
+
+● **The claim is the atom.** Almost no domain field is a bare value. Each one
+  is a `Claim`: statement, FACT / INFERENCE / SPECULATION, confidence, source
+  class, citation, date, and who asserted it. A bare string is only for
+  non-assertive data such as an id or a slug.
+● **Two rules are validators, not review comments.** A FACT with no citation
+  is rejected. A TBC with no named owner is rejected. Whitespace does not
+  satisfy either. These are the failed research pass turned into code: an
+  unverifiable claim has to name who must verify it.
+● **`asserted_by` is required on every claim.** There is no login auth, so
+  this field is the entire editorial layer. Do not make it optional.
+● **Observability is not confidence.** `PatternOfLifeSegment.observability`
+  says how well the behaviour could actually be seen (revisit rate, sensor
+  coverage); `claim.confidence` says how sure we are the assessment is right.
+  A segment from a sparse track and one from a dense track must never render
+  identically. Same principle as the JCO HRR rank gate.
+● **A proximity or pursuit mode must name its counterpart.** An RPO is always
+  with something, and that counterpart is what drives the relative-motion
+  view.
+
+`src/store.py` is at `schema_version` 2. The compendium hangs beside
+`systems`, never inside a record; `objects` is keyed by `system_id` so the
+migration is idempotent by construction. `_add_compendium_layer` reads system
+keys only, so it cannot alter a catalogue record even by accident. The
+compendium CRUD is one generic collection-keyed API rather than six
+near-identical sets, because six copies is six places for the anti-shrink
+merge and the archive-not-delete rule to drift.
+
+**How the migration was proved, and why two of the tests were wrong first.**
+`tests/test_store_migration.py` builds a store in the exact shape the shipped
+schema-1 code wrote, from the canonical 49 seed records, and compares every
+field. It was then calibrated by deliberately breaking the migration twice:
+once to drop a field, once to make the layer builder non-idempotent. The
+first sabotage was caught. **The second was not**, because the idempotency
+test compared the store file before and after a read, and a read migrates in
+memory without writing, so it was comparing the file with itself. A second
+attempt calling `_migrate` twice also failed to catch it, because the
+`schema_version` guard makes the second call a no-op. Only calling
+`_add_compendium_layer` directly catches it. Break the migration on purpose
+before believing a migration test, every time.
+
 ## Architecture, briefly
 
 - `src/app.py` — app factory (`build_app`), CORS, two-tier rate limiting.
