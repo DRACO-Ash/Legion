@@ -229,6 +229,39 @@ action, so read the policy evaluation and find the `STOP` row before changing a
 version. A breakdown that says "90 findings, all WARN" and "the scan failed" is
 describing two different things.
 
+## There is no authentication, and that was a decision
+
+Ash's instruction, 10 September 2026, after the shared team token cost three
+releases of diagnosis: **remove it completely.** `TEAM_TOKEN`,
+`require_team_token`, `/api/token-check`, the UI token box and every test for
+them are gone in 0.9.0. The only secrets are `UDL_USERNAME` and
+`UDL_PASSWORD`.
+
+What that means, stated plainly rather than buried: **reads, writes and UDL
+lookups are all open to anything that can reach the app.** The platform in
+front of it is the access control. This is recorded as a decision, not a gap.
+
+Three things follow, and undoing any of them quietly would be a regression:
+
+● **`ALLOWED_ORIGIN` refuses `*` unconditionally.** It used to be conditional
+  on a token being set, which was backwards: with writes ungated a wildcard
+  origin is strictly more dangerous, because it would let any page on the
+  internet issue writes from a reader's browser.
+● **The strict rate limiter is now the only control on the UDL call budget.**
+  It matters more than it did, not less.
+● **`tests/test_ui_contracts.py` fails if token machinery reappears** in the
+  interface, and `tests/test_security.py` asserts the open contract
+  explicitly, so a 401 coming back has to be somebody's decision rather than a
+  dependency creeping in.
+
+Why it went, in one line worth keeping: a token generated the usual way is
+always 43 characters, so two different values both read 43, and a single
+non-breaking space picked up from a copy is one character and two bytes. Three
+releases of diagnostics went into that before the answer turned out to be that
+a shared string pasted into a browser tab was the wrong control for the job.
+If authentication is ever needed here again, it needs identity from the
+platform.
+
 ## Architecture, briefly
 
 - `src/app.py` — app factory (`build_app`), CORS, two-tier rate limiting.
@@ -300,42 +333,20 @@ undo by accident:
   re-run the dataviz skill's `validate_palette.js` against the panel surface
   (`#152238`) first.
 
-● **Length is not enough to diagnose a token, and `/api/token-check` is why
-  it exists.** A live deployment sat at "both are 43 characters" through three
-  releases. The cause class is a single non-ASCII character in the pasted
-  value: a non-breaking space is one character and two bytes, so both sides
-  report 43 and `token_matches` still fails on its byte-length guard. The
-  endpoint compares shapes, never values, and names which kind of difference
-  it is. It is not gated by the token, on purpose. Do not add the value, a
-  position or a digest of either side to that response; the tests assert that
-  neither token appears in it.
-
-  Two facts worth keeping: a browser refuses to send a header value outside
-  Latin-1, so a look-alike hyphen surfaces as a failed request rather than a
-  401, while a non-breaking space or an accented letter is sent and reaches
-  the app. And httpx, which the tests use, is stricter still and rejects
-  anything non-ASCII, so that path cannot be tested through TestClient - it
-  was verified in a real browser instead.
-
-● **The three token outcomes stay distinguishable.** No token configured on
-  the deployment is 503 with a reason; a wrong or missing bearer token is 401;
-  a match passes. The UI turns the 401 into different advice depending on
-  whether it sent a token at all, and compares both the character count and the
-  UTF-8 byte count it holds against the `team_token_len` and `team_token_bytes`
-  that `/readyz` publishes. Do not collapse the two 401 causes back into one
-  message: "set the team token" is useless advice to someone who has just set
-  one, and it cost a round of live debugging to find that out. Lengths only,
-  never the value.
-
-  **Both units, always, added in 0.8.3.** The write guard rejects on byte
-  length while `len()` counts characters, so publishing characters alone made
-  the one failure that actually happened invisible: equal counts on both sides
-  and a refusal anyway. `/readyz` now carries `team_token_bytes` beside
-  `team_token_len`, and the status line names the case where the characters
-  agree and the bytes do not. It must not say which side carries the non-ASCII
-  character, because neither end can know: verified in a real browser where the
-  deployment held the non-breaking space and an earlier draft blamed the tab.
-  `tests/test_ui_contracts.py` pins both.
+● **The panel plots one scope at a time, and says which.** Choosing a family
+  plots the class; choosing a row in the catalogue plots that object's own
+  history. Both go through one client-side loader and one server-side
+  assembler, so the rank gate, the metric rule and the colour rule cannot
+  drift between them. `/api/udl/object-elements` deliberately passes the whole
+  family to `build_family_charts` and narrows with `focus_norad_id`, because
+  colour is assigned from launch-order position in the family: a satellite
+  charted alone keeps the colour it has beside its siblings. Only the focused
+  object is fetched, so it costs one element-set lookup, not the family's.
+● **Every message follows the scope on screen.** A single-object view that
+  says "nothing in this family cleared the checks" describes the wrong thing.
+  This is the fourth time a message in this UI has named something it could
+  not see, and each one was caught in a browser rather than by reading the
+  code. Drive the real page before believing any of them.
 
 `tests/test_ui_contracts.py` pins the parts of this that are checkable from
 Python, including that every path the UI fetches exists in the app's OpenAPI

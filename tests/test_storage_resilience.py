@@ -117,29 +117,6 @@ def test_readyz_reports_not_ready_when_reads_would_fail(
     assert response.json()["storage_writable"] is False
 
 
-@pytest.mark.parametrize(
-    ("method", "path", "body"),
-    [
-        # A valid body, so the request reaches the token gate rather than
-        # stopping at FastAPI's own request-model validation.
-        ("post", "/api/systems", dict(SEED[0])),
-        ("patch", "/api/systems/x", {"notes": "unauthorised"}),
-        ("delete", "/api/systems/x", None),
-    ],
-)
-def test_writes_fail_closed_when_no_team_token_is_configured(
-    method, path, body, tmp_path, monkeypatch, fake_udl
-):
-    """Unconfigured used to mean unauthenticated writes were accepted."""
-    monkeypatch.setenv("STORAGE_MOUNT_PATH", str(tmp_path))
-    app = build_app(settings=make_settings(team_token=None), udl_client=fake_udl)
-    with TestClient(app) as client:
-        kwargs = {} if body is None else {"json": body}
-        response = getattr(client, method)(path, **kwargs)
-    assert response.status_code == 503
-    assert "no team token" in response.json()["detail"]
-
-
 def test_write_survives_a_temp_file_that_cannot_be_removed(
     store, tmp_path, no_rename, monkeypatch
 ):

@@ -16,7 +16,7 @@ from src.models import (
     TrackedSystemList,
     TrackedSystemUpdate,
 )
-from src.security import client_key, enforce_rate_limit, enforce_team_token
+from src.security import client_key, enforce_rate_limit
 
 # One 404 detail for every "not in the catalogue" path, named once so the
 # three routes cannot drift apart (SonarQube python:S1192).
@@ -26,9 +26,14 @@ router = APIRouter(prefix="/api/systems")
 
 
 def _gate_write(request: Request) -> None:
-    settings = request.app.state.settings
+    """Rate limit a state-changing route.
+
+    There is no application-level authentication: the shared team token was
+    removed in 0.9.0. Access control belongs to the platform in front of this
+    app. The limiter here protects against runaway or accidental write
+    volume, not against an unauthorised caller.
+    """
     enforce_rate_limit(request.app.state.strict_limiter, request)
-    enforce_team_token(request, settings.team_token)
 
 
 @router.get("", response_model=TrackedSystemList)

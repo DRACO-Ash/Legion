@@ -28,38 +28,11 @@ def test_readyz_reports_udl_configured_boolean_only(client):
     assert body["udl_password_len"] == len("pass")
 
 
-def test_readyz_reports_team_token_boolean_and_length_not_value(client):
-    response = client.get("/readyz")
-    body = response.json()
-    assert body["team_token_configured"] is True
-    assert body["team_token_len"] == len("test-token")
-    assert body["team_token_bytes"] == len(b"test-token")
-    assert "team_token" not in body
-
-
-def test_readyz_separates_token_characters_from_bytes(fake_udl, tmp_path, monkeypatch):
-    """A non-ASCII character must show up as a byte count, not vanish.
-
-    The write guard rejects on UTF-8 byte length while the character count
-    stays equal, which is precisely how a pasted non-breaking space survived
-    three releases undiagnosed. /readyz has to publish both or it cannot
-    distinguish that case from a genuinely different value.
-    """
-    from fastapi.testclient import TestClient
-
-    from src.app import build_app
-    from tests.conftest import make_settings
-
-    nbsp_token = "token\u00a0with\u00a0nbsp"
-    monkeypatch.setenv("STORAGE_MOUNT_PATH", str(tmp_path))
-    app = build_app(settings=make_settings(team_token=nbsp_token), udl_client=fake_udl)
-    with TestClient(app) as test_client:
-        body = test_client.get("/readyz").json()
-
-    assert body["team_token_len"] == len(nbsp_token)
-    assert body["team_token_bytes"] == len(nbsp_token.encode())
-    assert body["team_token_bytes"] > body["team_token_len"]
-    assert nbsp_token not in str(body)
+def test_readyz_reports_no_token_field_at_all(client):
+    """The team token was removed in 0.9.0, and so were the three fields
+    /readyz published about it. Nothing should advertise a gate that is gone."""
+    body = client.get("/readyz").json()
+    assert not [key for key in body if "token" in key]
 
 
 def test_readyz_proves_storage_with_a_real_write(client):

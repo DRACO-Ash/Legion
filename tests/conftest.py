@@ -114,7 +114,6 @@ def make_settings(**overrides) -> Settings:
     base = {
         "port": 8080,
         "allowed_origin": "http://localhost:3000",
-        "team_token": "test-token",
         "udl_base_url": "https://unifieddatalibrary.com",
         "udl_username": "user",
         "udl_password": "pass",
@@ -214,8 +213,3 @@ def client(fake_udl, tmp_path, monkeypatch):
     app = build_app(settings=make_settings(), udl_client=fake_udl)
     with TestClient(app) as test_client:
         yield test_client
-
-
-@pytest.fixture
-def auth_headers():
-    return {"Authorization": "Bearer test-token"}

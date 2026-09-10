@@ -120,61 +120,87 @@ def test_the_axis_format_follows_the_span() -> None:
     assert 'year:"numeric"' in INDEX_HTML
 
 
-def test_a_rejected_token_and_a_missing_one_read_differently() -> None:
-    """ "Set the team token" is useless advice to someone who just did.
-
-    A 401 has two causes: nothing in this tab, or a value that does not match
-    the deployment. The UI has to tell them apart, and it does it by comparing
-    the length it is sending against the length /readyz reports.
-    """
-    assert "NO_TOKEN_HERE" in INDEX_HTML
-    assert "TOKEN_REJECTED" in INDEX_HTML
-    assert "team_token_len" in INDEX_HTML
-    assert "tokenRejectedMessage" in INDEX_HTML
-    # The old single message mapped both causes onto the wrong advice.
-    assert "401:" not in INDEX_HTML
-
-
-def test_the_token_box_says_how_long_the_token_it_holds_is() -> None:
-    """The one number that identifies a mismatch without exposing a secret."""
-    assert "held.length" in INDEX_HTML
-
-
-def test_the_token_box_compares_bytes_as_well_as_characters() -> None:
-    """Characters alone cannot see the failure that cost three releases.
-
-    The write guard rejects on UTF-8 byte length. A non-breaking space is one
-    character and two bytes, so a bad paste matches on characters and is still
-    refused. The UI has to measure both and /readyz has to publish both.
-    """
-    assert "TextEncoder" in INDEX_HTML
-    assert "team_token_bytes" in INDEX_HTML
-    assert "team_token_bytes" in (ROOT / "src" / "routes" / "health.py").read_text(
-        encoding="utf-8"
-    )
-
-
-def test_the_byte_mismatch_message_does_not_blame_a_side() -> None:
-    """Which side carries the non-ASCII character is not knowable from either
-    end, and a message that guesses sends the reader to the wrong token."""
-    assert "one side carries a" in INDEX_HTML
-    assert "this token carries a" not in INDEX_HTML
-
-
-def test_the_token_box_warns_that_it_is_per_tab() -> None:
-    """sessionStorage does not carry across tabs, and the App Store opens the
-    app in a new one."""
-    assert "per browser tab" in INDEX_HTML
-
-
 def test_the_panel_names_missing_deployment_configuration_on_load() -> None:
-    """Three gates stand between an analyst and a chart: the team token, the
-    UDL credentials, and the rank band. Two of them are deployment
-    configuration, and /readyz reports both, so the panel says what is missing
-    rather than waiting for the analyst to pick a family and get a 503."""
+    """One gate now stands between an analyst and a chart: the UDL
+    credentials. /readyz reports that, so the panel says what is missing
+    rather than waiting for the analyst to pick a family and get an error."""
     assert "missingConfiguration" in INDEX_HTML
     assert "udl_configured" in INDEX_HTML
     assert "UDL_USERNAME and UDL_PASSWORD" in INDEX_HTML
+
+
+def test_no_token_machinery_survives_in_the_interface() -> None:
+    """Removed in 0.9.0, at Ash's instruction, and it must stay removed.
+
+    The shared token cost more operator time to diagnose than it protected,
+    and it gated the very UDL lookups the charts need. Any reappearance of a
+    token box, a bearer header or a sessionStorage token here is a regression,
+    not a feature.
+    """
+    for fragment in [
+        "teamToken",
+        "team_token",
+        "Authorization",
+        "token-check",
+        "tokenInput",
+        "authHeaders",
+    ]:
+        assert fragment not in INDEX_HTML, f"token machinery is back: {fragment}"
+
+
+def test_selecting_a_row_plots_that_object() -> None:
+    """Ash's requirement, 10 September 2026: choosing one satellite in the
+    table plots its history, not just its edit form."""
+    assert "showObjectChart" in INDEX_HTML
+    assert "/api/udl/object-elements" in INDEX_HTML
+    assert "void showObjectChart(record);" in INDEX_HTML
+
+
+def test_selecting_a_family_plots_it_with_no_further_click() -> None:
+    """And choosing a family plots the class immediately."""
+    assert 'getElementById("cFamily").addEventListener("change", showFamilyChart)' in (
+        INDEX_HTML
+    )
+
+
+def test_there_is_a_way_back_from_one_object_to_the_family() -> None:
+    """A view you can enter and not leave is a trap."""
+    assert 'id="cWholeFamily"' in INDEX_HTML
+    assert (
+        'getElementById("cWholeFamily").addEventListener("click", showFamilyChart)'
+        in (INDEX_HTML)
+    )
+
+
+def test_the_panel_says_which_scope_it_is_showing() -> None:
+    """Two scopes on one panel is a lie waiting to happen unless the heading
+    changes with them."""
+    assert 'id="chartTitle"' in INDEX_HTML
+    assert "Object history" in INDEX_HTML
+    assert "Family movement" in INDEX_HTML
+
+
+def test_one_loader_serves_both_scopes() -> None:
+    """The rank gate, the metric rule and the colour rule live on the server.
+    Two client-side loaders would be two chances to drift from them."""
+    assert INDEX_HTML.count("async function loadCharts(") == 1
+    assert "function chartRequest(" in INDEX_HTML
+
+
+def test_the_hidden_attribute_actually_hides() -> None:
+    """`hidden` is only a user-agent `display:none`, and `.btn` sets `display`,
+    which beats it. Without this rule the "Whole family" button sat on screen
+    in family view. Caught in a browser, not by reading the markup."""
+    assert "[hidden]{ display:none !important; }" in INDEX_HTML
+
+
+def test_the_empty_state_follows_the_scope_on_screen() -> None:
+    """A single-object view saying "nothing in this family cleared the checks"
+    describes the wrong thing and sends the reader to the wrong place. Caught
+    in a browser by selecting a rank 4 object."""
+    assert "emptyChartReason" in INDEX_HTML
+    assert "This object is not charted. The reason is below." in INDEX_HTML
+    assert "Nothing in this family cleared the checks." in INDEX_HTML
 
 
 def test_the_empty_chart_state_does_not_invent_a_cause() -> None:
@@ -265,60 +291,3 @@ def test_row_storage_is_wrapped_against_a_throwing_accessor() -> None:
     returning null, and the table must still render."""
     stored = INDEX_HTML[INDEX_HTML.index("function storedRows()") :]
     assert "try{" in stored[:200] and "catch" in stored[:400]
-
-
-def test_equal_token_lengths_are_not_reported_as_reassurance() -> None:
-    """Ash hit this live: both sides read 43 characters and the panel simply
-    printed the two numbers, which reads as "so they match". A token generated
-    the usual way is always 43 characters, so two different tokens both are.
-    The message has to interpret the comparison, not just report it."""
-    assert "sameLengthMessage" in INDEX_HTML
-    assert "Equal lengths prove little" in INDEX_HTML
-    # Matched on one fragment: the sentence is built by concatenation, so a
-    # substring spanning two fragments is not in the file.
-    assert "restarted since TEAM_TOKEN was changed" in INDEX_HTML
-    assert "body.started_at" in INDEX_HTML
-
-
-def test_a_wrong_length_token_is_flagged_where_it_was_pasted() -> None:
-    """Ash hit this live: 22 characters pasted against a deployment expecting
-    43. The app only said so on the chart panel, three clicks later. A
-    truncated paste is invisible in a password field, so the status line reads
-    /readyz once and compares at the point of entry."""
-    assert "readExpectedTokenLength" in INDEX_HTML
-    assert "expectedTokenLength" in INDEX_HTML
-    assert "check the paste is complete" in INDEX_HTML
-    assert ".token-status.mismatch" in INDEX_HTML
-
-
-def test_the_token_field_is_hidden_from_password_managers() -> None:
-    """It is a shared token pasted per tab, not a password. A manager offering
-    to save it would later autofill a stale value over a correct paste."""
-    field = INDEX_HTML[INDEX_HTML.index('id="tokenInput"') :][:400]
-    assert 'autocomplete="off"' in field
-    assert 'spellcheck="false"' in field
-
-
-def test_the_token_can_be_checked_from_the_interface() -> None:
-    """Length ran out of diagnostic power on a live deployment. The Check
-    button asks the app how the two values differ, which is the question
-    lengths cannot answer."""
-    assert 'id="tokenCheck"' in INDEX_HTML
-    assert "/api/token-check" in INDEX_HTML
-    assert 'id="tokenMsg"' in INDEX_HTML
-
-
-def test_check_uses_the_value_in_the_box_before_the_saved_one() -> None:
-    """A token pasted but not yet saved is the commonest state to click Check
-    in, and checking only the saved value reported "no bearer token reached
-    the app" - which reads as a network fault when nothing had been sent at
-    all. Never name a cause without first reading the state this side knows."""
-    assert "tokenCandidate" in INDEX_HTML
-    assert "NOTHING_TO_CHECK" in INDEX_HTML
-    assert "UNSAVED_PREFIX" in INDEX_HTML
-
-
-def test_saving_a_token_checks_it_immediately() -> None:
-    """Saving is the moment the answer is wanted; do not make them ask twice."""
-    saved = INDEX_HTML[INDEX_HTML.index('getElementById("tokenSave")') :][:700]
-    assert "await checkToken();" in saved

@@ -40,17 +40,6 @@ header{ display:flex; justify-content:space-between; align-items:flex-end; gap:1
 .eyebrow{ font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--blue-2); font-weight:600; }
 h1{ font-size:24px; margin:4px 0 0; letter-spacing:.01em; }
 .subtitle{ font-size:12.5px; color:var(--text-dim); margin-top:2px; }
-.token-bar{ display:flex; gap:8px; align-items:center; background:var(--surface-2); border:1px solid var(--line);
-  border-radius:var(--radius); padding:8px 12px; font-size:12.5px; }
-.token-bar input{ background:var(--surface-3); border:1px solid var(--line); color:var(--text); padding:6px 8px;
-  border-radius:var(--radius); font-family:inherit; font-size:12.5px; width:220px; }
-.token-bar button{ display:inline-flex; align-items:center; gap:6px; background:var(--blue-1); border:none;
-  color:#fff; padding:6px 12px; border-radius:var(--radius); cursor:pointer; font-family:inherit;
-  font-size:12.5px; }
-.token-status{ font-size:11px; color:var(--text-faint); }
-.token-status.set{ color:var(--green-bright); }
-.token-status.mismatch{ color:var(--china-bright); }
-
 .layout{ display:grid; grid-template-columns:1fr 380px; gap:20px; align-items:start; }
 @media (max-width:900px){ .layout{ grid-template-columns:1fr; } }
 
@@ -106,6 +95,10 @@ form textarea{ min-height:56px; resize:vertical; }
 .form-actions{ display:flex; gap:8px; margin-top:14px; }
 .btn{ display:inline-flex; align-items:center; gap:6px; font-family:inherit; font-size:12.5px;
   padding:8px 14px; border-radius:var(--radius); cursor:pointer; border:1px solid; }
+/* The `hidden` attribute is only a user-agent `display:none`, so any author
+   rule that sets `display` beats it. `.btn` does exactly that, which left a
+   hidden button on screen until a browser test caught it. */
+[hidden]{ display:none !important; }
 .btn-primary{ background:var(--blue-1); border-color:var(--blue-1); color:#fff; }
 .btn-primary:hover{ background:#4571c7; }
 .btn-ghost{ background:none; border-color:var(--line); color:var(--text-dim); }
@@ -135,9 +128,6 @@ form textarea{ min-height:56px; resize:vertical; }
 .brand{ display:flex; align-items:center; gap:12px; }
 .panel h2 .icon{ width:13px; height:13px; stroke-width:2; color:var(--blue-2); }
 .btn .icon{ width:13px; height:13px; }
-.token-bar label{ display:flex; align-items:center; gap:6px; }
-.token-bar label .icon{ width:13px; height:13px; color:var(--text-faint); }
-.token-bar button .icon{ width:12px; height:12px; color:#fff; }
 /* A status shows its state as shape as well as colour: filled for on-orbit,
    open for decayed, dashed for anything unconfirmed. */
 .pill .icon{ width:9px; height:9px; stroke-width:2.4; }
@@ -202,7 +192,6 @@ svg.chart{ width:100%; height:auto; display:block; overflow:visible; }
       <path d="M4 4v16h16"/><path d="M7 15l4-5 3 3 5-7"/>
     </symbol>
     <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
-    <symbol id="i-save" viewBox="0 0 24 24"><path d="M4 12l5 5L20 6"/></symbol>
     <symbol id="i-clear" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
     <symbol id="i-archive" viewBox="0 0 24 24">
       <path d="M3 7h18v4H3zM5 11v9h14v-9"/><path d="M10 15h4"/>
@@ -210,13 +199,7 @@ svg.chart{ width:100%; height:auto; display:block; overflow:visible; }
     <symbol id="i-reload" viewBox="0 0 24 24">
       <path d="M20 12a8 8 0 1 1-2.6-5.9"/><path d="M20 4v4h-4"/>
     </symbol>
-    <symbol id="i-key" viewBox="0 0 24 24">
-      <circle cx="8" cy="12" r="4"/><path d="M12 12h9M18 12v3"/>
-    </symbol>
     <symbol id="i-status" viewBox="0 0 12 12"><circle cx="6" cy="6" r="4"/></symbol>
-    <symbol id="i-inspect" viewBox="0 0 24 24">
-      <circle cx="11" cy="11" r="6"/><path d="M15.5 15.5L21 21"/>
-    </symbol>
     <symbol id="i-prev" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></symbol>
     <symbol id="i-next" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></symbol>
   </defs>
@@ -232,17 +215,7 @@ svg.chart{ width:100%; height:auto; display:block; overflow:visible; }
         <div class="subtitle">Tracked Systems</div>
       </div>
     </div>
-    <div class="token-bar">
-      <label for="tokenInput"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-key"/></svg>Team token</label>
-      <input type="password" id="tokenInput" placeholder="paste to enable add/edit/archive"
-        autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">
-      <button id="tokenSave"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-save"/></svg>Save</button>
-      <button id="tokenCheck" class="btn btn-ghost"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-inspect"/></svg>Check</button>
-      <output class="token-status" id="tokenStatus">not set — read only</output>
-    </div>
   </header>
-  <output class="msg" id="tokenMsg"></output>
-
   <main id="main-content" class="layout">
     <div class="panel">
       <h2><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-catalogue"/></svg>Catalogue</h2>
@@ -320,7 +293,7 @@ svg.chart{ width:100%; height:auto; display:block; overflow:visible; }
     </div>
 
     <section class="panel chart-panel">
-      <h2><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-chart"/></svg>Family movement</h2>
+      <h2><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-chart"/></svg><span id="chartTitle">Family movement</span></h2>
       <div class="chart-controls">
         <label class="visually-hidden" for="cFamily">Family</label>
         <select id="cFamily"><option value="">Select a family…</option></select>
@@ -337,9 +310,10 @@ svg.chart{ width:100%; height:auto; display:block; overflow:visible; }
           <option value="absolute">Absolute position</option>
           <option value="relative">Relative to window start</option>
         </select>
+        <button type="button" class="btn btn-ghost" id="cWholeFamily" hidden><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-prev"/></svg>Whole family</button>
         <button type="button" class="btn btn-ghost" id="cReload"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-reload"/></svg>Reload</button>
       </div>
-      <output class="msg" id="chartMsg">Pick a family to plot its element sets. Reads live UDL data, so a team token is required.</output>
+      <output class="msg" id="chartMsg">Pick a family to plot the class, or a row in the table to plot one object. Reads live UDL data.</output>
       <div id="charts"></div>
     </section>
   </main>
@@ -359,126 +333,6 @@ function esc(value){
     {"&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;"}[ch]
   ));
 }
-
-function token(){ return sessionStorage.getItem("teamToken") || ""; }
-function authHeaders(){
-  const t = token();
-  return t ? {"Authorization": "Bearer " + t} : {};
-}
-/* The length the deployment is configured with, read once from /readyz.
-   Comparing against it here is the point: a token that does not match shows
-   as wrong the moment it is saved, in the field where it was pasted, rather
-   than three clicks later on a chart that will not load. A truncated paste is
-   the common case and it is invisible in a password field. */
-let expectedTokenLength = null;
-let expectedTokenBytes = null;
-
-/* The app rejects on UTF-8 byte length, not character count, and the two
-   differ exactly when the paste carries a non-ASCII character. A non-breaking
-   space is one character and two bytes, so a bad token can match on characters
-   and still be refused. Measuring both here is what makes that visible. */
-function byteLength(value){
-  return new TextEncoder().encode(value).length;
-}
-
-async function readExpectedTokenLength(){
-  try{
-    const res = await fetch("/readyz");
-    const body = await res.json();
-    if(body.team_token_configured){
-      expectedTokenLength = body.team_token_len;
-      expectedTokenBytes = body.team_token_bytes ?? null;
-    }
-  } catch { /* leave it unknown: the status line simply says less */ }
-  refreshTokenStatus();
-}
-
-function refreshTokenStatus(){
-  const el = document.getElementById("tokenStatus");
-  const held = token();
-  el.classList.remove("set", "mismatch");
-  if(!held){
-    el.textContent = "not set — read only";
-    return;
-  }
-  if(expectedTokenLength !== null && held.length !== expectedTokenLength){
-    el.textContent = `set, ${held.length} characters, but the deployment expects `
-      + `${expectedTokenLength}: check the paste is complete`;
-    el.classList.add("mismatch");
-    return;
-  }
-  const heldBytes = byteLength(held);
-  if(expectedTokenBytes !== null && heldBytes !== expectedTokenBytes){
-    el.textContent = `set, ${held.length} characters like the deployment, but `
-      + `${heldBytes} bytes against its ${expectedTokenBytes}: one side carries a `
-      + `non-ASCII character. Retype rather than paste, on whichever side you can change`;
-    el.classList.add("mismatch");
-    return;
-  }
-  el.textContent = `set, ${held.length} characters — writes enabled`;
-  el.classList.add("set");
-}
-/* Ask the app how the token it received differs from the one it holds.
-   Lengths stopped being able to answer this: a non-breaking space or a
-   look-alike hyphen is one character and reads identically, so two values can
-   both be 43 characters and still be different. The app compares shapes and
-   names the kind of difference; neither side ever sends a value back. */
-/* Ask the app how the token it received differs from the one it holds.
-   Lengths stopped being able to answer this: a non-breaking space or a
-   look-alike hyphen is one character and reads identically, so two values can
-   both be 43 characters and still be different. The app compares shapes and
-   names the kind of difference; neither side ever sends a value back.
-
-   The candidate is whatever is in the box, falling back to what is saved.
-   Checking only the saved value made the commonest case - a token pasted but
-   not yet saved - report "no bearer token reached the app", which reads as a
-   network fault when nothing had been sent at all. Never diagnose a cause
-   without first looking at the state this side already knows. */
-const NOTHING_TO_CHECK = "Nothing to check yet: paste the team token above first.";
-const UNSAVED_PREFIX = "Checking the value in the box, which is not saved yet. ";
-
-function tokenCandidate(){
-  const typed = document.getElementById("tokenInput").value.trim();
-  if(typed) return {value: typed, saved: false};
-  return {value: token(), saved: true};
-}
-
-async function checkToken(){
-  const msg = document.getElementById("tokenMsg");
-  const candidate = tokenCandidate();
-  if(!candidate.value){
-    msg.textContent = NOTHING_TO_CHECK;
-    msg.className = "msg error";
-    return;
-  }
-  msg.textContent = "Checking…";
-  msg.className = "msg";
-  try{
-    const res = await fetch("/api/token-check", {
-      headers: {"Authorization": "Bearer " + candidate.value},
-    });
-    const body = await res.json();
-    const prefix = candidate.saved ? "" : UNSAVED_PREFIX;
-    msg.textContent = prefix + body.verdict;
-    msg.className = body.matches ? "msg ok" : "msg error";
-  } catch {
-    msg.textContent = "Could not reach the app to check the token.";
-    msg.className = "msg error";
-  }
-}
-
-document.getElementById("tokenCheck").addEventListener("click", checkToken);
-
-document.getElementById("tokenSave").addEventListener("click", async () => {
-  const typed = document.getElementById("tokenInput").value.trim();
-  if(typed) sessionStorage.setItem("teamToken", typed);
-  else sessionStorage.removeItem("teamToken");
-  document.getElementById("tokenInput").value = "";
-  refreshTokenStatus();
-  // Saving is the moment the answer is wanted, so do not make them ask twice.
-  if(typed) await checkToken();
-  else document.getElementById("tokenMsg").textContent = "";
-});
 
 function qs(params){
   const p = new URLSearchParams();
@@ -721,6 +575,9 @@ function selectSystem(id){
   }
   renderTable(currentList);
   document.getElementById("formMsg").textContent = "";
+  // Selecting a row is the analyst saying "this one", so plot it. Deliberately
+  // not awaited: the form must not wait on a live UDL call to become editable.
+  void showObjectChart(record);
 }
 
 document.getElementById("clearBtn").addEventListener("click", () => {
@@ -731,6 +588,7 @@ document.getElementById("clearBtn").addEventListener("click", () => {
   document.getElementById("archiveBtn").style.display = "none";
   document.getElementById("formMsg").textContent = "";
   renderTable(currentList);
+  void showFamilyChart();
 });
 
 function collectPayload(){
@@ -758,13 +616,8 @@ function collectPayload(){
 document.getElementById("systemForm").addEventListener("submit", async (e) => {
   e.preventDefault();
   const msg = document.getElementById("formMsg");
-  if(!token()){
-    msg.textContent = "Set a team token above before adding or editing.";
-    msg.className = "msg error";
-    return;
-  }
   const payload = collectPayload();
-  const headers = {"Content-Type": "application/json", ...authHeaders()};
+  const headers = {"Content-Type": "application/json"};
   let res;
   if(selectedId){
     res = await fetch(`/api/systems/${selectedId}`, {method:"PATCH", headers, body: JSON.stringify(payload)});
@@ -785,13 +638,8 @@ document.getElementById("systemForm").addEventListener("submit", async (e) => {
 
 document.getElementById("archiveBtn").addEventListener("click", async () => {
   if(!selectedId) return;
-  if(!token()){
-    document.getElementById("formMsg").textContent = "Set a team token above first.";
-    document.getElementById("formMsg").className = "msg error";
-    return;
-  }
   if(!confirm("Archive this system? It stays in the store but is hidden by default.")) return;
-  const res = await fetch(`/api/systems/${selectedId}`, {method:"DELETE", headers: authHeaders()});
+  const res = await fetch(`/api/systems/${selectedId}`, {method:"DELETE"});
   const msg = document.getElementById("formMsg");
   if(res.ok){
     // Clear first: the clear handler blanks this message, so setting it
@@ -1161,12 +1009,26 @@ function skippedLine(skipped){
   return `<p class="skipped">Not charted: ${named}.</p>`;
 }
 
+/* The empty state has to follow the scope on screen. "Nothing in this family
+   cleared the checks" is simply wrong under a single object, and a message
+   that describes the wrong thing sends the reader looking in the wrong place.
+   It also never names a cause it cannot see: the skip reason underneath is
+   the cause, and it comes from the server. */
+function emptyChartReason(payload){
+  if(chartView.kind === "object"){
+    return payload.skipped.length > 0
+      ? "This object is not charted. The reason is below."
+      : "No element sets came back for this object.";
+  }
+  return payload.skipped.length > 0
+    ? "Nothing in this family cleared the checks. See below for each object."
+    : "This family has no catalogued members to chart.";
+}
+
 function renderCharts(payload){
   const host = document.getElementById("charts");
   if(payload.charts.length === 0){
-    const reason = payload.skipped.length > 0
-      ? "Nothing in this family cleared the checks. See below for each object."
-      : "This family has no catalogued members to chart.";
+    const reason = emptyChartReason(payload);
     host.innerHTML = `<div class="empty">${esc(reason)}</div>` + skippedLine(payload.skipped);
     return;
   }
@@ -1196,22 +1058,18 @@ async function loadFamilies(){
   select.value = keep;
 }
 
-/* The chart panel depends on two pieces of deployment configuration that the
-   catalogue does not: UDL credentials to fetch element sets at all, and a team
-   token to authorise the lookup. /readyz reports both, so the panel can name
-   what is missing on load instead of answering with a 503 after the analyst
-   picks a family. */
+/* The chart panel depends on one piece of deployment configuration that the
+   catalogue does not: UDL credentials, without which no element set can be
+   fetched at all. /readyz reports that, so the panel names what is missing on
+   load instead of answering with an error after the analyst picks a family. */
 async function missingConfiguration(){
   try{
     const res = await fetch("/readyz");
     const body = await res.json();
-    const missing = [];
-    if(!body.udl_configured) missing.push("UDL_USERNAME and UDL_PASSWORD");
-    if(!body.team_token_configured) missing.push("TEAM_TOKEN");
-    if(missing.length === 0) return null;
-    return `No charts are possible yet: this deployment needs ${missing.join(", and ")} `
-      + "set in its Configuration tab. Element sets come from live UDL. "
-      + "The catalogue above works without them.";
+    if(body.udl_configured) return null;
+    return "No charts are possible yet: this deployment needs "
+      + "UDL_USERNAME and UDL_PASSWORD set in its Configuration tab. "
+      + "Element sets come from live UDL. The catalogue above works without them.";
   } catch {
     return null;
   }
@@ -1227,92 +1085,67 @@ const CHART_ERRORS = {
   502: "UDL did not answer. Try again, or check the UDL status.",
 };
 
-const NO_TOKEN_HERE =
-  "Set the team token above: element sets come from UDL and the lookup is gated. " +
-  "Note the box is per browser tab, so a token saved in another tab does not carry over.";
-const TOKEN_REJECTED =
-  "The team token was rejected. Re-paste it above, or check TEAM_TOKEN in the app's " +
-  "Configuration tab.";
-
-/* A 401 means one of two things, and telling an analyst to "set the team
-   token" when they have already set one is the less useful of the two. A
-   deployment with no token at all answers 503 with its own reason, so it does
-   not come through here.
-
-   /readyz is public and reports how long the configured token is, so the two
-   lengths together narrow the fault. Lengths only - neither side ever exposes
-   the value.
-
-   Equal lengths are weak evidence and the message says so: a token generated
-   the usual way is always the same length, so two different tokens both read
-   43 characters. When they match, the more likely fault is a worker that has
-   not restarted since the configuration changed, which is why /readyz reports
-   when this process read its environment. */
-function lengthMismatchMessage(sent, configured){
-  return `${TOKEN_REJECTED} This tab is sending ${sent} characters; the deployment `
-    + `is configured with ${configured}.`;
-}
-
-function byteMismatchMessage(sent, sentBytes, configuredBytes){
-  return `${TOKEN_REJECTED} Both are ${sent} characters, but this tab is sending `
-    + `${sentBytes} bytes against the deployment's ${configuredBytes}. One side `
-    + "carries a non-ASCII character, most often a non-breaking space or a "
-    + "look-alike hyphen picked up from a copy. Retype the token rather than "
-    + "pasting it.";
-}
-
-function sameLengthMessage(sent, startedAt){
-  let message = "The team token was rejected even though both are " + sent
-    + " characters. Equal lengths prove little: two tokens generated the usual way "
-    + "are always the same length. Either the values differ, or this app has not "
-    + "restarted since TEAM_TOKEN was changed";
-  if(startedAt){
-    message += ", and it has been running since " + formatEpoch(startedAt);
-  }
-  return message + ". Redeploy if the configuration changed after that.";
-}
-
-async function tokenRejectedMessage(){
-  const held = token();
-  if(held.length === 0) return NO_TOKEN_HERE;
-  try{
-    const res = await fetch("/readyz");
-    const body = await res.json();
-    if(held.length !== body.team_token_len){
-      return lengthMismatchMessage(held.length, body.team_token_len);
-    }
-    const sentBytes = byteLength(held);
-    if(body.team_token_bytes != null && sentBytes !== body.team_token_bytes){
-      return byteMismatchMessage(held.length, sentBytes, body.team_token_bytes);
-    }
-    return sameLengthMessage(held.length, body.started_at);
-  } catch {
-    return TOKEN_REJECTED;
-  }
-}
-
-async function chartErrorMessage(status, detail){
-  if(status === 401) return tokenRejectedMessage();
+function chartErrorMessage(status, detail){
   return CHART_ERRORS[status] || detail || `Could not load element sets (${status}).`;
 }
 
-async function loadFamilyCharts(){
+/* The panel plots one of two things and never both: a whole family, or a
+   single object from the table. They are the same chart with the same rules -
+   same JCO HRR rank 0-3 gate, same metric per regime, same colour for a given
+   satellite - so they share one loader and differ only in the request. The
+   window and the scale apply to whichever is on screen. */
+let chartView = {kind: "family"};
+
+function chartRequest(){
+  const windowDays = document.getElementById("cWindow").value;
+  if(chartView.kind === "object"){
+    return {
+      url: "/api/udl/object-elements",
+      params: {record_id: chartView.recordId, window_days: windowDays},
+    };
+  }
   const familyId = document.getElementById("cFamily").value;
+  if(!familyId) return null;
+  return {
+    url: "/api/udl/family-elements",
+    params: {family_id: familyId, window_days: windowDays},
+  };
+}
+
+function describeChart(payload){
+  const depth = SOURCE_LABELS[payload.source] || payload.source;
+  const span = payload.window_days === 0 ? "full history" : `last ${payload.window_days} days`;
+  const charted = payload.charts.reduce((total, chart) => total + chart.series.length, 0);
+  const subject = chartView.kind === "object"
+    ? `${payload.family_title} · ${charted === 0 ? "not charted" : "one object"}`
+    : `${payload.family_title} · ${charted} object${charted === 1 ? "" : "s"}`;
+  return `${subject} · ${span} · ${depth} · JCO HRR rank 0-3 · generated ${formatEpoch(payload.generated_at)}`;
+}
+
+function applyChartScope(){
+  const isObject = chartView.kind === "object";
+  document.getElementById("chartTitle").textContent = isObject ? "Object history" : "Family movement";
+  document.getElementById("cWholeFamily").hidden = !isObject;
+}
+
+async function loadCharts(){
   const msg = document.getElementById("chartMsg");
   const host = document.getElementById("charts");
-  if(!familyId){
+  applyChartScope();
+  const request = chartRequest();
+  if(!request){
     host.innerHTML = "";
-    msg.textContent = "Pick a family to plot its element sets.";
+    lastPayload = null;
+    msg.textContent = "Pick a family to plot the class, or a row in the table to plot one object.";
     msg.className = "msg";
     return;
   }
-  const params = {family_id: familyId, window_days: document.getElementById("cWindow").value};
   msg.textContent = "Loading element sets…";
   msg.className = "msg";
   host.classList.add("stale");
   let res;
   try{
-    res = await fetch("/api/udl/family-elements?" + qs(params), {headers: authHeaders()});
+    res = await fetch(request.url + "?" + qs(request.params));
   } catch {
     host.classList.remove("stale");
     msg.textContent = "Could not reach the server.";
@@ -1322,37 +1155,46 @@ async function loadFamilyCharts(){
   host.classList.remove("stale");
   if(!res.ok){
     const body = await res.json().catch(() => ({}));
-    msg.textContent = await chartErrorMessage(res.status, body.detail);
+    host.innerHTML = "";
+    msg.textContent = chartErrorMessage(res.status, body.detail);
     msg.className = "msg error";
     return;
   }
   lastPayload = await res.json();
-  const payload = lastPayload;
-  renderCharts(payload);
-  const depth = SOURCE_LABELS[payload.source] || payload.source;
-  const span = payload.window_days === 0 ? "full history" : `last ${payload.window_days} days`;
-  const charted = payload.charts.reduce((total, chart) => total + chart.series.length, 0);
-  msg.textContent = `${payload.family_title} · ${span} · ${depth} · ${charted} object${charted === 1 ? "" : "s"} at JCO HRR rank 0-3 · generated ${formatEpoch(payload.generated_at)}`;
+  renderCharts(lastPayload);
+  msg.textContent = describeChart(lastPayload);
   msg.className = "msg";
 }
 
-document.getElementById("cFamily").addEventListener("change", loadFamilyCharts);
-document.getElementById("cWindow").addEventListener("change", loadFamilyCharts);
-document.getElementById("cReload").addEventListener("click", loadFamilyCharts);
+/* Selecting a row in the table plots that object. The catalogue record is the
+   only thing sent: the server resolves the NORAD ID, applies the rank gate and
+   picks the metric, so the UI cannot drift from the family chart's rules. */
+async function showObjectChart(record){
+  chartView = {kind: "object", recordId: record.id};
+  await loadCharts();
+}
+
+function showFamilyChart(){
+  chartView = {kind: "family"};
+  return loadCharts();
+}
+
+document.getElementById("cFamily").addEventListener("change", showFamilyChart);
+document.getElementById("cWholeFamily").addEventListener("click", showFamilyChart);
+// The window applies to whichever scope is on screen, so these reload it as-is.
+document.getElementById("cWindow").addEventListener("change", loadCharts);
+document.getElementById("cReload").addEventListener("click", loadCharts);
 // Switching scale is a redraw of data already fetched, never another UDL call.
 document.getElementById("cMode").addEventListener("change", () => {
   chartMode = document.getElementById("cMode").value;
   if(lastPayload) renderCharts(lastPayload);
 });
 
-refreshTokenStatus();
 // Top-level await: a module script is deferred, so the DOM is already parsed,
 // and awaiting means a failed first load surfaces rather than becoming an
 // unhandled rejection.
 await loadSystems();
 await loadFamilies();
-
-await readExpectedTokenLength();
 
 const configurationGap = await missingConfiguration();
 if(configurationGap){

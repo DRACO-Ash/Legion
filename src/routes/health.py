@@ -7,16 +7,6 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
 from src._version import __version__
-from src.security import (
-    describe_token_difference,
-    enforce_rate_limit,
-    extract_bearer_token,
-)
-
-NO_TOKEN_CONFIGURED_VERDICT = (
-    "This deployment has no TEAM_TOKEN configured, so nothing can match. Set "
-    "one in the Configuration tab and restart the app."
-)
 
 router = APIRouter()
 
@@ -72,18 +62,6 @@ async def readyz(request: Request):
         "udl_configured": udl_client.configured,
         "udl_username_len": len(settings.udl_username) if settings.udl_username else 0,
         "udl_password_len": len(settings.udl_password) if settings.udl_password else 0,
-        "team_token_configured": bool(settings.team_token),
-        # Characters and bytes both, because the two disagree exactly when it
-        # matters. The write guard rejects on UTF-8 byte length, while len()
-        # counts characters: a non-breaking space is one character and two
-        # bytes, so a token carrying one reports the same team_token_len as a
-        # clean one and is still refused. Publishing only characters is what
-        # let that sit undiagnosed through three releases. Lengths only,
-        # never the value, never a position.
-        "team_token_len": len(settings.team_token) if settings.team_token else 0,
-        "team_token_bytes": (
-            len(settings.team_token.encode("utf-8")) if settings.team_token else 0
-        ),
         "storage_writable": storage_writable,
     }
     if not storage_writable:
@@ -93,28 +71,3 @@ async def readyz(request: Request):
         body["storage_error"] = storage_error
         return JSONResponse(status_code=503, content=body)
     return body
-
-
-@router.get("/api/token-check")
-async def token_check(request: Request):
-    """Say how the caller's token differs from the configured one.
-
-    Shapes and booleans only: lengths, byte counts, whether the value is
-    ASCII, and which kind of difference it is. Never a character, a position
-    or a digest of either value.
-
-    Deliberately not gated by the token, because it exists for the case where
-    the token is refused. It tells a caller nothing it does not already know
-    about the value it just sent - a 401 from any gated route already reveals
-    "this does not match" - and the strict rate limit applies so it cannot be
-    driven quickly.
-
-    This exists because a live deployment sat at "both are 43 characters" with
-    nowhere to go. A look-alike hyphen from a copy through a document is one
-    character and reads identically, and no length comparison can see it.
-    """
-    enforce_rate_limit(request.app.state.strict_limiter, request)
-    configured = request.app.state.settings.team_token
-    if not configured:
-        return {"matches": False, "verdict": NO_TOKEN_CONFIGURED_VERDICT}
-    return describe_token_difference(extract_bearer_token(request), configured)

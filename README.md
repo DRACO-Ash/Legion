@@ -39,10 +39,15 @@ and elset lookup from the previous build stay as-is for enrichment.
   sent; nothing you don't touch is ever cleared.
 - **Archive, not delete**: `DELETE /api/systems/{id}` sets `archived: true`
   rather than removing the record, so a retired object stays auditable.
-- **Auth**: reads (`GET`) are public; writes (`POST`/`PATCH`/`DELETE`) need
-  the same `TEAM_TOKEN` bearer auth as the UDL routes. The UI has a token
-  field (stored in `sessionStorage` for that browser tab only) - paste it
-  once to enable add/edit/archive.
+- **No application-level authentication.** Every route is open. The shared
+  team token was removed in 0.9.0: it cost more operator time to diagnose than
+  it protected, and it gated the UDL lookups the charts exist to draw. Access
+  control belongs to the platform in front of this app. The only secrets are
+  `UDL_USERNAME` and `UDL_PASSWORD`, which never leave the process.
+- **Charts follow the selection.** Choosing a family plots the whole class;
+  choosing one row in the table plots that object's own history. Same rules
+  either way: JCO HRR rank 0 to 3 only, one metric per axis, and a satellite
+  keeps its colour in both views.
 
 ## Local setup
 
@@ -72,76 +77,49 @@ dependency to `requirements-runtime.txt`; add a new test-only dependency to
 | `GET /readyz` | none | Readiness; reports `udl_configured` boolean only |
 | `GET /api/systems?nation=&regime=&status_filter=&q=&include_archived=` | none | List/filter the catalogue |
 | `GET /api/systems/{id}` | none | One record |
-| `POST /api/systems` | Bearer team token | Add a new tracked system |
-| `PATCH /api/systems/{id}` | Bearer team token | Anti-shrink update |
-| `DELETE /api/systems/{id}` | Bearer team token | Archive (not delete) |
-| `GET /api/udl/jco-hrr?common_name=&window_hours=` | Bearer team token | Search live UDL JCO HRR feed by name |
-| `GET /api/udl/jco-hrr/{sat_no}?window_hours=` | Bearer team token | Look up one JCO HRR entry by satNo |
-| `GET /api/udl/elset/{sat_no}` | Bearer team token | Latest element set for a satNo |
-| `GET /api/udl/clash-check?window_hours=` | Bearer team token | Resolves the COSMOS-2612/2613/2614 NORAD 68762 clash against live UDL |
-| `GET /api/udl/family-elements?family_id=&window_days=` | Bearer team token | Element-set tracks for every rank 0-3 member of one family, ready to chart. `window_days=0` means the full history |
+| `POST /api/systems` | none | Add a new tracked system |
+| `PATCH /api/systems/{id}` | none | Anti-shrink update |
+| `DELETE /api/systems/{id}` | none | Archive (not delete) |
+| `GET /api/udl/jco-hrr?common_name=&window_hours=` | none | Search live UDL JCO HRR feed by name |
+| `GET /api/udl/jco-hrr/{sat_no}?window_hours=` | none | Look up one JCO HRR entry by satNo |
+| `GET /api/udl/elset/{sat_no}` | none | Latest element set for a satNo |
+| `GET /api/udl/clash-check?window_hours=` | none | Resolves the COSMOS-2612/2613/2614 NORAD 68762 clash against live UDL |
+| `GET /api/udl/family-elements?family_id=&window_days=` | none | Element-set tracks for every rank 0-3 member of one family, ready to chart. `window_days=0` means the full history |
+| `GET /api/udl/object-elements?record_id=&window_days=` | none | The same, for one catalogued object. Same rank gate, same metric rule, same colour |
 
-Auth is a shared bearer token (`TEAM_TOKEN`), compared in constant time. It
-fails closed: with no token configured, every write and every UDL route
-answers 503 rather than running open. Set it, together with `ALLOWED_ORIGIN`
-(the app refuses to start on a wildcard origin with a token set), before the
-app is of any use beyond reading the catalogue.
+**There is no authentication.** Reads, writes and UDL lookups are all open to
+anything that can reach the app. That is a deliberate decision taken on
+10 September 2026, not an oversight: the shared bearer token that used to gate
+the writes and the UDL routes was removed because diagnosing it repeatedly cost
+more than it protected, and because it blocked the element-set lookups the
+application exists to serve. The catalogue is public-domain reference data.
 
-Two separate places hold it, and both are needed. `TEAM_TOKEN` in the
-deployment's environment is what the server compares against; the box in the
-UI header is what the browser sends. That box lives in `sessionStorage`, so it
-is **per browser tab**: opening the app in a new tab means pasting it again.
+What still protects the things worth protecting:
 
-The token box compares what it holds against the deployment's length as soon
-as you save it, so a truncated or wrong paste shows in the header
-immediately: "set, 22 characters, but the deployment expects 43: check the
-paste is complete". The field is also hidden from password managers, since a
-saved entry autofilled later would quietly replace a correct paste.
+- **The UDL credentials** never leave the process and appear in no response.
+- **The UDL call budget** is held by a strict in-process rate limiter, which is
+  now the only control on it and therefore matters more than it did.
+- **`ALLOWED_ORIGIN` must be explicit.** The app refuses to start on `*`,
+  unconditionally. This used to be conditional on a token being set, which was
+  the wrong way round: with writes ungated, a wildcard origin would let any
+  page on the internet issue them from a reader's browser.
 
-Saving a token checks it straight away, and Check tests whatever is in the
-box if there is anything there, falling back to what is saved. That matters
-because the commonest moment to click Check is with a token pasted but not yet
-saved, and checking only the saved value reported "no bearer token reached the
-app", which reads as a network fault when in fact nothing had been sent.
+If an application-level control is ever wanted again, it should be real
+identity passed down from the platform, not a shared string pasted into a
+browser tab.
 
-**The Check button beside Save is the end of this road.** It asks
-`GET /api/token-check` how the token the app received differs from the one it
-holds, and names the kind of difference: a match, a length difference, letter
-case, invisible or look-alike characters, or "same characters, different
-bytes", which means a non-ASCII character got in. Shapes and booleans only:
-neither value, no positions, no digest, and never a character of either. It is
-deliberately not gated by the token, because it exists for the case where the
-token is refused, and it tells a caller nothing a 401 does not already.
 
-That last verdict is the one that closed a real case. A single non-breaking
-space inside a pasted token reads identically, counts as one character, and
-takes two bytes: both sides report 43 characters and the compare still fails.
-Copying through a document, a chat client or a PDF is how it gets in.
+**Why it went, in one paragraph, so nobody rebuilds it.** A shared token
+generated the usual way is always 43 characters, so two different values both
+read 43 and a length comparison cannot separate them. Worse, a single
+non-breaking space picked up by copying through a document counts as one
+character and two bytes, so both sides report the same length and the compare
+still fails. Three releases went into diagnostics for that: length reporting,
+then byte reporting, then a dedicated `/api/token-check` endpoint. All of it
+was machinery for a control that was never the right shape for the problem. If
+this application needs authentication again, it needs identity from the
+platform, not a string an analyst pastes into a tab.
 
-Equal lengths on both sides prove less than they look. A token generated the
-usual way, `secrets.token_urlsafe(32)`, is always 43 characters, so two
-**different** tokens both read 43. When the lengths match and the compare
-still fails, the likelier fault is a worker that has not restarted since
-`TEAM_TOKEN` changed: the process reads its environment once, at start. That
-is why `/readyz` reports `started_at` and `uptime_seconds`. If the app has
-been up since before you changed the configuration, it does not have the new
-value, and no amount of re-pasting will help.
-
-The decisive check needs no new build: set a token of a deliberately
-**different** length, redeploy, and watch `team_token_len` change. If it stays
-where it was, the process never took the new configuration and the fault is
-deployment, not typing.
-
-A rejected token is also logged by the container, with both lengths and
-neither value: `Team token rejected: caller sent 43 characters, this process
-is configured with 43`.
-
-When a lookup is refused, the status distinguishes the causes. A **503** means
-the deployment has no token configured at all, and says so. A **401** means
-what the tab sent does not match. The chart panel then reports both lengths,
-its own and the deployment's from `/readyz`, which is enough to spot the usual
-causes: nothing pasted into this tab, a stray pair of quotes, or a different
-value altogether. Neither side ever shows the token itself.
 
 ## Branding and icons
 
@@ -196,9 +174,7 @@ guess:
 1. `UDL_USERNAME` and `UDL_PASSWORD` in the deployment's Configuration tab.
    Element sets come from live UDL; without them every chart route answers 503
    "UDL is not configured".
-2. `TEAM_TOKEN` in the same place, **and** the same value pasted into the
-   token box in the UI header. The box is per browser tab.
-3. A JCO HRR rank of 0 to 3 on the object itself. A family whose members are
+2. A JCO HRR rank of 0 to 3 on the object itself. A family whose members are
    all rank 4 or 5, or all absent from the feed, produces no chart and lists
    each object with the reason.
 
@@ -290,6 +266,7 @@ Not done in this build session. The remaining steps, per your org's
 - The JSON store is single-writer per process (per data-layer's decision
   rule) - fine for a handful of analysts, but move to the Postgres add-on
   if concurrent writers or relational queries become a real need.
-- The team token is a single shared secret (no per-analyst identity), same
-  shared-token model as the rest of this baseline's server archetype -
-  recorded here as an accepted limitation, not an oversight.
+- There is no per-analyst identity, and since 0.9.0 no application-level
+  authentication at all. Every route is open to anything that can reach the
+  app. Recorded here as an accepted, deliberate limitation: the platform in
+  front of the application is the access control.

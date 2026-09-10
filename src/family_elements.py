@@ -431,6 +431,7 @@ async def build_family_charts(
     window_days: int,
     hrr_window_hours: int,
     now: dt.datetime | None = None,
+    focus_norad_id: str | None = None,
 ) -> FamilyElementsResponse:
     """Fetch and assemble every chart for one family.
 
@@ -442,6 +443,15 @@ async def build_family_charts(
     A single satellite failing costs that satellite's line and a note beside
     its name, not the whole chart. Every satellite failing raises, because that
     is an outage rather than a gap and the analyst should be told so.
+
+    `focus_norad_id` narrows the result to one object while still passing the
+    whole family in `members`. That is deliberate rather than wasteful: colour
+    is assigned from the family's launch-order position, so an object charted
+    on its own keeps the colour it has in the family chart. Only the focused
+    object is fetched, so the narrowing costs one UDL call, not the family's.
+    The rank gate is applied first and unchanged, so an object at rank 4, or
+    absent from the feed, produces a skip reason and no chart, exactly as it
+    would in the family view.
     """
     now = now or dt.datetime.now(dt.UTC)
     since = (
@@ -449,6 +459,18 @@ async def build_family_charts(
     )
     ranks = await hrr_ranks(client, cache, hrr_window_hours)
     eligible, skipped = partition_members(members, ranks)
+    if focus_norad_id is not None:
+        focus_names = {
+            str(member.get("catalogue_name") or "")
+            for member in members
+            if str(member.get("norad_id") or "") == focus_norad_id
+        }
+        eligible = [
+            entry
+            for entry in eligible
+            if str(entry[1].get("norad_id") or "") == focus_norad_id
+        ]
+        skipped = [entry for entry in skipped if entry.catalogue_name in focus_names]
 
     semaphore = asyncio.Semaphore(MAX_CONCURRENT_FETCHES)
 

@@ -13,7 +13,7 @@ from src.models import (
     JCOHRRRecord,
     SearchResponse,
 )
-from src.security import enforce_rate_limit, enforce_team_token
+from src.security import enforce_rate_limit
 from src.udl_client import UDLError, UDLNotConfigured
 
 logger = logging.getLogger("udl_tactics_app.routes.udl")
@@ -32,9 +32,13 @@ UDL_NOT_CONFIGURED_DETAIL = "UDL is not configured"
 
 
 def _gate(request: Request) -> None:
-    settings = request.app.state.settings
+    """Rate limit a UDL-facing route.
+
+    These routes cost a live UDL call, so the strict limiter is the control
+    that matters: it protects the call budget. Authentication was removed in
+    0.9.0 and is the platform's job.
+    """
     enforce_rate_limit(request.app.state.strict_limiter, request)
-    enforce_team_token(request, settings.team_token)
 
 
 def _to_generic_error(exc: Exception) -> HTTPException:
@@ -239,6 +243,74 @@ async def family_elements(
             members=members,
             window_days=clamp_window_days(window_days),
             hrr_window_hours=request.app.state.settings.udl_jco_hrr_window_hours,
+        )
+    except UDLError as exc:
+        raise _to_generic_error(exc) from exc
+
+
+@router.get("/object-elements", response_model=FamilyElementsResponse)
+async def object_elements(
+    request: Request, record_id: str, window_days: int | None = None
+):
+    """The element-set history of one catalogued object.
+
+    Same rules as the family chart, deliberately: the JCO HRR rank 0 to 3 gate
+    still applies, the metric still follows the regime, and the colour still
+    comes from the object's launch-order position in its own family, so a
+    satellite looks the same whether it is charted alone or beside its
+    siblings. An object at rank 4 or 5, or absent from the feed, comes back
+    with a skip reason and no chart rather than an unranked line.
+    """
+    _gate(request)
+    client = request.app.state.udl_client
+    if not client.configured:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=UDL_NOT_CONFIGURED_DETAIL,
+        )
+
+    store = request.app.state.systems_store
+    record = next(
+        (
+            candidate
+            for candidate in store.list(include_archived=True)
+            if candidate.get("id") == record_id
+        ),
+        None,
+    )
+    if record is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No system with that id",
+        )
+    norad_id = str(record.get("norad_id") or "")
+    if not norad_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=(
+                "That record carries no NORAD ID, so there is nothing to look "
+                "up in UDL."
+            ),
+        )
+
+    family_id = str(record.get("family_id") or "")
+    siblings = [
+        candidate
+        for candidate in store.list(include_archived=False)
+        if candidate.get("family_id") == family_id
+    ] or [record]
+
+    label = str(record.get("designator") or record.get("catalogue_name") or norad_id)
+    try:
+        return await build_family_charts(
+            client=client,
+            cache=getattr(request.app.state, "elset_cache", None),
+            family_id=family_id,
+            family_title=label,
+            members=siblings,
+            window_days=clamp_window_days(window_days),
+            hrr_window_hours=request.app.state.settings.udl_jco_hrr_window_hours,
+            focus_norad_id=norad_id,
         )
     except UDLError as exc:
         raise _to_generic_error(exc) from exc

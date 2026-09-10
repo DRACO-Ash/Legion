@@ -59,7 +59,6 @@ def _strip_invisible(value: str) -> str:
 class Settings:
     port: int
     allowed_origin: str
-    team_token: str | None
     udl_base_url: str
     udl_username: str | None
     udl_password: str | None
@@ -69,11 +68,6 @@ class Settings:
     @property
     def udl_credentials_configured(self) -> bool:
         return bool(self.udl_username and self.udl_password)
-
-    @property
-    def auth_required(self) -> bool:
-        """Auth is enforced once a team token is actually configured."""
-        return bool(self.team_token)
 
 
 def load_settings() -> Settings:
@@ -86,9 +80,6 @@ def load_settings() -> Settings:
     """
     port = int(_strip_invisible(os.environ.get("PORT", "8080")) or "8080")
     allowed_origin = _strip_invisible(os.environ.get("ALLOWED_ORIGIN", ""))
-    team_token_raw = os.environ.get("TEAM_TOKEN", "")
-    team_token = _strip_invisible(team_token_raw) or None
-
     udl_base_url = _strip_invisible(
         os.environ.get("UDL_BASE_URL", "https://unifieddatalibrary.com")
     ).rstrip("/")
@@ -111,7 +102,6 @@ def load_settings() -> Settings:
     return Settings(
         port=port,
         allowed_origin=allowed_origin,
-        team_token=team_token,
         udl_base_url=udl_base_url,
         udl_username=udl_username,
         udl_password=udl_password,

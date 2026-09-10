@@ -119,12 +119,16 @@ def build_app(
     configure_logging()
     settings = settings or load_settings()
 
-    # Fail closed: a wildcard origin with a team token configured refuses to start,
-    # mirroring the Node baseline's ALLOWED_ORIGIN contract.
-    if settings.team_token and settings.allowed_origin == "*":
+    # Fail closed on a wildcard origin, unconditionally. This used to be
+    # conditional on a team token being set; with that token gone the writes
+    # are gated only by whatever sits in front of this app, so a wildcard
+    # origin is strictly more dangerous than it was, not less: it would let
+    # any page on the internet issue writes from a reader's browser.
+    if settings.allowed_origin == "*":
         raise RuntimeError(
-            "Refusing to start: ALLOWED_ORIGIN is '*' with a team token set. "
-            "Set an explicit ALLOWED_ORIGIN before hosting for a team."
+            "Refusing to start: ALLOWED_ORIGIN is '*'. Writes are not gated "
+            "by this application, so a wildcard origin would let any origin "
+            "issue them. Set an explicit ALLOWED_ORIGIN."
         )
 
     @asynccontextmanager

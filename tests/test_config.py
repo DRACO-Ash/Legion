@@ -26,7 +26,6 @@ def test_defaults_when_nothing_set(monkeypatch, tmp_path):
     assert settings.port == 8080
     assert settings.udl_base_url == "https://unifieddatalibrary.com"
     assert settings.udl_credentials_configured is False
-    assert settings.auth_required is False
 
 
 def test_env_vars_take_precedence_over_credentials_ini(monkeypatch, tmp_path):
@@ -84,10 +83,3 @@ def test_strips_quotes_and_whitespace_from_pasted_env_values(monkeypatch, tmp_pa
     settings = load_settings()
     assert settings.allowed_origin == "https://example.com"
     assert settings.port == 9090
-
-
-def test_auth_required_true_when_team_token_set(monkeypatch, tmp_path):
-    monkeypatch.setattr(config_module, "CRED_PATH", tmp_path / "missing.ini")
-    monkeypatch.setenv("TEAM_TOKEN", "some-token")
-    settings = load_settings()
-    assert settings.auth_required is True

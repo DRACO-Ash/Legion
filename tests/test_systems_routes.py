@@ -53,7 +53,7 @@ def test_get_missing_id_404(systems_client):
     assert response.status_code == 404
 
 
-def test_create_requires_token(systems_client):
+def test_create_is_open(systems_client):
     payload = {
         "family_id": "f2",
         "family_title": "F2",
@@ -64,10 +64,10 @@ def test_create_requires_token(systems_client):
         "regime": "GEO",
     }
     response = systems_client.post("/api/systems", json=payload)
-    assert response.status_code == 401
+    assert response.status_code == 201
 
 
-def test_create_with_valid_token(systems_client, auth_headers):
+def test_create_returns_the_stored_record(systems_client):
     payload = {
         "family_id": "f2",
         "family_title": "F2",
@@ -77,7 +77,7 @@ def test_create_with_valid_token(systems_client, auth_headers):
         "launch_year": 2026,
         "regime": "GEO",
     }
-    response = systems_client.post("/api/systems", json=payload, headers=auth_headers)
+    response = systems_client.post("/api/systems", json=payload)
     assert response.status_code == 201
     body = response.json()
     assert body["catalogue_name"] == "NEWSAT"
@@ -85,26 +85,24 @@ def test_create_with_valid_token(systems_client, auth_headers):
     assert systems_client.get("/api/systems").json()["count"] == 2
 
 
-def test_create_rejects_malformed_payload(systems_client, auth_headers):
+def test_create_rejects_malformed_payload(systems_client):
     # missing required fields (catalogue_name, launch_year, regime, etc.)
-    response = systems_client.post(
-        "/api/systems", json={"nation": "CN"}, headers=auth_headers
-    )
+    response = systems_client.post("/api/systems", json={"nation": "CN"})
     assert response.status_code == 422
 
 
-def test_update_requires_token(systems_client):
+def test_update_is_open(systems_client):
     seeded_id = systems_client.get("/api/systems").json()["systems"][0]["id"]
     response = systems_client.patch(
         f"/api/systems/{seeded_id}", json={"status": "decayed"}
     )
-    assert response.status_code == 401
+    assert response.status_code == 200
 
 
-def test_update_anti_shrink_via_route(systems_client, auth_headers):
+def test_update_anti_shrink_via_route(systems_client):
     seeded_id = systems_client.get("/api/systems").json()["systems"][0]["id"]
     response = systems_client.patch(
-        f"/api/systems/{seeded_id}", json={"status": "decayed"}, headers=auth_headers
+        f"/api/systems/{seeded_id}", json={"status": "decayed"}
     )
     assert response.status_code == 200
     body = response.json()
@@ -112,32 +110,30 @@ def test_update_anti_shrink_via_route(systems_client, auth_headers):
     assert body["notes"] == "Seed record"  # untouched
 
 
-def test_update_missing_id_404(systems_client, auth_headers):
+def test_update_missing_id_404(systems_client):
     response = systems_client.patch(
-        "/api/systems/does-not-exist", json={"status": "decayed"}, headers=auth_headers
+        "/api/systems/does-not-exist", json={"status": "decayed"}
     )
     assert response.status_code == 404
 
 
-def test_archive_requires_token(systems_client):
+def test_archive_is_open(systems_client):
     seeded_id = systems_client.get("/api/systems").json()["systems"][0]["id"]
     response = systems_client.delete(f"/api/systems/{seeded_id}")
-    assert response.status_code == 401
+    assert response.status_code == 200
 
 
-def test_archive_hides_by_default(systems_client, auth_headers):
+def test_archive_hides_by_default(systems_client):
     seeded_id = systems_client.get("/api/systems").json()["systems"][0]["id"]
-    response = systems_client.delete(f"/api/systems/{seeded_id}", headers=auth_headers)
+    response = systems_client.delete(f"/api/systems/{seeded_id}")
     assert response.status_code == 200
     assert response.json()["archived"] is True
     assert systems_client.get("/api/systems").json()["count"] == 0
     assert systems_client.get("/api/systems?include_archived=true").json()["count"] == 1
 
 
-def test_archive_missing_id_404(systems_client, auth_headers):
-    response = systems_client.delete(
-        "/api/systems/does-not-exist", headers=auth_headers
-    )
+def test_archive_missing_id_404(systems_client):
+    response = systems_client.delete("/api/systems/does-not-exist")
     assert response.status_code == 404
 
 
