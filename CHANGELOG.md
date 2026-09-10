@@ -5,6 +5,11 @@ All notable changes to this project are documented here. Format follows
 [Semantic Versioning](https://semver.org/). Pre-1.0: minor bumps may include
 breaking changes, since nothing has shipped to the App Store yet.
 
+## [0.9.2] - 2026-09-10
+
+Relative chart mode now anchors each object on its most recent element set rather than the first point in the window, so the latest state sits at zero and the baseline no longer moves with the window.
+
+
 ## [0.9.1] - 2026-09-10
 
 Flatten two nested ternaries SonarQube reported in describeChart, and extend the local nested-ternary mirror to see inside template-literal slots, which is how it missed them.
