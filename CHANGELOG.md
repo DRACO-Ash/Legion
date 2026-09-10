@@ -5,6 +5,11 @@ All notable changes to this project are documented here. Format follows
 [Semantic Versioning](https://semver.org/). Pre-1.0: minor bumps may include
 breaking changes, since nothing has shipped to the App Store yet.
 
+## [0.9.1] - 2026-09-10
+
+Flatten two nested ternaries SonarQube reported in describeChart, and extend the local nested-ternary mirror to see inside template-literal slots, which is how it missed them.
+
+
 ## [0.9.0] - 2026-09-10
 
 Remove the team token completely: no application-level authentication, UDL credentials are the only secrets. Charts now plot on selection, a family or a single object, sharing one loader and one server-side assembler.
