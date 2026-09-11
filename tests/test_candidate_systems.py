@@ -17,6 +17,7 @@ import uuid
 import pytest
 
 from src.candidate_systems import CANDIDATE_FLAG, CANDIDATE_RECORDS
+from src.satcat import load_extract
 from src.seed_data import SEED_RECORDS
 from src.store import CANDIDATE_KEY, _add_candidate_systems
 
@@ -44,15 +45,18 @@ def _keys(data: dict) -> list[str]:
 
 
 @pytest.mark.parametrize("record", CANDIDATE_RECORDS, ids=lambda r: r["candidate_key"])
-def test_a_candidate_never_carries_an_invented_catalogue_number(record) -> None:
-    """The one error in this domain that looks exactly like data.
+def test_a_candidate_catalogue_number_comes_from_the_snapshot(record) -> None:
+    """The one field that could not be recalled.
 
-    The research names behaviours, not catalogue entries. A NORAD id here
-    would be recall, and a chart would then plot the wrong satellite while
-    looking entirely normal.
+    An invented NORAD id is the error in this domain that looks exactly like
+    data: a chart plots the wrong satellite and looks entirely normal. These
+    stayed empty until Ash supplied the SATCAT snapshot, and each is checked
+    against it here, so a number that drifts fails rather than plotting.
     """
-    assert record["norad_id"] is None
-    assert record["launch_year"] is None
+    row = load_extract().get(record["norad_id"])
+    assert row is not None, f"{record['norad_id']} is not in the snapshot"
+    assert row["launch_year"] == record["launch_year"]
+    assert row["launch_site"] == record["launch_site"]
 
 
 @pytest.mark.parametrize("record", CANDIDATE_RECORDS, ids=lambda r: r["candidate_key"])

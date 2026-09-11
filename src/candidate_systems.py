@@ -13,11 +13,11 @@ So they live here, and they are marked. Three rules make the distinction
 structural rather than a comment, and `tests/test_candidate_systems.py`
 enforces each one:
 
-● **No candidate carries a NORAD catalogue number.** The research names
-  behaviours, not catalogue entries, and inventing a satellite number is the
-  one error in this domain that looks exactly like data. Charts already
-  exclude an object with no NORAD id and say why (`SKIP_NO_NORAD_ID`), so a
-  candidate is visibly uncharted rather than silently wrong.
+● **Every catalogue number is checked against the SATCAT snapshot.** It was
+  the one field that could not be recalled: inventing a satellite number is
+  the error in this domain that looks exactly like data, because a chart
+  would plot the wrong object and look entirely normal. They stayed empty
+  until Ash supplied the snapshot, and a test now holds each one against it.
 ● **Every candidate cites the material it came from**, in the same way a
   `Claim` must. A record an analyst cannot trace is worse than an absent one.
 ● **Every candidate names who must verify it.** This is the TBC-with-an-owner
@@ -25,19 +25,25 @@ enforces each one:
   to name the person who resolves it, or it sits there for ever.
 
 Fields left `None` are fields the source does not state. Do not fill one in
-from memory. The route to promoting a candidate into the catalogue proper is
-a live UDL cross-check, which resolves the NORAD id, the launch year and the
-status together.
+from memory. Catalogue numbers, launch years and launch sites came from the
+SATCAT snapshot and nowhere else, which is why the module now carries them:
+they are looked up, not recalled. `tests/test_candidate_systems.py` checks
+every one against `src/satcat_extract.json`, so a number that drifts from the
+snapshot fails rather than quietly plotting the wrong satellite.
+
+What remains unverified is the behaviour, not the identity, and
+`verify_owner` says so.
 """
 
 from typing import Any
 
 CSIS_2025 = (
-    "CSIS Space Threat Assessment 2025 (Swope, Bingen, Young, LaFave, "
-    "April 2025), via deliverable/research/02_domain_counterspace.md"
+    "Behaviour: CSIS Space Threat Assessment 2025 (Swope, Bingen, Young, "
+    "LaFave, April 2025), via deliverable/research/02_domain_counterspace.md. "
+    "Identity: CelesTrak SATCAT snapshot, reference/satcat_26195.dat."
 )
-VERIFY_OWNER = "Ash, cross-check against a live UDL session"
-CANDIDATE_FLAG = "Candidate — not in the canonical 49, verify"
+VERIFY_OWNER = "Ash, confirm the behaviour assessment against a live UDL pull"
+CANDIDATE_FLAG = "Added from research, identity from SATCAT"
 
 LUCH_OLYMP_TITLE = "Luch / Olymp — GEO SIGINT Loiterers"
 LUCH_OLYMP_SUB = (
@@ -85,6 +91,9 @@ def _candidate(**fields: Any) -> dict[str, Any]:
 CANDIDATE_RECORDS: list[dict[str, Any]] = [
     _candidate(
         candidate_key="rus-luch/olymp-1",
+        norad_id="40258",
+        launch_year=2014,
+        launch_site="TTMTR",
         family_id="rus-luch",
         family_title=LUCH_OLYMP_TITLE,
         family_sub=LUCH_OLYMP_SUB,
@@ -100,6 +109,9 @@ CANDIDATE_RECORDS: list[dict[str, Any]] = [
     ),
     _candidate(
         candidate_key="rus-luch/olymp-2",
+        norad_id="55841",
+        launch_year=2023,
+        launch_site="TTMTR",
         family_id="rus-luch",
         family_title=LUCH_OLYMP_TITLE,
         family_sub=LUCH_OLYMP_SUB,
@@ -115,6 +127,9 @@ CANDIDATE_RECORDS: list[dict[str, Any]] = [
     ),
     _candidate(
         candidate_key="rus-testbed/cosmos-2553",
+        norad_id="51511",
+        launch_year=2022,
+        launch_site="PKMTR",
         family_id="rus-testbed",
         family_title=TESTBED_TITLE,
         family_sub=TESTBED_SUB,
@@ -130,6 +145,9 @@ CANDIDATE_RECORDS: list[dict[str, Any]] = [
     ),
     _candidate(
         candidate_key="chn-tjs/tjs-2",
+        norad_id="41911",
+        launch_year=2017,
+        launch_site="XSC",
         family_id="chn-tjs",
         family_title=TJS_TITLE,
         family_sub=TJS_SUB,
@@ -146,6 +164,9 @@ CANDIDATE_RECORDS: list[dict[str, Any]] = [
     ),
     _candidate(
         candidate_key="chn-tjs/tjs-4",
+        norad_id="44637",
+        launch_year=2019,
+        launch_site="XSC",
         family_id="chn-tjs",
         family_title=TJS_TITLE,
         family_sub=TJS_SUB,
@@ -161,6 +182,9 @@ CANDIDATE_RECORDS: list[dict[str, Any]] = [
     ),
     _candidate(
         candidate_key="chn-sj6/sj-6-05a",
+        norad_id="49961",
+        launch_year=2021,
+        launch_site="JSC",
         family_id="chn-sj6",
         family_title=SJ6_TITLE,
         family_sub=SJ6_SUB,
@@ -178,6 +202,9 @@ CANDIDATE_RECORDS: list[dict[str, Any]] = [
     ),
     _candidate(
         candidate_key="chn-sj6/sj-6-05b",
+        norad_id="49962",
+        launch_year=2021,
+        launch_site="JSC",
         family_id="chn-sj6",
         family_title=SJ6_TITLE,
         family_sub=SJ6_SUB,

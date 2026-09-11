@@ -143,3 +143,24 @@ def test_a_seeded_counterpart_we_hold_is_a_real_system_id(client) -> None:
     partnered = [s for s in body["segments"] if s["related_object_id"]]
     assert partnered
     assert partnered[0]["related_object_id"] == systems["SJ-21"]
+
+
+# --- the catalogue snapshot -------------------------------------------------
+
+
+def test_the_reconciliation_is_served(client) -> None:
+    """An analyst has to be able to see the disagreement without reading the
+    repository."""
+    body = client.get("/api/satcat/reconciliation").json()
+    assert body["checked"] >= 49
+    assert any(f["norad_id"] == "68762" for f in body["findings"])
+
+
+def test_one_catalogue_row_can_be_looked_up(client) -> None:
+    body = client.get("/api/satcat/49961").json()
+    assert body["name"] == "SHIJIAN 6 05A (SJ-6 05A)"
+    assert body["launch_year"] == 2021
+
+
+def test_a_number_outside_the_snapshot_is_a_404(client) -> None:
+    assert client.get("/api/satcat/99999999").status_code == 404

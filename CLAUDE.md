@@ -304,6 +304,51 @@ sources only" constrains nobody:
   hard-coding a banner, so the string an analyst sees and the rule the
   validator enforces come from one module and cannot drift.
 
+## The SATCAT snapshot: a reference that checks the catalogue
+
+`celestrak.org` and `www.space-track.org` both return 403 at the organisation
+proxy, which is a policy denial, so nothing here can resolve a catalogue
+number live. Ash supplied a CelesTrak SATCAT snapshot on 11 September 2026 and
+it is the reference of record at `reference/satcat_26195.dat`, 69,870 rows.
+
+● **The 9 MB snapshot is `export-ignore`d from the upload package.**
+  `scripts/extract_satcat.py` distils it into `src/satcat_extract.json`, 16 KB,
+  holding only the rows the catalogue references, and that is what ships. A
+  static catalogue inside a deployed image goes stale with nobody watching.
+  Regenerate with one command when a newer snapshot arrives.
+● **The column layout in `src/satcat.py` was measured against the file, not
+  read from a specification.** It matches CelesTrak's documented `satcat.txt`
+  in the fields that matter and differs in the tail. `tests/test_satcat.py`
+  pins it against two real rows, because a layout that slips by one parses
+  every row into plausible-looking nonsense.
+● **The two-digit year pivots on the space age.** Nothing was launched before
+  1957, so under 57 is this century. Exact for every row the file can hold.
+
+**It is not a passive document. `src/satcat_reconcile.py` checks the catalogue
+against it**, and `GET /api/satcat/reconciliation` serves the result. A wrong
+catalogue number is the one failure nothing else here catches: it plots a real
+satellite's element sets under another satellite's name and every chart looks
+entirely normal.
+
+**The standing NORAD clash is now answered, and not silently fixed.** The seed
+carries 68762 three times, for COSMOS-2612, -2613 and -2614, flagged
+"cross-check UDL" since the beginning. The snapshot says 68762 is COSMOS 2612,
+68763 is COSMOS 2613 and 68764 is COSMOS 2614. `seed_data.py` is a verbatim
+mirror of a delivered spreadsheet and the rule is that its values are not
+re-derived here, so the finding is reported to whoever owns that source rather
+than patched out of sight. `tests/test_satcat.py` pins both the clash and the
+snapshot's answer, so correcting the seed will tell you by failing.
+
+**The seven candidates now carry real identities.** Catalogue numbers, launch
+years and launch sites came from the snapshot and nowhere else, and a test
+holds each against it. What is still unverified about them is the behaviour,
+not the identity, and `verify_owner` says so. They chart now, because they
+have numbers.
+
+A name comparison ignores house abbreviations: SJ for Shijian, SY for Shiyan,
+and a missing space in "Spacecraft2". A report full of non-discrepancies is a
+report nobody reads, and the real finding would be lost in it.
+
 ## Candidate systems: the catalogue grew, and the join is visible
 
 `src/seed_data.py` still holds exactly the canonical 49, mirrored verbatim

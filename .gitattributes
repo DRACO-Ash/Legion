@@ -12,3 +12,11 @@
 .gitlab-ci.yml export-ignore
 .claude/ export-ignore
 .ruff.toml export-ignore
+
+# reference/: the CelesTrak SATCAT snapshot, 9 MB. Held here as the reference
+# of record because celestrak.org and space-track.org both return 403 at the
+# organisation proxy. Kept out of the upload package: the container needs the
+# few dozen rows the catalogue references, which scripts/extract_satcat.py
+# distils into src/satcat_extract.json, and a static catalogue inside a
+# deployed image goes stale with nobody watching.
+reference/ export-ignore
