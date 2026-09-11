@@ -412,6 +412,25 @@ class FamilyAssessment(_Stamped):
         return not (self.validated_by or "").strip()
 
 
+class PatternOfLifeSegmentUpdate(BaseModel):
+    """A partial segment edit. Every field optional, anti-shrink on merge.
+
+    Like `ClaimUpdate`, deliberately not the full model with optionals: the
+    route re-validates the merged result as a whole `PatternOfLifeSegment`,
+    so a PATCH cannot turn a solo mode into an RPO without naming the
+    counterpart, and cannot strip the counterpart off one that has it.
+    """
+
+    mode: BehaviourMode | None = None
+    start_epoch: str | None = None
+    end_epoch: str | None = None
+    claim: Claim | None = None
+    related_object_id: str | None = None
+    observability: Observability | None = None
+    observability_note: str | None = None
+    notes: str | None = None
+
+
 class ClaimUpdate(BaseModel):
     """A partial claim edit. Every field optional, anti-shrink on merge.
 

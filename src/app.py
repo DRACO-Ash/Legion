@@ -23,7 +23,8 @@ from src.cache import TTLCache
 from src.candidate_systems import CANDIDATE_RECORDS
 from src.config import Settings, load_settings
 from src.family_elements import CACHE_TTL_SECONDS
-from src.routes import claims, health, systems, udl, ui
+from src.pol_seed import SEED_SEGMENTS
+from src.routes import claims, health, segments, systems, udl, ui
 from src.security import RateLimiter, enforce_rate_limit
 from src.seed_data import SEED_RECORDS
 from src.store import (
@@ -159,7 +160,9 @@ def build_app(
     )
     global_limiter = RateLimiter(limit=GLOBAL_LIMIT_PER_MINUTE, window_seconds=60.0)
     app.state.systems_store = systems_store or TrackedSystemsStore(
-        seed_records=SEED_RECORDS, candidate_records=CANDIDATE_RECORDS
+        seed_records=SEED_RECORDS,
+        candidate_records=CANDIDATE_RECORDS,
+        pol_seeds=SEED_SEGMENTS,
     )
 
     allowed_origins = [settings.allowed_origin] if settings.allowed_origin else []
@@ -176,6 +179,7 @@ def build_app(
     app.include_router(udl.router)
     app.include_router(systems.router)
     app.include_router(claims.router)
+    app.include_router(segments.router)
     app.include_router(ui.router)
 
     return app

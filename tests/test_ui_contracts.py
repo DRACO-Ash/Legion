@@ -420,3 +420,45 @@ def test_an_unknown_launch_year_reads_as_a_dash() -> None:
     characters "null" in the table. Caught in a browser, not by a test."""
     assert "esc(s.launch_year || EM_DASH)" in INDEX_HTML
     assert "esc(s.launch_year)}" not in INDEX_HTML
+
+
+# --- the pattern-of-life timeline ------------------------------------------
+
+
+def test_the_timeline_colour_carries_provenance_not_the_mode() -> None:
+    """The series palette identifies a satellite in a chart. An analyst must
+    never read a timeline colour as one of those, so the timeline reuses the
+    marker tokens and carries the mode in text."""
+    assert "function provenanceClass(claim)" in INDEX_HTML
+    for token in ["pol-fact", "pol-inference", "pol-speculation"]:
+        assert f"var(--marker-{token.removeprefix('pol-')})" in INDEX_HTML
+    assert "--series-" not in INDEX_HTML.split(".pol-row")[1].split("</style>")[0]
+
+
+def test_the_timeline_reads_its_shape_from_the_server() -> None:
+    """Whether a mode is an instant comes from the model's own frozenset by
+    way of the API. A second copy in JavaScript would let a separation be
+    drawn as a band."""
+    assert "segment.instantaneous" in INDEX_HTML
+    assert "/api/pol/modes" in INDEX_HTML
+
+
+def test_the_timeline_states_the_precision_of_its_dates() -> None:
+    """A month-precision band drawn as if a day were observed is the same
+    class of error as promoting an inference to a fact."""
+    assert "PRECISION_WORD" in INDEX_HTML
+    assert "segment.start_precision" in INDEX_HTML
+
+
+def test_the_timeline_never_calls_a_missing_end_ongoing() -> None:
+    """Both wordings were wrong in a browser before they were right.
+
+    Checked against the code rather than the whole file: the comment above
+    the fix names the word it is there to prevent, and a test that cannot
+    tell a comment from a string would fail on its own explanation.
+    """
+    assert "no end recorded" in INDEX_HTML
+    code = [
+        line for line in INDEX_HTML.splitlines() if not line.lstrip().startswith("//")
+    ]
+    assert [line for line in code if '"ongoing"' in line] == []

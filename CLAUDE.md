@@ -434,6 +434,61 @@ claim was made and pulled rather than finding a silent gap.
 own validation gate. Inventing a parallel family-claim store now would mean
 migrating it away later.
 
+## Phase 3, the pattern-of-life timeline: what must not be inferred
+
+`src/pol.py` holds the mode vocabulary and the timeline assembler,
+`src/pol_seed.py` the seeded history, `src/routes/segments.py` the API. The
+timeline is the *assessed* behavioural history. The element-set charts are
+the *raw* observed data from UDL. They are never drawn as the same thing.
+
+Five rules, and three of them exist because a browser found them wrong:
+
+● **An epoch is never more precise on screen than in the source.** The
+  research says "May 2024", so the segment stores `2024-05` and
+  `parse_pol_epoch` reports month precision, which the row states. Writing
+  `2024-05-01` invents a day nobody observed.
+● **An instant has no end.** The TJS-2 node read "2024 to ongoing", which
+  asserts a behaviour still happening. `separation_event` and
+  `anomalous_high_dv` are markers, not bands, and the server says which from
+  the model's own frozenset.
+● **A missing end is "no end recorded", never "ongoing".** SJ-21's 2022
+  capture is finished, and read as ongoing purely because the field was
+  blank. A blank field is not evidence of continuation. Where a source does
+  say a behaviour continues, as for COSMOS-2558, that goes in the claim.
+● **The server resolves the counterpart's name.** A client-side lookup
+  rendered a raw uuid the moment a filter hid the other object. The browser
+  only ever holds the page of the catalogue it is showing.
+● **Colour on the timeline carries provenance, never the mode.** The
+  eight-slot series palette identifies a satellite in a chart, and an analyst
+  must never read one as the other. The marker tokens are reused, and the
+  mode is carried in text.
+
+A counterpart outside the catalogue keeps a `target:` slug and is labelled as
+outside it. USA 314 is not one of our systems, and resolving it to something
+shaped like a catalogue id would put a phantom object in front of an analyst.
+Phase 5's `Target` records are where those become first class.
+
+**The four CRUD endpoints are generated, not written twice.**
+`src/routes/object_lists.py` builds read, create, edit and archive for any
+per-object list, and claims and segments both use it. Two copies would put
+the anti-shrink merge and the archive rule in two places, and would trip the
+gate's duplicated-lines-on-new-code condition on its own. That module
+deliberately has no `from __future__ import annotations`: FastAPI reads the
+endpoint signatures at decoration time, and with postponed evaluation the
+parameterised annotation is the string "model". mypy cannot follow a type
+held in a closure, hence the four targeted ignores.
+
+**The store is at `schema_version` 4.** `_add_pol_segments` is keyed on
+`seed_key`, idempotent by construction, and skips a seed naming an object the
+store does not hold rather than guessing.
+
+**Still blocked, and not built:** the relative-motion view against a
+counterpart outside the catalogue, which is [DECISION - Ash] item 5. It needs
+a confirmed UDL path and query pattern for a target object's element sets,
+and the specification warns against the per-object query-loop. SJ-25/SJ-21 is
+buildable without it, because both are catalogued and the existing family
+machinery already fetches them. COSMOS-2576/USA-314 is not.
+
 ## Architecture, briefly
 
 - `src/app.py` — app factory (`build_app`), CORS, two-tier rate limiting.

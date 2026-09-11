@@ -33,7 +33,7 @@ AUDIT_LOGGER_NAME = f"{APP_LOGGER_NAME}.audit"
 logger = logging.getLogger(f"{APP_LOGGER_NAME}.store")
 audit_logger = logging.getLogger(AUDIT_LOGGER_NAME)
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 STORE_FILENAME = "tracked_systems.json"
 
 # The compendium layer, added at schema_version 2. Held beside `systems`, never
@@ -174,6 +174,71 @@ def _add_candidate_systems(data: dict[str, Any], records: Records) -> None:
         present.add(key)
 
 
+SEED_KEY = "seed_key"
+POL_SEGMENTS = "pol_segments"
+TARGET_PREFIX = "target:"
+
+
+def _system_ids_by_name(data: dict[str, Any]) -> dict[str, str]:
+    return {
+        str(record.get("catalogue_name")): record_id
+        for record_id, record in data.get("systems", {}).items()
+        if record.get("catalogue_name")
+    }
+
+
+def _resolve_counterpart(name: str | None, by_name: dict[str, str]) -> str | None:
+    """A counterpart is a system id when we hold the object, a slug when not.
+
+    USA 314 is not one of our systems. Resolving it to something that looks
+    like a catalogue id would put a phantom object in the graph, so an
+    unheld counterpart keeps its `target:` slug and is visibly outside the
+    catalogue. Phase 5's `Target` records are where those become first class.
+    """
+    if not name:
+        return None
+    if name.startswith(TARGET_PREFIX):
+        return name
+    return by_name.get(name)
+
+
+def _add_pol_segments(data: dict[str, Any], seeds: Records) -> None:
+    """Schema 3 to 4: attach the seeded behavioural history.
+
+    Keyed on `seed_key`, so it is idempotent by construction and an analyst's
+    edit to a seeded segment is never overwritten. A seed naming an object
+    the store does not hold is skipped rather than guessed at: that is how a
+    deployment with a hand-pruned catalogue stays consistent.
+    """
+    by_name = _system_ids_by_name(data)
+    now = _now_iso()
+    for seed in seeds:
+        object_id = by_name.get(str(seed.get("object_name")))
+        if object_id is None:
+            continue
+        layer = _ensure_compendium_object(data, object_id)
+        segments = layer.setdefault(POL_SEGMENTS, [])
+        if any(entry.get(SEED_KEY) == seed[SEED_KEY] for entry in segments):
+            continue
+        segments.append(
+            {
+                **{
+                    field: value
+                    for field, value in seed.items()
+                    if field not in {"object_name", "related_name"}
+                },
+                "id": str(uuid.uuid4()),
+                "object_id": object_id,
+                "related_object_id": _resolve_counterpart(
+                    seed.get("related_name"), by_name
+                ),
+                "archived": False,
+                "created_at": now,
+                "updated_at": now,
+            }
+        )
+
+
 class StoreValidationError(Exception):
     """Raised when a record fails boundary validation before being written."""
 
@@ -183,12 +248,16 @@ class TrackedSystemsStore:
         self,
         seed_records: Records | None = None,
         candidate_records: Records | None = None,
+        pol_seeds: Records | None = None,
     ):
         self._seed_records = seed_records or []
         # Kept apart from the seed records deliberately: these are not from
         # the canonical spreadsheet, and the migration needs them by
         # themselves to land on a store that already exists.
         self._candidate_records = candidate_records or []
+        # Seeded behavioural history. Resolved against whatever catalogue the
+        # store actually holds, so a seed naming an absent object is skipped.
+        self._pol_seeds = pol_seeds or []
         # Warn once per store, not once per write, if rename is unsupported.
         self._warned_rename_fallback = False
 
@@ -219,6 +288,9 @@ class TrackedSystemsStore:
         if version < 3:
             _add_candidate_systems(data, self._candidate_records)
             data["schema_version"] = 3
+        if version < 4:
+            _add_pol_segments(data, self._pol_seeds)
+            data["schema_version"] = 4
         return data
 
     def _seed(self) -> dict[str, Any]:
@@ -238,6 +310,7 @@ class TrackedSystemsStore:
         data: dict[str, Any] = {"schema_version": SCHEMA_VERSION, "systems": systems}
         _add_compendium_layer(data)
         _add_candidate_systems(data, self._candidate_records)
+        _add_pol_segments(data, self._pol_seeds)
         self._write_atomic(data)
         logger.info("Seeded tracked-systems store with %d records", len(systems))
         return data
