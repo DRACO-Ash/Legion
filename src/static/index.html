@@ -33,6 +33,7 @@
      style all carry the same meaning. */
   --marker-fact:#3FCB7C; --marker-inference:#739BCF; --marker-speculation:#F5B95A;
   --marker-unverified:#7d8fb3;
+  --entity-object:#739BCF; --entity-family:#C9A227; --entity-target:#B58A9B;
 }
 @media (prefers-reduced-motion: reduce){ *{ transition-duration:.001ms !important; } }
 *{ box-sizing:border-box; }
@@ -100,6 +101,30 @@ h1{ font-size:24px; margin:4px 0 0; letter-spacing:.01em; }
 .pol-axis{ display:flex; justify-content:space-between; color:var(--text-dim);
            font-size:10.5px; margin:2px 0 8px 180px; }
 .pol-outside{ font-style:italic; }
+#graphCanvas{ width:100%; height:auto; display:block; background:var(--panel-2);
+              border-radius:4px; margin-bottom:9px; }
+.gnode{ cursor:pointer; }
+.gnode text{ font-size:10px; fill:var(--text); pointer-events:none; }
+.gnode circle{ stroke-width:1.6px; }
+.gtype-object{ fill:var(--entity-object); stroke:var(--entity-object); }
+.gtype-family{ fill:var(--entity-family); stroke:var(--entity-family); }
+.gtype-target{ fill:none; stroke:var(--entity-target); stroke-dasharray:2 2; }
+.gfocus circle{ stroke:var(--text); stroke-width:2.4px; }
+.gedge{ fill:none; stroke:var(--text-dim); stroke-width:1.3px; }
+.gedge-fact{ stroke-dasharray:none; }
+.gedge-inference{ stroke-dasharray:5 3; }
+.gedge-speculation{ stroke-dasharray:1.5 3; }
+.graph-list{ list-style:none; margin:0; padding:0; font-size:11.5px; }
+.graph-list li{ margin-bottom:5px; }
+.graph-list button{ width:100%; text-align:left; background:none; border:0;
+                    border-left:3px solid var(--line); padding:4px 9px; color:var(--text);
+                    cursor:pointer; font:inherit; }
+.graph-list button:hover, .graph-list button:focus-visible{ background:var(--panel-2);
+                    border-left-color:var(--blue-2); outline:none; }
+.graph-list .gkind{ color:var(--text-dim); }
+.graph-list .gsrc{ display:block; color:var(--text-dim); font-size:10.5px; }
+.sr-only{ position:absolute; width:1px; height:1px; padding:0; margin:-1px;
+          overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; border:0; }
 .claim-fact{ border-left-color:var(--marker-fact); }
 .claim-inference{ border-left-color:var(--marker-inference); }
 .claim-speculation{ border-left-color:var(--marker-speculation); }
@@ -281,7 +306,7 @@ svg.chart{ width:100%; height:auto; display:block; overflow:visible; }
     <symbol id="i-speculation" viewBox="0 0 24 24">
       <circle cx="12" cy="12" r="9"/><path d="M9.4 9.6a2.6 2.6 0 1 1 3.3 2.5v1.6"/><path d="M12.7 17.2v.2"/>
     </symbol>
-    <symbol id="i-timeline" viewBox="0 0 16 16"><path d="M1 8h14M4 5v6M8 3v10M12 6v4" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></symbol><symbol id="i-provenance" viewBox="0 0 24 24">
+    <symbol id="i-graph" viewBox="0 0 16 16"><circle cx="3" cy="4" r="2"/><circle cx="13" cy="4" r="2"/><circle cx="8" cy="13" r="2"/><path d="M4.6 5.4 6.8 11.2M11.4 5.4 9.2 11.2M5 4h6" fill="none" stroke="currentColor" stroke-width="1.2"/></symbol><symbol id="i-timeline" viewBox="0 0 16 16"><path d="M1 8h14M4 5v6M8 3v10M12 6v4" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></symbol><symbol id="i-provenance" viewBox="0 0 24 24">
       <path d="M5 4h11l3 3v13H5z"/><path d="M8 10h8M8 14h6"/>
     </symbol>
     <symbol id="i-prev" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></symbol>
@@ -395,6 +420,14 @@ svg.chart{ width:100%; height:auto; display:block; overflow:visible; }
         <summary>What the modes mean</summary>
         <dl id="polLegendBody"></dl>
       </details>
+    </section>
+
+    <section class="panel graph-panel">
+      <h2><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-graph"/></svg><span id="graphTitle">Relationships</span></h2>
+      <output class="msg" id="graphMsg">Choose a row in the catalogue to see what it is connected to.</output>
+      <svg id="graphCanvas" viewBox="0 0 620 340" role="img" aria-labelledby="graphAlt"></svg>
+      <p id="graphAlt" class="sr-only"></p>
+      <ul id="graphList" class="graph-list"></ul>
     </section>
 
     <section class="panel chart-panel">
@@ -686,6 +719,7 @@ function selectSystem(id){
   void showObjectChart(record);
   void showObjectProvenance(record);
   void showObjectTimeline(record);
+  void focusGraphNode(record.id);
 }
 
 document.getElementById("clearBtn").addEventListener("click", () => {
@@ -1539,6 +1573,126 @@ function noTimelineMessage(record){
   return `${record.catalogue_name} has no assessed behavioural history yet. `
     + "The element-set chart still shows what UDL observed: this panel is the "
     + "assessment of what that behaviour means, and none has been recorded.";
+}
+
+const GRAPH_CENTRE = {x: 310, y: 170};
+const GRAPH_RADIUS = {x: 250, y: 128};
+const NODE_RADIUS = 9;
+let graphFocusId = null;
+
+function nodeClass(node){
+  return `gnode gtype-${node.type}`;
+}
+
+function nodePosition(index, total){
+  // Radial, deterministic. A force layout would place the same neighbourhood
+  // differently on every visit, and an analyst comparing two objects would
+  // have to re-read the picture each time.
+  if(total === 0) return GRAPH_CENTRE;
+  const angle = (2 * Math.PI * index) / total - Math.PI / 2;
+  return {x: GRAPH_CENTRE.x + GRAPH_RADIUS.x * Math.cos(angle),
+          y: GRAPH_CENTRE.y + GRAPH_RADIUS.y * Math.sin(angle)};
+}
+
+function otherEnd(edge, focusId){
+  return edge.source === focusId ? edge.target : edge.source;
+}
+
+function edgeSentence(edge, focusId, labels){
+  // Direction matters: "SJ-21 captured X" and "X captured SJ-21" are
+  // different claims, so the wording follows the edge, not the layout.
+  const other = labels.get(otherEnd(edge, focusId)) || otherEnd(edge, focusId);
+  const outbound = edge.source === focusId;
+  return outbound ? `${edge.label} ${other}` : `${other} ${edge.label} this`;
+}
+
+function svgEl(name, attrs){
+  const el = document.createElementNS("http://www.w3.org/2000/svg", name);
+  for(const [key, value] of Object.entries(attrs)) el.setAttribute(key, value);
+  return el;
+}
+
+function drawGraph(view){
+  const canvas = document.getElementById("graphCanvas");
+  canvas.textContent = "";
+  const focusId = view.focus.id;
+  const others = view.nodes.filter(n => n.id !== focusId);
+  const placed = new Map([[focusId, GRAPH_CENTRE]]);
+  others.forEach((node, index) => placed.set(node.id, nodePosition(index, others.length)));
+
+  for(const edge of view.edges){
+    const a = placed.get(edge.source), b = placed.get(edge.target);
+    if(!a || !b) continue;
+    canvas.appendChild(svgEl("line", {
+      class: `gedge gedge-${edge.tone}`, x1: a.x, y1: a.y, x2: b.x, y2: b.y,
+    }));
+  }
+  for(const node of view.nodes){
+    const at = placed.get(node.id);
+    const group = svgEl("g", {class: nodeClass(node) + (node.id === focusId ? " gfocus" : "")});
+    group.dataset.node = node.id;
+    group.appendChild(svgEl("circle", {cx: at.x, cy: at.y, r: NODE_RADIUS}));
+    const text = svgEl("text", {x: at.x, y: at.y + NODE_RADIUS + 11, "text-anchor": "middle"});
+    text.textContent = node.label.length > 22 ? node.label.slice(0, 21) + "…" : node.label;
+    group.appendChild(text);
+    canvas.appendChild(group);
+  }
+  canvas.querySelectorAll(".gnode").forEach(group => {
+    group.addEventListener("click", () => void focusGraphNode(group.dataset.node));
+  });
+}
+
+function graphListMarkup(view){
+  const labels = new Map(view.nodes.map(n => [n.id, n.label]));
+  return view.edges.map(edge => {
+    const other = otherEnd(edge, view.focus.id);
+    const outside = (view.nodes.find(n => n.id === other) || {}).in_catalogue === false;
+    const suffix = outside ? " (outside the catalogue)" : "";
+    // Marker as text beside every edge: the line style is the redundant half,
+    // never the whole signal.
+    return `<li><button type="button" data-node="${esc(other)}">
+      ${esc(edgeSentence(edge, view.focus.id, labels))}${esc(suffix)}
+      <span class="gsrc"><span class="gkind">${esc(edge.marker || "")}, ${esc(edge.confidence || "")}</span>
+      · ${esc(edge.detail)} · ${esc(edge.citation || "no citation")}</span>
+    </button></li>`;
+  }).join("");
+}
+
+function graphAltText(view){
+  return `${view.focus.label} has ${view.counts.neighbours} connections `
+    + `across ${view.counts.edges} relationships. The list below carries all of them.`;
+}
+
+async function focusGraphNode(nodeId){
+  if(!nodeId) return;
+  const msg = document.getElementById("graphMsg");
+  const list = document.getElementById("graphList");
+  let res;
+  try{
+    res = await fetch(`/api/graph/${encodeURIComponent(nodeId)}`);
+  } catch {
+    msg.textContent = "Could not reach the server to load relationships.";
+    msg.className = "msg error";
+    return;
+  }
+  if(!res.ok){
+    msg.textContent = `Nothing in the graph for this node (${res.status}).`;
+    msg.className = "msg error";
+    return;
+  }
+  const view = await res.json();
+  graphFocusId = view.focus.id;
+  document.getElementById("graphTitle").textContent = `Relationships · ${view.focus.label}`;
+  msg.className = "msg";
+  msg.textContent = view.counts.edges === 0
+    ? `${view.focus.label} has no recorded relationships. Nothing is hidden: none has been asserted.`
+    : `${view.counts.edges} relationships, each with its own source. Click or press Enter to travel.`;
+  document.getElementById("graphAlt").textContent = graphAltText(view);
+  drawGraph(view);
+  list.innerHTML = graphListMarkup(view);
+  list.querySelectorAll("button[data-node]").forEach(button => {
+    button.addEventListener("click", () => void focusGraphNode(button.dataset.node));
+  });
 }
 
 async function showObjectTimeline(record){

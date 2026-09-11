@@ -534,6 +534,52 @@ and the specification warns against the per-object query-loop. SJ-25/SJ-21 is
 buildable without it, because both are catalogued and the existing family
 machinery already fetches them. COSMOS-2576/USA-314 is not.
 
+## Phase 4, the relationship graph: derived, never a second copy
+
+`src/graph.py` assembles it, `src/routes/graph.py` serves it, and the
+interface draws a neighbourhood at a time. Every edge comes from something
+the store already holds:
+
+● **Family membership** from the record's `family_id`.
+● **Proximity and capture edges** from pattern-of-life segments, which
+  already name a counterpart and carry a claim. Storing the same fact twice
+  would let the timeline and the graph disagree about what happened.
+● **Coplanar edges** from the catalogue's own `coplanar` field.
+● **Hand-authored edges** from the compendium's `relationships` collection.
+
+Five rules:
+
+● **No edge is unsourced.** That is the phase's bar and it is a test: every
+  edge carries a marker, a confidence and a citation.
+● **A catalogue-derived edge names the field it came from.** One shared
+  claim meant a family membership edge cited the coplanar field. Caught in a
+  browser, reading the citations the panel prints. A citation naming the
+  wrong field is worse than none, because a reader who follows it finds
+  nothing that supports the edge.
+● **A solo behaviour is not a relationship.** A drift or a station-keep
+  produces no edge. `MODE_EDGE` lists the modes that are genuinely between
+  two things, and inventing the rest would fill the graph with lines that
+  mean nothing.
+● **An edge to a node that does not exist is dropped.** A line to nowhere is
+  worse than a missing line: it implies a relationship with something the
+  analyst cannot inspect.
+● **Node colour is by entity type, from its own three tokens.** Not the
+  eight-slot series palette: that identifies a satellite in a chart, and a
+  node painted from it would be read as an object identity. Edge style
+  follows the marker, and the list beneath prints the marker as text, so the
+  dash pattern is never the whole signal.
+
+**The layout is deterministic and radial, and the graph is navigated a step
+at a time.** At 80 nodes the whole thing is a hairball, and the analyst's
+question is always "what is this connected to". A force layout would place
+the same neighbourhood differently on every visit. Every edge is a real
+button in a list, so tab and Enter traverse it without a pointer, and the SVG
+carries a text equivalent.
+
+Node ids are namespaced so they cannot collide: an object is its store id, a
+family is `family:<family_id>`, and a counterpart outside the catalogue keeps
+its `target:` slug.
+
 ## Architecture, briefly
 
 - `src/app.py` — app factory (`build_app`), CORS, two-tier rate limiting.

@@ -24,7 +24,16 @@ from src.candidate_systems import CANDIDATE_RECORDS
 from src.config import Settings, load_settings
 from src.family_elements import CACHE_TTL_SECONDS
 from src.pol_seed import SEED_SEGMENTS
-from src.routes import claims, health, satcat, segments, systems, udl, ui
+from src.routes import (
+    claims,
+    graph,
+    health,
+    satcat,
+    segments,
+    systems,
+    udl,
+    ui,
+)
 from src.security import RateLimiter, enforce_rate_limit
 from src.seed_data import SEED_RECORDS
 from src.store import (
@@ -181,6 +190,7 @@ def build_app(
     app.include_router(claims.router)
     app.include_router(segments.router)
     app.include_router(satcat.router)
+    app.include_router(graph.router)
     app.include_router(ui.router)
 
     return app

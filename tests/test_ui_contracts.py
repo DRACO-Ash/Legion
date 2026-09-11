@@ -462,3 +462,40 @@ def test_the_timeline_never_calls_a_missing_end_ongoing() -> None:
         line for line in INDEX_HTML.splitlines() if not line.lstrip().startswith("//")
     ]
     assert [line for line in code if '"ongoing"' in line] == []
+
+
+# --- the relationship graph -------------------------------------------------
+
+
+def test_the_graph_uses_entity_type_colours_not_the_series_palette() -> None:
+    """The eight-slot palette identifies a satellite in a chart. A node type
+    painted from it would be read as an object identity."""
+    assert "--entity-object" in INDEX_HTML
+    assert "--entity-family" in INDEX_HTML
+    graph_css = INDEX_HTML.split("#graphCanvas")[1].split("</style>")[0]
+    assert "--series-" not in graph_css
+
+
+def test_the_graph_is_operable_from_the_keyboard() -> None:
+    """Every edge is a real button in a list, so tab and Enter traverse the
+    graph without a pointer. The drawing is the redundant half."""
+    assert '<ul id="graphList"' in INDEX_HTML
+    assert '<button type="button" data-node=' in INDEX_HTML
+
+
+def test_the_graph_has_a_text_equivalent_for_a_screen_reader() -> None:
+    assert 'role="img" aria-labelledby="graphAlt"' in INDEX_HTML
+    assert "function graphAltText(view)" in INDEX_HTML
+
+
+def test_every_listed_edge_prints_its_marker_and_its_source() -> None:
+    """Line style alone would put the most important distinction in a dash
+    pattern nobody can name."""
+    assert "edge.marker" in INDEX_HTML
+    assert "edge.citation" in INDEX_HTML
+
+
+def test_the_graph_layout_is_deterministic() -> None:
+    """A force layout would place the same neighbourhood differently on every
+    visit, and an analyst comparing two objects would re-read it each time."""
+    assert "function nodePosition(index, total)" in INDEX_HTML
