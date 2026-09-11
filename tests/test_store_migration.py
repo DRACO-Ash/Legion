@@ -17,7 +17,12 @@ from fastapi.testclient import TestClient
 
 from src.app import build_app
 from src.seed_data import SEED_RECORDS
-from src.store import STORE_FILENAME, TrackedSystemsStore, _add_compendium_layer
+from src.store import (
+    SCHEMA_VERSION,
+    STORE_FILENAME,
+    TrackedSystemsStore,
+    _add_compendium_layer,
+)
 
 from .conftest import make_settings
 
@@ -98,7 +103,7 @@ def test_the_migration_persists(tmp_path, monkeypatch) -> None:
     store.update(first["id"], {"notes": "migration write"})
 
     on_disk = json.loads((tmp_path / STORE_FILENAME).read_text(encoding="utf-8"))
-    assert on_disk["schema_version"] == 2
+    assert on_disk["schema_version"] == SCHEMA_VERSION
     assert len(on_disk["compendium"]["objects"]) == SEEDED_COUNT
 
 

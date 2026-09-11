@@ -20,6 +20,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 from src._version import __version__
 from src.cache import TTLCache
+from src.candidate_systems import CANDIDATE_RECORDS
 from src.config import Settings, load_settings
 from src.family_elements import CACHE_TTL_SECONDS
 from src.routes import claims, health, systems, udl, ui
@@ -158,7 +159,7 @@ def build_app(
     )
     global_limiter = RateLimiter(limit=GLOBAL_LIMIT_PER_MINUTE, window_seconds=60.0)
     app.state.systems_store = systems_store or TrackedSystemsStore(
-        seed_records=SEED_RECORDS
+        seed_records=SEED_RECORDS, candidate_records=CANDIDATE_RECORDS
     )
 
     allowed_origins = [settings.allowed_origin] if settings.allowed_origin else []

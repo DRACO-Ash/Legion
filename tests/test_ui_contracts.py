@@ -392,3 +392,31 @@ def test_row_storage_is_wrapped_against_a_throwing_accessor() -> None:
     returning null, and the table must still render."""
     stored = INDEX_HTML[INDEX_HTML.index("function storedRows()") :]
     assert "try{" in stored[:200] and "catch" in stored[:400]
+
+
+# --- candidate systems, verified in a browser first -------------------------
+
+
+def test_a_candidate_is_marked_by_text_and_not_only_by_colour() -> None:
+    """The badge has to survive a colour-blind reader and a screen reader.
+
+    Same rule the provenance chips follow. A dotted border and a muted colour
+    are the supporting encodings, never the whole signal.
+    """
+    assert 'const CANDIDATE_WORD = "Candidate";' in INDEX_HTML
+    assert "esc(CANDIDATE_WORD)" in INDEX_HTML
+
+
+def test_a_candidate_shows_where_it_came_from_and_who_closes_it() -> None:
+    """A candidate that names no owner is the entry that sits unresolved for a
+    year. The panel reads both fields off the record rather than describing
+    them in prose that could drift."""
+    assert "record.source_citation" in INDEX_HTML
+    assert "record.verify_owner" in INDEX_HTML
+
+
+def test_an_unknown_launch_year_reads_as_a_dash() -> None:
+    """A candidate has no launch year, and `esc(null)` renders the four
+    characters "null" in the table. Caught in a browser, not by a test."""
+    assert "esc(s.launch_year || EM_DASH)" in INDEX_HTML
+    assert "esc(s.launch_year)}" not in INDEX_HTML

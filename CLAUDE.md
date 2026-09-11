@@ -304,6 +304,47 @@ sources only" constrains nobody:
   hard-coding a banner, so the string an analyst sees and the rule the
   validator enforces come from one module and cannot drift.
 
+## Candidate systems: the catalogue grew, and the join is visible
+
+`src/seed_data.py` still holds exactly the canonical 49, mirrored verbatim
+from the spreadsheet. Seven more systems named in the research but absent
+from it live in `src/candidate_systems.py`, and they are kept apart on
+purpose: mixing them into the mirror would make it unverifiable against the
+spreadsheet, because nobody could tell by looking which rows came from where.
+
+Three rules make the difference structural, and `tests/test_candidate_systems.py`
+enforces each:
+
+● **No candidate carries a NORAD id or a launch year.** The research names
+  behaviours, not catalogue entries. An invented satellite number is the one
+  error in this domain that looks exactly like data: a chart would plot the
+  wrong object and look entirely normal. The existing `SKIP_NO_NORAD_ID` path
+  therefore excludes every candidate from charts and says so.
+● **Every candidate cites its source and names who verifies it.** The
+  TBC-with-an-owner rule from the compendium, applied to the catalogue.
+● **A candidate is marked in the interface by text, not colour.** The badge
+  reads "Candidate" and the provenance panel carries the source and the owner,
+  read off the record rather than written into prose that could drift.
+
+The seven are Luch/Olymp-1 and -2, COSMOS-2553, TJS-2, TJS-4, and SJ-6-05A
+and -05B, all from the CSIS Space Threat Assessment 2025 by way of
+`deliverable/research/02_domain_counterspace.md`. The SJ-6 pair is carried
+because a proximity segment must name its counterpart, and the SY-24C
+"dogfighting" segments need one.
+
+**The store is at `schema_version` 3.** `_add_candidate_systems` is keyed on
+`candidate_key`, a stable natural key, so it is idempotent by construction
+rather than by a guard, and an existing deployment picks the seven up on its
+next read. An analyst's edit to a candidate outranks the shipped text: only
+the key is read, so a renamed, re-flagged or archived candidate is matched and
+left alone. Proved by three deliberate sabotages, all caught: a non-idempotent
+builder, a builder that clobbers an existing record, and a candidate that
+quietly gains a NORAD id.
+
+`launch_year` is now optional on the model because of this. Every one of the
+canonical 49 still declares one and a test holds that, so the widening cannot
+become a hole in the catalogue proper.
+
 ## The compendium layer: provenance is a schema, not a convention
 
 Added in Phase 1 of the compendium upgrade (`deliverable/`, which carries the

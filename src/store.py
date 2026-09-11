@@ -33,7 +33,7 @@ AUDIT_LOGGER_NAME = f"{APP_LOGGER_NAME}.audit"
 logger = logging.getLogger(f"{APP_LOGGER_NAME}.store")
 audit_logger = logging.getLogger(AUDIT_LOGGER_NAME)
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 STORE_FILENAME = "tracked_systems.json"
 
 # The compendium layer, added at schema_version 2. Held beside `systems`, never
@@ -136,13 +136,59 @@ def _add_compendium_layer(data: dict[str, Any]) -> None:
         _ensure_compendium_object(data, system_id)
 
 
+CANDIDATE_KEY = "candidate_key"
+
+
+def _add_candidate_systems(data: dict[str, Any], records: Records) -> None:
+    """Schema 2 to 3: add any candidate system the store does not already hold.
+
+    Keyed on `candidate_key`, which is a stable natural key, so this is
+    idempotent by construction rather than by a guard: a record already
+    present is matched and skipped whatever uuid it was given when it landed.
+
+    It is additive in both directions. A candidate an analyst has since
+    edited, renamed or archived is left exactly as it is, because the key is
+    all that is read. A candidate an analyst has deleted outright cannot come
+    back, because archive-not-delete means there is nothing to come back from.
+    """
+    systems = data.setdefault("systems", {})
+    present = {
+        record.get(CANDIDATE_KEY)
+        for record in systems.values()
+        if record.get(CANDIDATE_KEY)
+    }
+    now = _now_iso()
+    for record in records:
+        key = record.get(CANDIDATE_KEY)
+        if not key or key in present:
+            continue
+        record_id = str(uuid.uuid4())
+        systems[record_id] = {
+            **record,
+            "id": record_id,
+            "archived": False,
+            "created_at": now,
+            "updated_at": now,
+        }
+        _ensure_compendium_object(data, record_id)
+        present.add(key)
+
+
 class StoreValidationError(Exception):
     """Raised when a record fails boundary validation before being written."""
 
 
 class TrackedSystemsStore:
-    def __init__(self, seed_records: list[dict[str, Any]] | None = None):
+    def __init__(
+        self,
+        seed_records: Records | None = None,
+        candidate_records: Records | None = None,
+    ):
         self._seed_records = seed_records or []
+        # Kept apart from the seed records deliberately: these are not from
+        # the canonical spreadsheet, and the migration needs them by
+        # themselves to land on a store that already exists.
+        self._candidate_records = candidate_records or []
         # Warn once per store, not once per write, if rename is unsupported.
         self._warned_rename_fallback = False
 
@@ -170,6 +216,9 @@ class TrackedSystemsStore:
         if version < 2:
             _add_compendium_layer(data)
             data["schema_version"] = 2
+        if version < 3:
+            _add_candidate_systems(data, self._candidate_records)
+            data["schema_version"] = 3
         return data
 
     def _seed(self) -> dict[str, Any]:
@@ -188,6 +237,7 @@ class TrackedSystemsStore:
             }
         data: dict[str, Any] = {"schema_version": SCHEMA_VERSION, "systems": systems}
         _add_compendium_layer(data)
+        _add_candidate_systems(data, self._candidate_records)
         self._write_atomic(data)
         logger.info("Seeded tracked-systems store with %d records", len(systems))
         return data

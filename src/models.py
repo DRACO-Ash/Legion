@@ -25,7 +25,10 @@ class TrackedSystemCreate(BaseModel):
     )
     designator: str | None = None
     catalogue_name: str = Field(min_length=1)
-    launch_year: int = Field(ge=1957, le=2100)
+    # Optional because a candidate system carries only what its source
+    # states, and the research names behaviours rather than launch dates.
+    # Every one of the canonical 49 has one; a test holds that.
+    launch_year: int | None = Field(default=None, ge=1957, le=2100)
     launch_site: str | None = None
     norad_id: str | None = None
     regime: str = Field(min_length=1, description="e.g. LEO, GEO, HEO, MEO")
@@ -63,6 +66,14 @@ class TrackedSystem(TrackedSystemCreate):
     archived: bool
     created_at: str
     updated_at: str
+    # Read-only provenance for a candidate system: present on the seven
+    # records that came from the research rather than the canonical
+    # spreadsheet, absent on the 49. Deliberately not on the create model,
+    # because an analyst adding a record is not adding a candidate: they know
+    # what they are entering and own it themselves.
+    candidate_key: str | None = None
+    source_citation: str | None = None
+    verify_owner: str | None = None
 
 
 class TrackedSystemList(BaseModel):
