@@ -5,6 +5,11 @@ All notable changes to this project are documented here. Format follows
 [Semantic Versioning](https://semver.org/). Pre-1.0: minor bumps may include
 breaking changes, since nothing has shipped to the App Store yet.
 
+## [0.11.0] - 2026-09-11
+
+Add the claims API and the provenance legend, and surface every claim in the interface with its marker, confidence, source and date.
+
+
 ## [0.10.1] - 2026-09-11
 
 Record the unclassified, publicly-available-information-only decision and enforce it: an internal assessment must cite its public basis, and GET /version serves the marking.
