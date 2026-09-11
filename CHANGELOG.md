@@ -5,6 +5,11 @@ All notable changes to this project are documented here. Format follows
 [Semantic Versioning](https://semver.org/). Pre-1.0: minor bumps may include
 breaking changes, since nothing has shipped to the App Store yet.
 
+## [0.12.0] - 2026-09-11
+
+Expand the catalogue with seven candidate systems and add the Phase 3 pattern-of-life timeline.
+
+
 ## [0.11.0] - 2026-09-11
 
 Add the claims API and the provenance legend, and surface every claim in the interface with its marker, confidence, source and date.
