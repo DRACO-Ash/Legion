@@ -273,6 +273,32 @@ a shared string pasted into a browser tab was the wrong control for the job.
 If authentication is ever needed here again, it needs identity from the
 platform.
 
+## Unclassified, publicly available information only
+
+Ash's decision, 11 September 2026, answering the first open item in the
+compendium specification. It is settled: **the compendium stays unclassified
+and derived from publicly available information only.**
+
+`src/classification.py` holds the marking and the handling statement in Ash's
+own words. Do not invent, infer or elaborate a marking or a caveat scheme
+here; a different one comes from the person who owns that decision.
+
+The decision is enforced rather than described, because a note saying "open
+sources only" constrains nobody:
+
+● **An `internal_assessment` claim must cite the publicly available material
+  it is derived from.** Every other source class already names something
+  published, so a reader can follow the citation to the material. An
+  analyst's own assessment is opaque about its inputs, which makes it the one
+  place non-public material could enter unnoticed. It therefore carries the
+  same citation burden a FACT does. `tests/test_compendium_models.py` proves
+  it, and one test asserts that every declared source class is accounted for
+  as public, derived-with-declared-basis, or the TBC placeholder, so adding a
+  new class without thinking about the posture fails.
+● **`GET /version` serves the marking.** The interface reads it rather than
+  hard-coding a banner, so the string an analyst sees and the rule the
+  validator enforces come from one module and cannot drift.
+
 ## The compendium layer: provenance is a schema, not a convention
 
 Added in Phase 1 of the compendium upgrade (`deliverable/`, which carries the

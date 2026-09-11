@@ -11,6 +11,15 @@ def test_root_returns_200_html(client):
     assert "Tracked Systems" in response.text
 
 
+def test_version_carries_the_classification_posture(client):
+    """The marking is served, not hard-coded in the interface, so the banner an
+    analyst reads and the rule the Claim validator enforces cannot drift."""
+    body = client.get("/version").json()
+    assert body["classification"] == "UNCLASSIFIED"
+    assert "publicly available information only" in body["handling"]
+    assert body["classification_banner"].startswith("UNCLASSIFIED")
+
+
 def test_healthz_unauthenticated_200(client):
     response = client.get("/healthz")
     assert response.status_code == 200

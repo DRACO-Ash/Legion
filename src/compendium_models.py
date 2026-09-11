@@ -20,6 +20,13 @@ almost nothing and recording that honestly. That honesty is the standard:
   ● A TBC with no named owner is rejected, because an unverifiable claim has
     to name who must verify it.
 
+A third rule follows from the classification decision in
+`src/classification.py`: this deployment is unclassified and derived from
+publicly available information only, so an `internal_assessment` claim must
+cite the public material it reasons from. Every other source class names
+something published already; an analyst's own assessment does not, and that
+is exactly where non-public material could enter unnoticed.
+
 Nothing here replaces `TrackedSystem`. The compendium composes onto it by
 `system_id` and the shipped catalogue is untouched.
 """
@@ -31,6 +38,8 @@ from datetime import UTC, datetime
 from typing import Literal
 
 from pydantic import BaseModel, Field, model_validator
+
+from src.classification import DERIVED_NEEDS_CITATION, DERIVED_SOURCE_CLASS
 
 # ---------------------------------------------------------------------------
 # Vocabulary
@@ -187,12 +196,17 @@ class Claim(_Stamped):
             )
         if self.marker == MARKER_FACT:
             self._reject_unsourced_fact()
+        if self.source_class == DERIVED_SOURCE_CLASS and not self._has_citation():
+            raise ValueError(DERIVED_NEEDS_CITATION)
         return self
+
+    def _has_citation(self) -> bool:
+        return bool((self.source_citation or "").strip())
 
     def _reject_unsourced_fact(self) -> None:
         if self.source_class == SOURCE_CLASS_TBC:
             raise ValueError("A FACT cannot have source_class 'tbc'.")
-        if not (self.source_citation or "").strip():
+        if not self._has_citation():
             raise ValueError("A FACT must carry a source_citation.")
 
 

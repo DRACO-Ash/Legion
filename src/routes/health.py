@@ -7,6 +7,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
 from src._version import __version__
+from src.classification import CLASSIFICATION, CLASSIFICATION_BANNER, HANDLING
 
 router = APIRouter()
 
@@ -18,7 +19,19 @@ STORAGE_PROBE_TIMEOUT_SECONDS = 3.0
 
 @router.get("/version")
 async def version():
-    return {"service": "udl-tactics-app", "version": __version__}
+    """Service identity, and the classification posture it operates under.
+
+    The marking is served rather than hard-coded in the interface so one
+    string cannot drift from another: the banner the analyst reads and the
+    rule the `Claim` validator enforces come from the same module.
+    """
+    return {
+        "service": "udl-tactics-app",
+        "version": __version__,
+        "classification": CLASSIFICATION,
+        "handling": HANDLING,
+        "classification_banner": CLASSIFICATION_BANNER,
+    }
 
 
 @router.get("/healthz")

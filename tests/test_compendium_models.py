@@ -78,6 +78,46 @@ def test_every_claim_must_name_who_asserted_it() -> None:
         Claim(**payload)
 
 
+def test_an_internal_assessment_must_cite_its_public_basis() -> None:
+    """Ash's decision, 11 September 2026: unclassified, publicly available
+    information only.
+
+    Every other source class names something already published. An analyst's
+    own assessment does not, so it is the one place non-public material could
+    enter unnoticed, and it carries the same citation burden a FACT does.
+    """
+    with pytest.raises(ValidationError, match="publicly available material"):
+        _claim(
+            marker="INFERENCE",
+            confidence="moderate",
+            source_class="internal_assessment",
+            source_citation=None,
+        )
+
+
+def test_an_internal_assessment_citing_public_material_is_accepted() -> None:
+    claim = _claim(
+        marker="INFERENCE",
+        confidence="moderate",
+        source_class="internal_assessment",
+        source_citation="CSIS Space Threat Assessment 2025, RPO section",
+    )
+    assert claim.source_class == "internal_assessment"
+
+
+def test_the_public_source_classes_cover_the_vocabulary() -> None:
+    """A source class that is neither publicly citable nor the TBC placeholder
+    nor the declared-basis assessment would be a gap in the posture."""
+    from typing import get_args
+
+    from src.classification import DERIVED_SOURCE_CLASS, PUBLIC_SOURCE_CLASSES
+    from src.compendium_models import SOURCE_CLASS_TBC, SourceClass
+
+    declared = set(get_args(SourceClass))
+    accounted = PUBLIC_SOURCE_CLASSES | {DERIVED_SOURCE_CLASS, SOURCE_CLASS_TBC}
+    assert declared == accounted, f"unaccounted source classes: {declared - accounted}"
+
+
 def test_speculation_is_allowed_and_keeps_its_marker() -> None:
     """Speculation is a legitimate epistemic state. It must be storable, and
     it must not be quietly promoted."""
