@@ -135,9 +135,10 @@ def test_speculation_is_allowed_and_keeps_its_marker() -> None:
 def test_a_proximity_mode_must_name_its_counterpart(mode: str) -> None:
     """An RPO is always with something. Without the counterpart the segment
     cannot drive a relative-motion view and reads as a solo behaviour."""
+    claim = _claim()
     with pytest.raises(ValidationError, match="must name the counterpart"):
         PatternOfLifeSegment(
-            object_id="obj-1", mode=mode, start_epoch="2024-05-01", claim=_claim()
+            object_id="obj-1", mode=mode, start_epoch="2024-05-01", claim=claim
         )
 
 

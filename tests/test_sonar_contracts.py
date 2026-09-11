@@ -118,6 +118,54 @@ def test_error_logging_inside_a_handler_uses_exception() -> None:
     )
 
 
+def _raises_block_calls(node: ast.With) -> list[ast.Call]:
+    """Every invocation inside a `with pytest.raises(...)` body.
+
+    The context manager's own call sits in `node.items`, not the body, so it
+    is excluded by construction rather than by name matching.
+    """
+    return [
+        call
+        for statement in node.body
+        for call in ast.walk(statement)
+        if isinstance(call, ast.Call)
+    ]
+
+
+def _is_pytest_raises(node: ast.With) -> bool:
+    calls = [
+        item.context_expr
+        for item in node.items
+        if isinstance(item.context_expr, ast.Call)
+    ]
+    return any(
+        isinstance(call.func, ast.Attribute) and call.func.attr == "raises"
+        for call in calls
+    )
+
+
+def test_an_exception_test_makes_one_call_that_can_throw() -> None:
+    """SonarQube: "Refactor this exception test to have only one invocation
+    possibly throwing an exception."
+
+    Two calls inside one `pytest.raises` block means the test passes if either
+    raises, so it can go green for the wrong reason: a broken fixture builder
+    would satisfy a test written to prove a validator. Build the fixture
+    first, assert on the one call under test.
+    """
+    offenders = {
+        f"{path.relative_to(ROOT)}:{node.lineno}": len(calls)
+        for path in _python_files()
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8")))
+        if isinstance(node, ast.With)
+        and _is_pytest_raises(node)
+        and len(calls := _raises_block_calls(node)) > 1
+    }
+    assert offenders == {}, (
+        f"Hoist everything but the call under test out of the raises block: {offenders}"
+    )
+
+
 # --- The JavaScript rules the gate raised against src/static/index.html -----
 #
 # These are heuristics on the source text, not a parse: there is no JavaScript

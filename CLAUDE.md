@@ -146,6 +146,11 @@ any of these, and only the first produces anything resembling an error message:
   three upload cycles on its own because the gate's only visible message is
   "Quality Gate FAILED". It must scan `tests/` as well as `src/`,
   because `sonar-project.properties` sets `sonar.tests=tests`.
+  It also covers "Refactor this exception test to have only one invocation
+  possibly throwing an exception", which fires on a `pytest.raises` block
+  holding more than one call: the test then passes if either raises, so a
+  broken fixture builder satisfies a test written to prove a validator. Build
+  the fixture first, assert on the one call under test.
 ● Coverage on new code. Measure the changed lines, not the project total: a
   95% project can still ship a poorly covered diff.
 ● **Duplicated lines on new code.** This one has no local check and is easy to
