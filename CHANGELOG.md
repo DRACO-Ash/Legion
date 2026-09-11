@@ -5,6 +5,11 @@ All notable changes to this project are documented here. Format follows
 [Semantic Versioning](https://semver.org/). Pre-1.0: minor bumps may include
 breaking changes, since nothing has shipped to the App Store yet.
 
+## [0.13.1] - 2026-09-11
+
+Correct the COSMOS-2613 and COSMOS-2614 catalogue numbers from the SATCAT snapshot, as authorised.
+
+
 ## [0.13.0] - 2026-09-11
 
 Hold the SATCAT snapshot as a reference and add the Phase 4 relationship graph.
