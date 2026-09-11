@@ -330,14 +330,38 @@ catalogue number is the one failure nothing else here catches: it plots a real
 satellite's element sets under another satellite's name and every chart looks
 entirely normal.
 
-**The standing NORAD clash is now answered, and not silently fixed.** The seed
-carries 68762 three times, for COSMOS-2612, -2613 and -2614, flagged
-"cross-check UDL" since the beginning. The snapshot says 68762 is COSMOS 2612,
-68763 is COSMOS 2613 and 68764 is COSMOS 2614. `seed_data.py` is a verbatim
-mirror of a delivered spreadsheet and the rule is that its values are not
-re-derived here, so the finding is reported to whoever owns that source rather
-than patched out of sight. `tests/test_satcat.py` pins both the clash and the
-snapshot's answer, so correcting the seed will tell you by failing.
+**The standing NORAD clash is corrected, and it is the one authorised
+deviation from the verbatim mirror.** The spreadsheet gave 68762 to
+COSMOS-2612, -2613 and -2614 alike, flagged "cross-check UDL" from the start,
+so two of the three plotted a satellite that was not theirs and looked
+entirely normal doing it. The snapshot resolves it: 68762, 68763 and 68764.
+**Ash authorised the correction on 11 September 2026.**
+
+Four things make it safe to have touched the mirror at all, and none of them
+should be undone:
+
+● **Only those two values changed.** Nothing else in `seed_data.py` has been
+  altered and nothing else should be without the same authorisation. The
+  module docstring records the deviation, and each corrected record's notes
+  name the snapshot and what the source said, so the next person reconciling
+  this file against the spreadsheet sees an authorised correction rather than
+  a transcription slip.
+● **`_apply_norad_corrections` reaches an existing deployment.** Seeding only
+  happens when the store is absent, so without a migration the fix would
+  reach a fresh install and nothing else while the running deployment kept
+  plotting the wrong satellite. The store is at `schema_version` 5.
+● **It is a named list of two, not a rule.** "Correct any number the snapshot
+  disagrees with" would rewrite analyst data on the strength of a static
+  file, and a snapshot is a reference, not an authority over a deliberate
+  edit. Matching on the name and the wrong value together makes it idempotent
+  by construction and unable to touch a record someone has already fixed.
+● **The detector is now tested on synthetic data, not on this defect.** Tying
+  it to a real disagreement meant that fixing the disagreement silently
+  disarmed the check, which is how a test ends up passing for the wrong
+  reason. `tests/test_satcat.py` asserts the catalogue is clean, pins each
+  corrected number against the snapshot, and proves the shared-number and
+  wrong-name detectors separately. Calibrated by putting the defect back on
+  purpose: three tests failed, and all three named it.
 
 **The seven candidates now carry real identities.** Catalogue numbers, launch
 years and launch sites came from the snapshot and nowhere else, and a test

@@ -1,6 +1,6 @@
 {
   "source": "satcat_26195.dat",
-  "count": 54,
+  "count": 56,
   "objects": {
     "40258": {
       "intldes": "2014-058A",
@@ -578,6 +578,28 @@
       "intldes": "2026-083H",
       "norad_id": "68762",
       "name": "COSMOS 2612",
+      "source": "CIS",
+      "launch_date": "16 APR 26",
+      "launch_site": "PKMTR",
+      "decay_date": "",
+      "launch_year": 2026,
+      "launch_date_iso": "2026-04-16"
+    },
+    "68763": {
+      "intldes": "2026-083J",
+      "norad_id": "68763",
+      "name": "COSMOS 2613",
+      "source": "CIS",
+      "launch_date": "16 APR 26",
+      "launch_site": "PKMTR",
+      "decay_date": "",
+      "launch_year": 2026,
+      "launch_date_iso": "2026-04-16"
+    },
+    "68764": {
+      "intldes": "2026-083K",
+      "norad_id": "68764",
+      "name": "COSMOS 2614",
       "source": "CIS",
       "launch_date": "16 APR 26",
       "launch_site": "PKMTR",

@@ -148,12 +148,12 @@ def test_a_seeded_counterpart_we_hold_is_a_real_system_id(client) -> None:
 # --- the catalogue snapshot -------------------------------------------------
 
 
-def test_the_reconciliation_is_served(client) -> None:
-    """An analyst has to be able to see the disagreement without reading the
-    repository."""
+def test_the_reconciliation_is_served_and_the_catalogue_is_clean(client) -> None:
+    """An analyst has to be able to see any disagreement without reading the
+    repository, and right now there is none to see."""
     body = client.get("/api/satcat/reconciliation").json()
-    assert body["checked"] >= 49
-    assert any(f["norad_id"] == "68762" for f in body["findings"])
+    assert body["checked"] >= 56
+    assert body["findings"] == [], body["findings"]
 
 
 def test_one_catalogue_row_can_be_looked_up(client) -> None:

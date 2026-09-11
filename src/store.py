@@ -33,7 +33,7 @@ AUDIT_LOGGER_NAME = f"{APP_LOGGER_NAME}.audit"
 logger = logging.getLogger(f"{APP_LOGGER_NAME}.store")
 audit_logger = logging.getLogger(AUDIT_LOGGER_NAME)
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 STORE_FILENAME = "tracked_systems.json"
 
 # The compendium layer, added at schema_version 2. Held beside `systems`, never
@@ -239,6 +239,38 @@ def _add_pol_segments(data: dict[str, Any], seeds: Records) -> None:
         )
 
 
+# The one authorised correction to a value that came from the canonical
+# spreadsheet. Ash authorised it on 11 September 2026 after the CelesTrak
+# SATCAT snapshot resolved a clash the source had carried from the start: the
+# spreadsheet gave 68762 to COSMOS-2612, -2613 and -2614 alike, so two of the
+# three plotted a satellite that was not theirs and looked entirely normal.
+#
+# Deliberately a named list of three, not a rule. "Correct any catalogue
+# number the snapshot disagrees with" would be a migration that rewrites
+# analyst data on the strength of a static file, and a snapshot is a
+# reference, not an authority over someone's deliberate edit.
+NORAD_CORRECTIONS: tuple[tuple[str, str, str], ...] = (
+    ("COSMOS-2613", "68762", "68763"),
+    ("COSMOS-2614", "68762", "68764"),
+)
+
+
+def _apply_norad_corrections(data: dict[str, Any]) -> None:
+    """Schema 4 to 5: correct the two catalogue numbers Ash authorised.
+
+    Matched on the name *and* the wrong value together, so it is idempotent
+    by construction and cannot touch a record someone has already fixed by
+    hand, nor one holding some third value for a reason of its own.
+    """
+    for record in data.get("systems", {}).values():
+        name = str(record.get("catalogue_name") or "")
+        current = str(record.get("norad_id") or "")
+        for target, wrong, right in NORAD_CORRECTIONS:
+            if name == target and current == wrong:
+                record["norad_id"] = right
+                record["updated_at"] = _now_iso()
+
+
 class StoreValidationError(Exception):
     """Raised when a record fails boundary validation before being written."""
 
@@ -291,6 +323,9 @@ class TrackedSystemsStore:
         if version < 4:
             _add_pol_segments(data, self._pol_seeds)
             data["schema_version"] = 4
+        if version < 5:
+            _apply_norad_corrections(data)
+            data["schema_version"] = 5
         return data
 
     def _seed(self) -> dict[str, Any]:

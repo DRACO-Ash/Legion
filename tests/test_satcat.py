@@ -86,28 +86,74 @@ def test_the_extract_covers_every_catalogue_number_we_reference() -> None:
 # --- the reconciliation -----------------------------------------------------
 
 
-def test_a_number_claimed_by_more_than_one_record_is_reported() -> None:
-    """At most one of them can be right, and until it is resolved two of the
-    three plot a satellite that is not theirs."""
+def test_the_catalogue_now_agrees_with_the_snapshot_everywhere() -> None:
+    """The state this correction was for.
+
+    The spreadsheet gave 68762 to COSMOS-2612, -2613 and -2614 alike, so two
+    of the three plotted a satellite that was not theirs and looked entirely
+    normal doing it. Ash authorised the correction on 11 September 2026 and
+    this holds the result: not one disagreement left across the catalogue.
+    """
     report = reconcile([*SEED_RECORDS, *CANDIDATE_RECORDS])
+
+    assert report["findings"] == [], report["findings"]
+    assert report["checked"] == len(SEED_RECORDS) + len(CANDIDATE_RECORDS)
+
+
+@pytest.mark.parametrize(
+    ("name", "norad_id"),
+    [("COSMOS-2612", "68762"), ("COSMOS-2613", "68763"), ("COSMOS-2614", "68764")],
+)
+def test_the_corrected_numbers_are_the_ones_the_snapshot_gives(name, norad_id) -> None:
+    """Pinned against the snapshot rather than against each other, so the
+    correction cannot drift back or drift sideways."""
+    record = next(r for r in SEED_RECORDS if r["catalogue_name"] == name)
+    assert record["norad_id"] == norad_id
+    assert load_extract()[norad_id]["name"] == name.replace("-", " ")
+
+
+def test_a_corrected_record_says_what_the_source_said() -> None:
+    """A silent edit to a verbatim mirror looks like a transcription slip to
+    the next person reconciling it against the spreadsheet."""
+    record = next(r for r in SEED_RECORDS if r["catalogue_name"] == "COSMOS-2614")
+    assert "68762" in record["notes"]
+    assert "SATCAT" in record["notes"]
+
+
+# --- the detector itself, proved on data of its own -------------------------
+#
+# Deliberately synthetic. Tying these to a defect in the real catalogue means
+# that fixing the defect silently disarms the detector, which is how a check
+# ends up passing for the wrong reason.
+
+
+def test_a_number_claimed_by_more_than_one_record_is_reported() -> None:
+    """At most one of them can be right, and until it is resolved the others
+    plot a satellite that is not theirs."""
+    report = reconcile(
+        [
+            {"norad_id": "49961", "catalogue_name": "SJ-6-05A"},
+            {"norad_id": "49961", "catalogue_name": "Something else"},
+        ]
+    )
     shared = [f for f in report["findings"] if f["kind"] == SHARED]
 
     assert shared == [
         {
             "kind": SHARED,
-            "norad_id": "68762",
-            "claimed_by": ["COSMOS-2612", "COSMOS-2613", "COSMOS-2614"],
+            "norad_id": "49961",
+            "claimed_by": ["SJ-6-05A", "Something else"],
         }
     ]
 
 
-def test_the_snapshot_names_which_of_the_three_owns_that_number() -> None:
-    """The finding is only useful if it says what the right answer is."""
-    report = reconcile([*SEED_RECORDS, *CANDIDATE_RECORDS])
-    named = {f["catalogue_name"]: f for f in report["findings"] if f["kind"] == NAME}
+def test_a_finding_names_what_the_snapshot_says_the_number_is() -> None:
+    """A finding is only useful if it carries the right answer."""
+    report = reconcile([{"norad_id": "49961", "catalogue_name": "Not that object"}])
+    named = [f for f in report["findings"] if f["kind"] == NAME]
 
-    assert set(named) == {"COSMOS-2613", "COSMOS-2614"}
-    assert named["COSMOS-2613"]["satcat_name"] == "COSMOS 2612"
+    assert named[0]["satcat_name"] == "SHIJIAN 6 05A (SJ-6 05A)"
+    assert named[0]["satcat_launch"] == "2021-12-10"
 
 
 def test_a_house_abbreviation_is_not_a_discrepancy() -> None:
@@ -131,3 +177,54 @@ def test_a_record_with_no_number_is_not_counted_as_checked() -> None:
     report = reconcile([{"norad_id": None, "catalogue_name": "No number"}])
     assert report["checked"] == 0
     assert report["findings"] == []
+
+
+# --- the migration that reaches an existing deployment ----------------------
+
+
+def test_a_deployed_store_is_corrected_on_its_next_read() -> None:
+    """Seeding only happens when the store is absent, so without this the
+    correction reaches a fresh install and nothing else, and the running
+    deployment keeps plotting the wrong satellite."""
+    from src.store import _apply_norad_corrections
+
+    data = {
+        "systems": {
+            "a": {"catalogue_name": "COSMOS-2613", "norad_id": "68762"},
+            "b": {"catalogue_name": "COSMOS-2614", "norad_id": "68762"},
+            "c": {"catalogue_name": "COSMOS-2612", "norad_id": "68762"},
+        }
+    }
+
+    _apply_norad_corrections(data)
+
+    assert [r["norad_id"] for r in data["systems"].values()] == [
+        "68763",
+        "68764",
+        "68762",
+    ]
+
+
+def test_the_correction_does_not_touch_a_record_someone_already_fixed() -> None:
+    """Matched on the name and the wrong value together. A rule that
+    corrected any number the snapshot disagreed with would rewrite an
+    analyst's deliberate edit on the strength of a static file."""
+    from src.store import _apply_norad_corrections
+
+    data = {"systems": {"a": {"catalogue_name": "COSMOS-2613", "norad_id": "99999"}}}
+
+    _apply_norad_corrections(data)
+
+    assert data["systems"]["a"]["norad_id"] == "99999"
+
+
+def test_running_the_correction_twice_changes_nothing() -> None:
+    from src.store import _apply_norad_corrections
+
+    data = {"systems": {"a": {"catalogue_name": "COSMOS-2613", "norad_id": "68762"}}}
+    _apply_norad_corrections(data)
+    once = dict(data["systems"]["a"])
+
+    _apply_norad_corrections(data)
+
+    assert data["systems"]["a"]["norad_id"] == once["norad_id"]

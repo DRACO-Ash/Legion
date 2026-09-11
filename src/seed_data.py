@@ -2,7 +2,23 @@
 Red_ASAT_Systems.xlsx, mirrored verbatim from tactics_wiki.html's DATA
 array (per data-layer: a delivered dataset's controlled values are
 law - not re-canonicalised here). Used only to create the store if it
-is genuinely absent; never re-applied over an existing, edited store."""
+is genuinely absent; never re-applied over an existing, edited store.
+
+**One authorised deviation from that mirror, and only one.** Ash authorised
+it on 11 September 2026, after the CelesTrak SATCAT snapshot resolved the
+NORAD clash the source had carried since the beginning. The spreadsheet gave
+68762 to COSMOS-2612, -2613 and -2614 alike; the snapshot
+(`reference/satcat_26195.dat`, launch 2026-083 on 16 April 2026) gives 68762,
+68763 and 68764 respectively. Two of the three were therefore pointing at
+COSMOS-2612, so their charts plotted a real satellite's element sets under
+another satellite's name and looked entirely normal while doing it.
+
+The corrected values are recorded in the record notes, naming the snapshot
+and what the source said, so the deviation is visible to anyone reconciling
+this file against the spreadsheet rather than looking like a transcription
+slip. `tests/test_satcat.py` holds the corrected numbers against the
+snapshot, so this cannot drift back. Nothing else in this file has been
+changed, and nothing else should be without the same authorisation."""
 
 from typing import Any
 
@@ -33,7 +49,7 @@ LIT_4_YEARS = "4 years"
 MANOEUVRABLE_MINOR_PLANE_PERIOD = "Manoeuvrable — minor plane/period changes"
 NIVELIR_CLUSTER_1_2017 = "Nivelir Cluster 1 (2017)"
 NIVELIR_CLUSTER_2_2019 = "Nivelir Cluster 2 (2019)"
-NORAD_ID_CLASH_CROSS = "NORAD ID clash — cross-check UDL"
+NORAD_ID_CORRECTED = "NORAD ID corrected from SATCAT"
 NUMIZMAT_NAVESKA_CLUSTER_2025 = "Numizmat / Naveska Cluster (2025)"
 RELEASED_SUBSATELLITE = "Released subsatellite"
 ROBOTIC_ARM_REFUELLING_CAPABLE = (
@@ -425,8 +441,8 @@ SEED_RECORDS: list[dict[str, Any]] = [
         "status": "onorbit",
         "life": None,
         "coplanar": None,
-        "notes": "NORAD ID as recorded in source; not yet cross-checked against UDL.",
-        "flag": NORAD_ID_CLASH_CROSS,
+        "notes": "NORAD ID confirmed against the CelesTrak SATCAT snapshot (2026-083, 16 April 2026).",
+        "flag": NORAD_ID_CORRECTED,
     },
     {
         "family_id": "rus-2026",
@@ -437,14 +453,14 @@ SEED_RECORDS: list[dict[str, Any]] = [
         "catalogue_name": "COSMOS-2613",
         "launch_year": 2026,
         "launch_site": None,
-        "norad_id": "68762",
+        "norad_id": "68763",
         "regime": "LEO",
         "delta_v": "150 m/s, +0.8° inclination, 14 May 26",
         "status": "onorbit",
         "life": None,
         "coplanar": "ICEYE-X36, ICEYE-X37",
-        "notes": "Coplanar with ICEYE-X36 and ICEYE-X37. NORAD ID as recorded in source; not yet cross-checked against UDL.",
-        "flag": NORAD_ID_CLASH_CROSS,
+        "notes": "Coplanar with ICEYE-X36 and ICEYE-X37. Source recorded 68762; corrected from the CelesTrak SATCAT snapshot (2026-083, 16 April 2026), authorised by Ash on 11 September 2026.",
+        "flag": NORAD_ID_CORRECTED,
     },
     {
         "family_id": "rus-2026",
@@ -455,14 +471,14 @@ SEED_RECORDS: list[dict[str, Any]] = [
         "catalogue_name": "COSMOS-2614",
         "launch_year": 2026,
         "launch_site": None,
-        "norad_id": "68762",
+        "norad_id": "68764",
         "regime": "LEO",
         "delta_v": MANOEUVRABLE_MINOR_PLANE_PERIOD,
         "status": "onorbit",
         "life": None,
         "coplanar": None,
-        "notes": "NORAD ID as recorded in source; not yet cross-checked against UDL.",
-        "flag": NORAD_ID_CLASH_CROSS,
+        "notes": "Source recorded 68762; corrected from the CelesTrak SATCAT snapshot (2026-083, 16 April 2026), authorised by Ash on 11 September 2026.",
+        "flag": NORAD_ID_CORRECTED,
     },
     {
         "family_id": "chn-sj",
