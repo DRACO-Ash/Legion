@@ -350,6 +350,44 @@ attempt calling `_migrate` twice also failed to catch it, because the
 `_add_compendium_layer` directly catches it. Break the migration on purpose
 before believing a migration test, every time.
 
+## Provenance on screen: Phase 2 rules
+
+The claims API is `src/routes/claims.py`, the vocabulary is `src/provenance.py`
+and the interface renders it in the Provenance panel. Five things are
+load-bearing:
+
+● **An edit re-validates the whole claim.** `PATCH` merges anti-shrink and
+  then runs the merged result through `Claim` again, so a patch cannot strip
+  the citation off a FACT or the owner off a TBC. A rule enforced only at
+  creation is decorative, and decorative provenance is worse than none
+  because it looks like a guarantee.
+● **The legend words are served, not hard-coded.** `GET /api/provenance/legend`
+  carries the marker, confidence and source-class meanings. A copy in the
+  interface would drift from the validators using the same vocabulary and
+  nothing would fail. `tests/test_ui_contracts.py` asserts the legend text
+  does not appear in the markup.
+● **A chip states the strongest true thing, and a TBC is not its marker.** A
+  browser run found an unsourced claim wearing an INFERENCE chip, with only a
+  border colour marking it unverified: colour carrying the most important
+  distinction alone. The chip now reads "TBC, re-verify" and what it was
+  marked as moves to a meta row. `chipFace` owns this.
+● **Four redundant encodings, never colour alone.** Colour, icon, text label
+  and border style all carry the marker. The marker colours are existing house
+  tokens, deliberately not the eight-slot series palette: those identify a
+  satellite in a chart and an analyst must never read one as the other.
+● **Only an http or https source URL becomes a link.** A citation is
+  analyst-entered text, so `safeUrl` refuses anything else. Verified in a
+  browser with a `javascript:` URL: no link is rendered and no script runs.
+
+Claims are archived, never deleted, like everything else here: a withdrawn
+assessment stays visible under `include_archived` so an analyst sees that a
+claim was made and pulled rather than finding a silent gap.
+
+**Family-level claims are not here on purpose.** They are modelled by
+`FamilyAssessment`, a Phase 5 deliverable with its own required fields and its
+own validation gate. Inventing a parallel family-claim store now would mean
+migrating it away later.
+
 ## Architecture, briefly
 
 - `src/app.py` — app factory (`build_app`), CORS, two-tier rate limiting.

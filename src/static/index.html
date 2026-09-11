@@ -24,6 +24,15 @@
      lists the remainder instead of reusing a colour. */
   --series-1:#3987e5; --series-2:#d95926; --series-3:#199e70; --series-4:#c98500;
   --series-5:#d55181; --series-6:#008300; --series-7:#9085e9; --series-8:#e66767;
+  /* Provenance markers. Deliberately NOT drawn from the series slots above:
+     those identify a satellite in a chart, these identify the epistemic
+     status of a claim, and an analyst must never read one as the other. They
+     are existing house tokens rather than a new palette, so the validated
+     series set is untouched and nothing needs re-validating. Colour is only
+     ever one of four encodings here: colour, icon, text label and border
+     style all carry the same meaning. */
+  --marker-fact:#3FCB7C; --marker-inference:#739BCF; --marker-speculation:#F5B95A;
+  --marker-unverified:#7d8fb3;
 }
 @media (prefers-reduced-motion: reduce){ *{ transition-duration:.001ms !important; } }
 *{ box-sizing:border-box; }
@@ -40,6 +49,43 @@ header{ display:flex; justify-content:space-between; align-items:flex-end; gap:1
 .eyebrow{ font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--blue-2); font-weight:600; }
 h1{ font-size:24px; margin:4px 0 0; letter-spacing:.01em; }
 .subtitle{ font-size:12.5px; color:var(--text-dim); margin-top:2px; }
+/* The classification marking. Read from /version, never hard-coded here, so
+   the string an analyst sees and the rule the validator enforces come from
+   one module. */
+.classification{ border:1px solid var(--line); border-radius:var(--radius);
+  background:var(--surface-2); color:var(--text-dim); font-size:11px;
+  letter-spacing:.12em; text-transform:uppercase; text-align:center;
+  padding:6px 10px; margin-bottom:14px; font-weight:600; }
+
+.provenance-panel{ grid-column:1 / -1; }
+.claim{ border:1px solid var(--line-soft); border-left-width:3px; border-radius:var(--radius);
+  background:var(--surface-2); padding:10px 12px; margin-bottom:8px; }
+.claim-statement{ font-size:13px; line-height:1.5; margin:0 0 8px; }
+.claim-meta{ display:flex; flex-wrap:wrap; gap:6px 14px; font-size:11.5px; color:var(--text-dim); }
+.claim-meta dt{ color:var(--text-faint); display:inline; margin:0; }
+.claim-meta dd{ display:inline; margin:0 0 0 4px; }
+.claim-meta div{ display:inline; }
+.chip{ display:inline-flex; align-items:center; gap:5px; font-size:10.5px; font-weight:700;
+  letter-spacing:.08em; text-transform:uppercase; padding:3px 8px; border-radius:999px;
+  border:1px solid currentColor; }
+.chip .icon{ width:11px; height:11px; }
+/* Border style is a second, non-colour encoding of the same thing. */
+.chip-fact{ color:var(--marker-fact); border-style:solid; }
+.chip-inference{ color:var(--marker-inference); border-style:dashed; }
+.chip-speculation{ color:var(--marker-speculation); border-style:dotted; }
+.chip-unverified{ color:var(--marker-unverified); border-style:dotted; }
+.claim-fact{ border-left-color:var(--marker-fact); }
+.claim-inference{ border-left-color:var(--marker-inference); }
+.claim-speculation{ border-left-color:var(--marker-speculation); }
+.claim-unverified{ border-left-color:var(--marker-unverified); }
+.claim-archived{ opacity:.62; }
+.prov-legend{ margin-top:14px; border-top:1px solid var(--line-soft); padding-top:12px; }
+.prov-legend summary{ cursor:pointer; font-size:12px; color:var(--text-dim); }
+.prov-legend dl{ margin:10px 0 0; display:grid; grid-template-columns:auto 1fr; gap:6px 12px;
+  font-size:11.5px; align-items:baseline; }
+.prov-legend dt{ margin:0; }
+.prov-legend dd{ margin:0; color:var(--text-dim); line-height:1.45; }
+
 .layout{ display:grid; grid-template-columns:1fr 380px; gap:20px; align-items:start; }
 @media (max-width:900px){ .layout{ grid-template-columns:1fr; } }
 
@@ -200,12 +246,25 @@ svg.chart{ width:100%; height:auto; display:block; overflow:visible; }
       <path d="M20 12a8 8 0 1 1-2.6-5.9"/><path d="M20 4v4h-4"/>
     </symbol>
     <symbol id="i-status" viewBox="0 0 12 12"><circle cx="6" cy="6" r="4"/></symbol>
+    <symbol id="i-fact" viewBox="0 0 24 24">
+      <circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.6 2.6L16 9.5"/>
+    </symbol>
+    <symbol id="i-inference" viewBox="0 0 24 24">
+      <circle cx="12" cy="12" r="9"/><path d="M7 15l4-6 6 6"/>
+    </symbol>
+    <symbol id="i-speculation" viewBox="0 0 24 24">
+      <circle cx="12" cy="12" r="9"/><path d="M9.4 9.6a2.6 2.6 0 1 1 3.3 2.5v1.6"/><path d="M12.7 17.2v.2"/>
+    </symbol>
+    <symbol id="i-provenance" viewBox="0 0 24 24">
+      <path d="M5 4h11l3 3v13H5z"/><path d="M8 10h8M8 14h6"/>
+    </symbol>
     <symbol id="i-prev" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></symbol>
     <symbol id="i-next" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></symbol>
   </defs>
 </svg>
 <a href="#main-content" class="skip-link">Skip to main content</a>
 <div class="wrap">
+  <output class="classification" id="classificationBanner"></output>
   <header>
     <div class="brand">
       <svg class="mark" aria-hidden="true" focusable="false"><use href="#i-mark"/></svg>
@@ -291,6 +350,16 @@ svg.chart{ width:100%; height:auto; display:block; overflow:visible; }
         <output class="msg" id="formMsg"></output>
       </form>
     </div>
+
+    <section class="panel provenance-panel">
+      <h2><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-provenance"/></svg><span id="provTitle">Provenance</span></h2>
+      <output class="msg" id="provMsg">Choose a row in the catalogue to see what is claimed about it, and how sure we are.</output>
+      <div id="claims"></div>
+      <details class="prov-legend" id="provLegend">
+        <summary>What the markers mean</summary>
+        <div id="legendBody"></div>
+      </details>
+    </section>
 
     <section class="panel chart-panel">
       <h2><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-chart"/></svg><span id="chartTitle">Family movement</span></h2>
@@ -578,6 +647,7 @@ function selectSystem(id){
   // Selecting a row is the analyst saying "this one", so plot it. Deliberately
   // not awaited: the form must not wait on a live UDL call to become editable.
   void showObjectChart(record);
+  void showObjectProvenance(record);
 }
 
 document.getElementById("clearBtn").addEventListener("click", () => {
@@ -589,6 +659,7 @@ document.getElementById("clearBtn").addEventListener("click", () => {
   document.getElementById("formMsg").textContent = "";
   renderTable(currentList);
   void showFamilyChart();
+  clearProvenance();
 });
 
 function collectPayload(){
@@ -1215,9 +1286,226 @@ document.getElementById("cMode").addEventListener("change", () => {
   if(lastPayload) renderCharts(lastPayload);
 });
 
+/* Provenance.
+
+   The whole point of the compendium is that an analyst can see the epistemic
+   status of every claim, so none of this is decoration. Four redundant
+   encodings carry the same meaning on every chip: colour, an icon, a text
+   label, and a border style. Colour alone would fail a colour-blind reader
+   and a screen reader both.
+
+   The words come from GET /api/provenance/legend rather than from here. A
+   hard-coded legend would drift from the validators that enforce the same
+   vocabulary, and nothing would fail when it did, which is exactly the bug
+   class this interface keeps producing. */
+const MARKER_STYLE = {
+  FACT: {tone: "fact", icon: "#i-fact"},
+  INFERENCE: {tone: "inference", icon: "#i-inference"},
+  SPECULATION: {tone: "speculation", icon: "#i-speculation"},
+};
+const UNVERIFIED_STYLE = {tone: "unverified", icon: "#i-speculation"};
+const SOURCE_CLASS_TBC = "tbc";
+const CHOOSE_A_ROW = "Choose a row in the catalogue to see what is claimed about it, and how sure we are.";
+
+const markerLabel = {};
+const sourceClassLabel = {};
+
+function markerStyle(marker){
+  return MARKER_STYLE[marker] || UNVERIFIED_STYLE;
+}
+
+/* A TBC claim is never shown as established, whatever its marker says. The
+   source class wins, because "not yet sourced" is a statement about the
+   evidence and the marker is a statement about the assertion. */
+function claimTone(claim){
+  if(claim.source_class === SOURCE_CLASS_TBC) return UNVERIFIED_STYLE.tone;
+  return markerStyle(claim.marker).tone;
+}
+
+function labelFor(lookup, value){
+  return lookup[value] || value || "not stated";
+}
+
+/* Only ever an http(s) link. A citation is analyst-entered text, and a
+   javascript: or data: URL in an href would execute on click. */
+function safeUrl(value){
+  const raw = String(value || "");
+  if(raw.startsWith("https://") || raw.startsWith("http://")) return raw;
+  return "";
+}
+
+/* The chip is the most prominent thing on a claim, so it states the strongest
+   true thing about it. For a TBC that is "not yet sourced", not whatever the
+   claim was marked as: a browser run showed an unsourced claim wearing an
+   INFERENCE chip with only a border colour distinguishing it, which is colour
+   carrying the most important distinction on its own. What it was marked as
+   is still recorded, in the meta rows, where it cannot be mistaken for
+   provenance. */
+function chipFace(claim){
+  if(claim.source_class === SOURCE_CLASS_TBC){
+    return {
+      tone: UNVERIFIED_STYLE.tone,
+      icon: UNVERIFIED_STYLE.icon,
+      label: labelFor(sourceClassLabel, SOURCE_CLASS_TBC),
+    };
+  }
+  const style = markerStyle(claim.marker);
+  return {tone: style.tone, icon: style.icon, label: labelFor(markerLabel, claim.marker)};
+}
+
+function markerChip(claim){
+  const face = chipFace(claim);
+  return `<span class="chip chip-${esc(face.tone)}">
+    <svg class="icon" aria-hidden="true" focusable="false"><use href="${esc(face.icon)}"/></svg>
+    ${esc(face.label)}</span>`;
+}
+
+function markedAsRow(claim){
+  if(claim.source_class !== SOURCE_CLASS_TBC) return "";
+  return metaRow("Marked as", esc(labelFor(markerLabel, claim.marker)));
+}
+
+function sourceText(claim){
+  const className = labelFor(sourceClassLabel, claim.source_class);
+  const citation = claim.source_citation || "";
+  if(!citation) return esc(className);
+  return `${esc(className)}: ${esc(citation)}`;
+}
+
+function sourceLink(claim){
+  const href = safeUrl(claim.source_url);
+  if(!href) return "";
+  return ` <a href="${esc(href)}" target="_blank" rel="noopener noreferrer">open source</a>`;
+}
+
+function metaRow(term, value){
+  return `<div><dt>${esc(term)}</dt><dd>${value}</dd></div>`;
+}
+
+function ownerRow(claim){
+  if(!claim.owner) return "";
+  return metaRow("Owner to verify", esc(claim.owner));
+}
+
+function archivedRow(claim){
+  if(!claim.archived) return "";
+  return metaRow("Status", "Withdrawn, kept for the record");
+}
+
+function claimMarkup(claim){
+  const tone = claimTone(claim);
+  const archived = claim.archived ? " claim-archived" : "";
+  return `<article class="claim claim-${esc(tone)}${archived}">
+    <p class="claim-statement">${esc(claim.statement)}</p>
+    <dl class="claim-meta">
+      <div>${markerChip(claim)}</div>
+      ${metaRow("Confidence", esc(labelFor({}, claim.confidence)))}
+      ${metaRow("Source", sourceText(claim) + sourceLink(claim))}
+      ${metaRow("As of", esc(claim.as_of || "not stated"))}
+      ${metaRow("Asserted by", esc(claim.asserted_by))}
+      ${markedAsRow(claim)}
+      ${ownerRow(claim)}
+      ${archivedRow(claim)}
+    </dl>
+  </article>`;
+}
+
+function noClaimsMessage(record){
+  return `${record.catalogue_name} has no recorded claims yet. Nothing is being `
+    + "withheld: the compendium holds no sourced assessment for this object. "
+    + "Add one through the claims API, with its source.";
+}
+
+async function showObjectProvenance(record){
+  const msg = document.getElementById("provMsg");
+  const host = document.getElementById("claims");
+  document.getElementById("provTitle").textContent = `Provenance · ${record.catalogue_name}`;
+  msg.className = "msg";
+  msg.textContent = "Loading claims…";
+  let res;
+  try{
+    res = await fetch(`/api/objects/${encodeURIComponent(record.id)}/claims`);
+  } catch {
+    host.innerHTML = "";
+    msg.textContent = "Could not reach the server to load claims.";
+    msg.className = "msg error";
+    return;
+  }
+  if(!res.ok){
+    host.innerHTML = "";
+    msg.textContent = `Could not load claims for this object (${res.status}).`;
+    msg.className = "msg error";
+    return;
+  }
+  const body = await res.json();
+  if(body.count === 0){
+    host.innerHTML = "";
+    msg.textContent = noClaimsMessage(record);
+    return;
+  }
+  host.innerHTML = body.claims.map(claimMarkup).join("");
+  msg.textContent = `${body.count} claim${body.count === 1 ? "" : "s"}, each with its source.`;
+}
+
+function clearProvenance(){
+  document.getElementById("provTitle").textContent = "Provenance";
+  document.getElementById("claims").innerHTML = "";
+  const msg = document.getElementById("provMsg");
+  msg.textContent = CHOOSE_A_ROW;
+  msg.className = "msg";
+}
+
+function legendSection(title, entries){
+  const rows = entries.map(entry =>
+    `<dt>${markerChipFor(entry.value)}</dt><dd>${esc(entry.meaning)}</dd>`).join("");
+  return `<h3 class="chart-note">${esc(title)}</h3><dl>${rows}</dl>`;
+}
+
+function markerChipFor(value){
+  return markerChip({marker: value, source_class: "think_tank"});
+}
+
+function plainSection(title, entries){
+  const rows = entries.map(entry =>
+    `<dt>${esc(entry.label)}</dt><dd>${esc(entry.meaning)}</dd>`).join("");
+  return `<h3 class="chart-note">${esc(title)}</h3><dl>${rows}</dl>`;
+}
+
+async function loadProvenanceLegend(){
+  let body;
+  try{
+    const res = await fetch("/api/provenance/legend");
+    body = await res.json();
+  } catch {
+    document.getElementById("legendBody").textContent =
+      "The legend could not be loaded, so the markers below are shown without their explanations.";
+    return;
+  }
+  body.markers.forEach(entry => { markerLabel[entry.value] = entry.label; });
+  body.source_classes.forEach(entry => { sourceClassLabel[entry.value] = entry.label; });
+  document.getElementById("legendBody").innerHTML =
+    legendSection("Markers", body.markers) + plainSection("Confidence", body.confidence_levels);
+}
+
+async function loadClassification(){
+  const el = document.getElementById("classificationBanner");
+  try{
+    const res = await fetch("/version");
+    const body = await res.json();
+    el.textContent = body.classification_banner || body.classification || "";
+  } catch {
+    // Say nothing rather than guess a marking: an invented one is worse than
+    // none, and this is the one string in the interface that must never be
+    // assumed.
+    el.textContent = "";
+  }
+}
+
 // Top-level await: a module script is deferred, so the DOM is already parsed,
 // and awaiting means a failed first load surfaces rather than becoming an
 // unhandled rejection.
+await loadClassification();
+await loadProvenanceLegend();
 await loadSystems();
 await loadFamilies();
 

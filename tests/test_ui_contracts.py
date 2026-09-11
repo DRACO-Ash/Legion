@@ -225,6 +225,76 @@ def test_relative_mode_never_differences_against_the_first_point() -> None:
     assert "first element set in this window" not in INDEX_HTML
 
 
+def test_the_classification_marking_is_fetched_not_hard_coded() -> None:
+    """The one string in this interface that must never be assumed. If the
+    fetch fails the banner stays empty, because an invented marking is worse
+    than no marking."""
+    assert "loadClassification" in INDEX_HTML
+    assert "classification_banner" in INDEX_HTML
+    assert "UNCLASSIFIED" not in INDEX_HTML
+
+
+def test_a_provenance_chip_never_relies_on_colour_alone() -> None:
+    """Four redundant encodings carry the same meaning: colour, an icon, a
+    text label and a border style. Colour alone fails a colour-blind reader
+    and a screen reader both."""
+    assert "markerChip" in INDEX_HTML
+    for marker in ["#i-fact", "#i-inference", "#i-speculation"]:
+        assert marker in INDEX_HTML
+    for style in ["border-style:solid", "border-style:dashed", "border-style:dotted"]:
+        assert style in INDEX_HTML
+
+
+def test_a_tbc_claim_is_shown_as_unverified_whatever_its_marker() -> None:
+    """ "Not yet sourced" is a statement about the evidence; the marker is a
+    statement about the assertion. The evidence wins, so an unsourced claim
+    can never render as established."""
+    assert "function claimTone" in INDEX_HTML
+    assert "claim.source_class === SOURCE_CLASS_TBC" in INDEX_HTML
+    assert "chip-unverified" in INDEX_HTML
+    # The chip itself must say so, not only the border colour. A browser run
+    # found an unsourced claim wearing an INFERENCE chip, with colour alone
+    # carrying the distinction that matters most.
+    assert "function chipFace" in INDEX_HTML
+    assert "function markedAsRow" in INDEX_HTML
+
+
+def test_the_provenance_words_come_from_the_server() -> None:
+    """A hard-coded legend would drift from the validators enforcing the same
+    vocabulary, and nothing would fail when it did."""
+    assert "/api/provenance/legend" in INDEX_HTML
+    assert "loadProvenanceLegend" in INDEX_HTML
+    for invented in ["Stated directly by a named", "Reasoned from cited facts"]:
+        assert invented not in INDEX_HTML, "the legend text is duplicated in the UI"
+
+
+def test_claim_text_is_escaped_before_it_reaches_the_markup() -> None:
+    """Claim statements, citations and owners are analyst-entered text."""
+    for expression in [
+        "esc(claim.statement)",
+        "esc(claim.asserted_by)",
+        "esc(citation)",
+        "esc(claim.owner)",
+    ]:
+        assert expression in INDEX_HTML
+
+
+def test_only_an_http_source_url_becomes_a_link() -> None:
+    """A citation is analyst-entered, so a javascript: URL in an href would
+    execute on click."""
+    assert "function safeUrl" in INDEX_HTML
+    assert 'raw.startsWith("https://")' in INDEX_HTML
+    assert 'rel="noopener noreferrer"' in INDEX_HTML
+
+
+def test_the_provenance_empty_states_say_why_and_what_next() -> None:
+    """An empty panel that says nothing reads as a fault. Both states name the
+    reason and the remedy, and neither implies something is being withheld."""
+    assert "Choose a row in the catalogue" in INDEX_HTML
+    assert "has no recorded claims yet" in INDEX_HTML
+    assert "Nothing is being " in INDEX_HTML
+
+
 def test_the_empty_chart_state_does_not_invent_a_cause() -> None:
     """It used to say every member lacked a NORAD ID, which since the rank
     gate is usually false: the real reasons are in the skipped list."""
@@ -249,9 +319,18 @@ def test_the_favicon_needs_no_network_request() -> None:
 
 
 def test_every_icon_reference_resolves_to_a_defined_symbol() -> None:
-    """A typo in a sprite id fails silently: nothing renders, no error."""
+    """A typo in a sprite id fails silently: nothing renders, no error.
+
+    References are counted wherever they appear, not only in a literal
+    `<use href="#...">`. The provenance chips pick their icon from a lookup
+    keyed by marker, so the id lives in a JavaScript string. Counting only the
+    static form reported three genuinely-used symbols as unused, and would
+    equally have missed a typo in a dynamic one.
+    """
     defined = set(re.findall(r'<symbol id="(i-[\w-]+)"', INDEX_HTML))
-    used = set(re.findall(r'<use href="#(i-[\w-]+)"', INDEX_HTML))
+    # A declaration is `id="i-fact"` with no hash, so every `#i-...` in the
+    # file is a reference, whether it sits in markup or in a JavaScript string.
+    used = set(re.findall(r"#(i-[\w-]+)", INDEX_HTML))
     assert used, "The UI should be using the sprite"
     assert used <= defined, f"No symbol defined for: {used - defined}"
     assert defined == used, f"Sprite carries unused symbols: {defined - used}"

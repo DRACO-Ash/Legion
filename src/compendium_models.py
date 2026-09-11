@@ -155,9 +155,18 @@ def new_id() -> str:
 
 
 class _Stamped(BaseModel):
-    """Identity and timestamps, shared so every entity stamps the same way."""
+    """Identity, timestamps and the archive flag, shared so every entity
+    stamps and retires the same way.
+
+    `archived` is here rather than on individual entities because the house
+    rule is archive, never delete: a withdrawn assessment has to stay
+    auditable, so an analyst can see that a claim was made and later pulled
+    rather than finding a silent gap. The store already wrote this field; the
+    models now declare it.
+    """
 
     id: str = Field(default_factory=new_id)
+    archived: bool = False
     created_at: str = Field(default_factory=now_iso)
     updated_at: str = Field(default_factory=now_iso)
 
@@ -401,3 +410,23 @@ class FamilyAssessment(_Stamped):
     @property
     def awaiting_validation(self) -> bool:
         return not (self.validated_by or "").strip()
+
+
+class ClaimUpdate(BaseModel):
+    """A partial claim edit. Every field optional, anti-shrink on merge.
+
+    Deliberately not a `Claim` with optional fields: the merged result is
+    re-validated as a full `Claim` by the route, so a PATCH cannot strip the
+    citation off a FACT or the owner off a TBC. An update that could defeat
+    the provenance rules would make them decorative.
+    """
+
+    statement: str | None = None
+    marker: ConfidenceMarker | None = None
+    confidence: ConfidenceLevel | None = None
+    source_class: SourceClass | None = None
+    asserted_by: str | None = None
+    source_citation: str | None = None
+    source_url: str | None = None
+    as_of: str | None = None
+    owner: str | None = None
