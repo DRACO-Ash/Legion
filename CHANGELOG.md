@@ -5,6 +5,11 @@ All notable changes to this project are documented here. Format follows
 [Semantic Versioning](https://semver.org/). Pre-1.0: minor bumps may include
 breaking changes, since nothing has shipped to the App Store yet.
 
+## [0.15.0] - 2026-09-13
+
+Add the Phase 6 operability layer: command palette, keyboard navigation, comparison view and house-style briefing export.
+
+
 ## [0.14.0] - 2026-09-13
 
 Add the Phase 5 capability, context and intent layer: family assessments with class manoeuvre baselines.
