@@ -29,6 +29,17 @@ INDEX_HTML = SRC / "static" / "index.html"
 # why "coplanar" x49 was never reported while "4 years" x3 was.
 MIN_OCCURRENCES = 3
 
+# ...and it ignores short ones. This floor was added when the mirror started
+# flagging a bare " " repeated inside f-strings, which SonarQube has never
+# reported against this repository: the upload that produced the 26 findings
+# in `seed_data.py` scanned a codebase already full of repeated separators
+# and named none of them. Five is SonarQube's own documented default and is
+# comfortably below the shortest literal the platform has actually reported
+# here, "4 years" at seven characters, so the floor removes false positives
+# without blunting the check. `test_the_floor_still_catches_a_real_duplicate`
+# holds that.
+MIN_LENGTH = 5
+
 
 def _python_files() -> list[pathlib.Path]:
     return [path for tree in SCANNED_TREES for path in sorted(tree.rglob("*.py"))]
@@ -43,7 +54,9 @@ def _duplicated_literals(path: pathlib.Path) -> dict[str, list[int]]:
     return {
         text: lines
         for text, lines in seen.items()
-        if len(lines) >= MIN_OCCURRENCES and re.search(r"\s", text)
+        if len(lines) >= MIN_OCCURRENCES
+        and len(text) >= MIN_LENGTH
+        and re.search(r"\s", text)
     }
 
 
@@ -58,6 +71,31 @@ def test_no_duplicated_string_literals() -> None:
     assert offenders == {}, (
         f"Define a constant for these repeated literals: {offenders}"
     )
+
+
+def test_the_floor_still_catches_a_real_duplicate() -> None:
+    """The floor must not blunt the check.
+
+    "4 years" is the shortest literal the platform has actually reported
+    against this repository, at seven characters. If a change to MIN_LENGTH
+    ever lets that through, the mirror has stopped mirroring.
+    """
+    source = "\n".join(['x = "4 years"'] * MIN_OCCURRENCES)
+    tree = ast.parse(source)
+    found = [
+        node.value
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Constant) and isinstance(node.value, str)
+    ]
+    assert len(found) >= MIN_OCCURRENCES
+    assert len("4 years") >= MIN_LENGTH
+
+
+def test_the_floor_excludes_a_bare_separator() -> None:
+    """A one-character separator repeated inside f-strings is not a finding,
+    and treating it as one is how a mirror becomes noise nobody reads."""
+    assert len(" ") < MIN_LENGTH
+    assert len(", ") < MIN_LENGTH
 
 
 def test_status_role_is_expressed_as_output_element() -> None:

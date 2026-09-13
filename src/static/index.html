@@ -142,6 +142,39 @@ h1{ font-size:24px; margin:4px 0 0; letter-spacing:.01em; }
 .baseline{ padding:7px 10px; font-size:11.5px; line-height:1.55; border-radius:3px;
            background:var(--panel-2); border-left:3px solid var(--blue-2); }
 .assess-q{ font-size:11.5px; line-height:1.6; color:var(--text-dim); margin:0; padding-left:17px; }
+.palette{ position:fixed; inset:0; background:rgba(4,9,20,.72); z-index:50;
+          display:flex; align-items:flex-start; justify-content:center; padding-top:11vh; }
+.palette-box{ width:min(620px,92vw); background:var(--panel); border:1px solid var(--line);
+              border-radius:6px; box-shadow:0 18px 48px rgba(0,0,0,.55); overflow:hidden; }
+.palette-box input{ width:100%; box-sizing:border-box; padding:13px 15px; font:inherit;
+                    font-size:14px; color:var(--text); background:var(--panel-2);
+                    border:0; border-bottom:1px solid var(--line); }
+.palette-box input:focus-visible{ outline:2px solid var(--blue-2); outline-offset:-2px; }
+.palette-list{ list-style:none; margin:0; padding:0; max-height:48vh; overflow-y:auto; }
+.palette-list li{ padding:0; }
+.palette-list button{ display:block; width:100%; text-align:left; background:none;
+                      border:0; border-left:3px solid transparent; padding:8px 13px;
+                      color:var(--text); font:inherit; font-size:12.5px; cursor:pointer; }
+.palette-list button small{ display:block; color:var(--text-dim); font-size:10.5px; margin-top:2px; }
+.palette-list .on button{ background:var(--panel-2); border-left-color:var(--blue-2); }
+.palette-help{ margin:0; padding:7px 13px; font-size:10.5px; color:var(--text-dim);
+               border-top:1px solid var(--line); }
+.tray{ display:flex; flex-wrap:wrap; gap:6px; margin-bottom:10px; }
+.tray .chip{ display:inline-flex; align-items:center; gap:6px; font-size:11px;
+             padding:3px 8px; border:1px solid var(--line); border-radius:11px; }
+.tray .chip button{ background:none; border:0; color:var(--text-dim); cursor:pointer;
+                    font:inherit; padding:0 1px; }
+.cmp{ width:100%; border-collapse:collapse; font-size:11.5px; }
+.cmp th, .cmp td{ text-align:left; vertical-align:top; padding:5px 8px;
+                  border-bottom:1px solid var(--line); }
+.cmp th{ color:var(--text-dim); font-weight:600; }
+.cmp .absent{ color:var(--marker-unverified); font-style:italic; }
+.cmp-scroll{ overflow-x:auto; }
+.brief-head{ display:flex; align-items:center; justify-content:space-between; margin-top:15px; }
+#briefingText{ white-space:pre-wrap; font-size:11px; line-height:1.55; margin:7px 0 0;
+               padding:11px; background:var(--panel-2); border-radius:3px;
+               max-height:360px; overflow-y:auto; }
+tbody tr.row:focus-visible{ outline:2px solid var(--blue-2); outline-offset:-2px; }
 .claim-fact{ border-left-color:var(--marker-fact); }
 .claim-inference{ border-left-color:var(--marker-inference); }
 .claim-speculation{ border-left-color:var(--marker-speculation); }
@@ -323,7 +356,7 @@ svg.chart{ width:100%; height:auto; display:block; overflow:visible; }
     <symbol id="i-speculation" viewBox="0 0 24 24">
       <circle cx="12" cy="12" r="9"/><path d="M9.4 9.6a2.6 2.6 0 1 1 3.3 2.5v1.6"/><path d="M12.7 17.2v.2"/>
     </symbol>
-    <symbol id="i-assess" viewBox="0 0 16 16"><path d="M3 2h7l3 3v9H3z" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M5.5 7.5h5M5.5 10h3.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></symbol><symbol id="i-graph" viewBox="0 0 16 16"><circle cx="3" cy="4" r="2"/><circle cx="13" cy="4" r="2"/><circle cx="8" cy="13" r="2"/><path d="M4.6 5.4 6.8 11.2M11.4 5.4 9.2 11.2M5 4h6" fill="none" stroke="currentColor" stroke-width="1.2"/></symbol><symbol id="i-timeline" viewBox="0 0 16 16"><path d="M1 8h14M4 5v6M8 3v10M12 6v4" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></symbol><symbol id="i-provenance" viewBox="0 0 24 24">
+    <symbol id="i-compare" viewBox="0 0 16 16"><path d="M3 2h4v12H3zM9 2h4v12H9z" fill="none" stroke="currentColor" stroke-width="1.3"/></symbol><symbol id="i-assess" viewBox="0 0 16 16"><path d="M3 2h7l3 3v9H3z" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M5.5 7.5h5M5.5 10h3.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></symbol><symbol id="i-graph" viewBox="0 0 16 16"><circle cx="3" cy="4" r="2"/><circle cx="13" cy="4" r="2"/><circle cx="8" cy="13" r="2"/><path d="M4.6 5.4 6.8 11.2M11.4 5.4 9.2 11.2M5 4h6" fill="none" stroke="currentColor" stroke-width="1.2"/></symbol><symbol id="i-timeline" viewBox="0 0 16 16"><path d="M1 8h14M4 5v6M8 3v10M12 6v4" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></symbol><symbol id="i-provenance" viewBox="0 0 24 24">
       <path d="M5 4h11l3 3v13H5z"/><path d="M8 10h8M8 14h6"/>
     </symbol>
     <symbol id="i-prev" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></symbol>
@@ -439,6 +472,20 @@ svg.chart{ width:100%; height:auto; display:block; overflow:visible; }
       </details>
     </section>
 
+    <section class="panel compare-panel">
+      <h2><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-compare"/></svg><span>Comparison</span></h2>
+      <output class="msg" id="compareMsg">Press <kbd>Ctrl</kbd>+<kbd>K</kbd> to open the command palette, then add two to four subjects.</output>
+      <div id="compareTray" class="tray"></div>
+      <div id="compareBody"></div>
+      <div id="briefingWrap" hidden>
+        <div class="brief-head">
+          <span class="assess-h">Briefing, house style, provenance carried</span>
+          <button type="button" class="btn btn-ghost" id="copyBriefing">Copy</button>
+        </div>
+        <pre id="briefingText" tabindex="0"></pre>
+      </div>
+    </section>
+
     <section class="panel assess-panel">
       <h2><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-assess"/></svg><span id="assessTitle">Family assessment</span></h2>
       <output class="msg" id="assessMsg">Choose a family, or a row in the catalogue, to read what its class is assessed to do.</output>
@@ -480,6 +527,14 @@ svg.chart{ width:100%; height:auto; display:block; overflow:visible; }
   </main>
 </div>
 
+<div id="palette" class="palette" hidden role="dialog" aria-modal="true" aria-label="Command palette">
+  <div class="palette-box">
+    <input type="text" id="paletteInput" autocomplete="off" spellcheck="false"
+           placeholder="Jump to an object or family, or type a command…" aria-controls="paletteList">
+    <ul id="paletteList" class="palette-list" role="listbox" aria-label="Results"></ul>
+    <p class="palette-help">↑↓ move · Enter open · Shift+Enter add to comparison · Esc close</p>
+  </div>
+</div>
 <script type="module">
 const STATUS_LABEL = {onorbit:"On-orbit", decayed:"Decayed/Deorbited", decaying:"Decaying", unknown:"Unconfirmed"};
 // Operational order, not alphabetical: sorting by status is a question about
@@ -691,7 +746,7 @@ function renderTable(list){
   wrap.innerHTML = `<table>
     <thead><tr>${sortHeader()}</tr></thead>
     <tbody>${rows.map(s => `
-      <tr class="row ${s.id === selectedId ? "selected" : ""}" data-id="${esc(s.id)}">
+      <tr class="row ${s.id === selectedId ? "selected" : ""}" data-id="${esc(s.id)}" tabindex="0" role="button" aria-label="Select ${esc(s.catalogue_name)}">
         <td>${esc(s.catalogue_name)}${s.archived ? " <em>(archived)</em>" : ""}${candidateBadge(s)}</td>
         <td><span class="badge ${nationClass(s.nation)}">${esc(s.nation)}</span></td>
         <td>${esc(s.regime)}</td>
@@ -1824,6 +1879,239 @@ async function showFamilyAssessment(familyId, title){
     + openQuestionsMarkup(a);
 }
 
+const MAX_COMPARE = 4;
+const MIN_COMPARE = 2;
+let compareIds = [];
+let paletteRows = [];
+let paletteAt = 0;
+
+function paletteOpen(){
+  return !document.getElementById("palette").hidden;
+}
+
+function setPalette(open){
+  const box = document.getElementById("palette");
+  const input = document.getElementById("paletteInput");
+  box.hidden = !open;
+  if(open){
+    input.value = "";
+    input.focus();
+    void runPaletteSearch("");
+  } else {
+    paletteRows = [];
+  }
+}
+
+function paletteMarkup(){
+  return paletteRows.map((row, index) => `<li class="${index === paletteAt ? "on" : ""}" role="option"
+    aria-selected="${index === paletteAt}"><button type="button" data-index="${index}">
+    ${esc(row.label)}<small>${esc(row.kind)} · ${esc(row.detail)}</small></button></li>`).join("");
+}
+
+function renderPalette(){
+  const list = document.getElementById("paletteList");
+  list.innerHTML = paletteRows.length
+    ? paletteMarkup()
+    : `<li><button type="button" disabled>Nothing matches that.</button></li>`;
+  list.querySelectorAll("button[data-index]").forEach(button => {
+    button.addEventListener("click", event => {
+      paletteAt = Number(button.dataset.index);
+      void choosePaletteRow(event.shiftKey);
+    });
+  });
+}
+
+async function runPaletteSearch(query){
+  let res;
+  try{
+    res = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
+  } catch {
+    paletteRows = [];
+    renderPalette();
+    return;
+  }
+  paletteRows = res.ok ? (await res.json()).results : [];
+  paletteAt = 0;
+  renderPalette();
+}
+
+async function choosePaletteRow(addToComparison){
+  const row = paletteRows[paletteAt];
+  if(!row) return;
+  setPalette(false);
+  if(addToComparison){
+    addToCompare(row);
+    return;
+  }
+  if(row.kind === "family"){
+    await showFamilyAssessment(row.id.replace("family:", ""), row.label);
+    await focusGraphNode(row.id);
+    return;
+  }
+  const record = currentList.find(s => s.id === row.id);
+  if(record) selectSystem(row.id); else await focusGraphNode(row.id);
+}
+
+function addToCompare(row){
+  const msg = document.getElementById("compareMsg");
+  if(compareIds.some(entry => entry.id === row.id)) return;
+  if(compareIds.length >= MAX_COMPARE){
+    msg.textContent = `Four is the most that fits. Remove one first.`;
+    return;
+  }
+  compareIds.push({id: row.id, label: row.label});
+  void renderComparison();
+}
+
+function trayMarkup(){
+  return compareIds.map(entry => `<span class="chip">${esc(entry.label)}
+    <button type="button" data-remove="${esc(entry.id)}" aria-label="Remove ${esc(entry.label)}">×</button></span>`).join("");
+}
+
+function comparisonCell(cell){
+  // A blank cell in a comparison reads as a finding. It almost never is.
+  if(cell && cell.value !== null && cell.value !== undefined){
+    return esc(cell.value);
+  }
+  return `<span class="absent">${esc((cell || {}).absent || "not recorded")}</span>`;
+}
+
+function comparisonTable(body){
+  const head = body.subjects.map(s => `<th scope="col">${esc(s.label)}</th>`).join("");
+  const rows = body.rows.map(label => {
+    const cells = body.subjects.map(s => `<td>${comparisonCell(s.attributes[label])}</td>`).join("");
+    return `<tr><th scope="row">${esc(label)}</th>${cells}</tr>`;
+  }).join("");
+  const baselines = body.subjects.map(s => `<td>${comparisonCell(s.baseline)}</td>`).join("");
+  const caps = body.subjects.map(s => `<td>${s.capabilities.length
+    ? s.capabilities.map(c => `${esc(c.label)} <span class="absent">[${esc(c.marker)}]</span>`).join("<br>")
+    : `<span class="absent">none recorded</span>`}</td>`).join("");
+  return `<div class="cmp-scroll"><table class="cmp">
+    <thead><tr><th scope="col">Attribute</th>${head}</tr></thead>
+    <tbody>${rows}
+      <tr><th scope="row">Class baseline</th>${baselines}</tr>
+      <tr><th scope="row">Capabilities</th>${caps}</tr>
+    </tbody></table></div>`;
+}
+
+async function renderComparison(){
+  const msg = document.getElementById("compareMsg");
+  const host = document.getElementById("compareBody");
+  const tray = document.getElementById("compareTray");
+  tray.innerHTML = trayMarkup();
+  tray.querySelectorAll("button[data-remove]").forEach(button => {
+    button.addEventListener("click", () => {
+      compareIds = compareIds.filter(entry => entry.id !== button.dataset.remove);
+      void renderComparison();
+    });
+  });
+  document.getElementById("briefingWrap").hidden = compareIds.length === 0;
+  if(compareIds.length === 0){
+    host.innerHTML = "";
+    msg.textContent = "Press Ctrl+K to open the command palette, then Shift+Enter to add a subject.";
+    return;
+  }
+  await loadBriefing();
+  if(compareIds.length < MIN_COMPARE){
+    host.innerHTML = "";
+    msg.textContent = "One subject is a briefing, not a comparison. Add another to see them side by side.";
+    return;
+  }
+  const query = compareIds.map(entry => `ids=${encodeURIComponent(entry.id)}`).join("&");
+  const res = await fetch(`/api/compare?${query}`);
+  if(!res.ok){
+    host.innerHTML = "";
+    msg.textContent = `Could not build the comparison (${res.status}).`;
+    msg.className = "msg error";
+    return;
+  }
+  msg.className = "msg";
+  msg.textContent = `${compareIds.length} subjects side by side. An empty cell says why it is empty.`;
+  host.innerHTML = comparisonTable(await res.json());
+}
+
+async function loadBriefing(){
+  const query = compareIds.map(entry => `ids=${encodeURIComponent(entry.id)}`).join("&");
+  const res = await fetch(`/api/briefing?${query}`);
+  const target = document.getElementById("briefingText");
+  target.textContent = res.ok ? (await res.json()).text : "Could not build the briefing.";
+}
+
+function paletteKey(event){
+  if(event.key === "Escape"){ setPalette(false); return true; }
+  if(event.key === "ArrowDown"){ movePalette(1); return true; }
+  if(event.key === "ArrowUp"){ movePalette(-1); return true; }
+  if(event.key === "Enter"){ void choosePaletteRow(event.shiftKey); return true; }
+  return false;
+}
+
+function inATextField(target){
+  // Ctrl+K is safe anywhere, but a bare "/" must not hijack typing.
+  const tag = (target.tagName || "").toLowerCase();
+  return tag === "input" || tag === "textarea" || target.isContentEditable;
+}
+
+function tableKey(event){
+  const row = event.target.closest ? event.target.closest("tbody tr.row") : null;
+  if(!row) return false;
+  if(event.key === "ArrowDown"){ moveTableFocus(1); return true; }
+  if(event.key === "ArrowUp"){ moveTableFocus(-1); return true; }
+  if(event.key === "Enter" || event.key === " "){ row.click(); return true; }
+  return false;
+}
+
+function installKeyboard(){
+  document.addEventListener("keydown", event => {
+    if(paletteOpen()){
+      if(paletteKey(event)) event.preventDefault();
+      return;
+    }
+    const summon = (event.key === "k" && (event.ctrlKey || event.metaKey))
+      || (event.key === "/" && !inATextField(event.target));
+    if(summon){
+      event.preventDefault();
+      setPalette(true);
+      return;
+    }
+    if(tableKey(event)) event.preventDefault();
+  });
+  document.getElementById("paletteInput").addEventListener("input", event => {
+    void runPaletteSearch(event.target.value);
+  });
+  document.getElementById("palette").addEventListener("mousedown", event => {
+    if(event.target.id === "palette") setPalette(false);
+  });
+  document.getElementById("copyBriefing").addEventListener("click", async () => {
+    const text = document.getElementById("briefingText").textContent;
+    const button = document.getElementById("copyBriefing");
+    try{
+      await navigator.clipboard.writeText(text);
+      button.textContent = "Copied";
+    } catch {
+      // Clipboard access can be refused. Say so rather than appearing to work,
+      // and leave the text selectable, which is the fallback that always works.
+      button.textContent = "Select the text and copy";
+    }
+    setTimeout(() => { button.textContent = "Copy"; }, 2500);
+  });
+}
+
+function movePalette(step){
+  if(paletteRows.length === 0) return;
+  paletteAt = (paletteAt + step + paletteRows.length) % paletteRows.length;
+  renderPalette();
+  const active = document.querySelector(".palette-list .on button");
+  if(active) active.scrollIntoView({block: "nearest"});
+}
+
+function moveTableFocus(step){
+  const rows = [...document.querySelectorAll("tbody tr.row")];
+  if(rows.length === 0) return;
+  const at = rows.indexOf(document.activeElement);
+  const next = rows[Math.min(Math.max(at + step, 0), rows.length - 1)] || rows[0];
+  next.focus();
+}
+
 async function showObjectTimeline(record){
   const msg = document.getElementById("polMsg");
   const host = document.getElementById("polTimeline");
@@ -1949,6 +2237,7 @@ async function loadClassification(){
 // unhandled rejection.
 await loadClassification();
 await loadProvenanceLegend();
+installKeyboard();
 await loadSystems();
 await loadFamilies();
 

@@ -30,6 +30,7 @@ from src.routes import (
     families,
     graph,
     health,
+    operability,
     satcat,
     segments,
     systems,
@@ -195,6 +196,7 @@ def build_app(
     app.include_router(satcat.router)
     app.include_router(graph.router)
     app.include_router(families.router)
+    app.include_router(operability.router)
     app.include_router(ui.router)
 
     return app

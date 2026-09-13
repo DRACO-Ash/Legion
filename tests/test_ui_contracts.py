@@ -536,3 +536,48 @@ def test_the_class_baseline_is_shown_so_a_deviation_reads_as_one() -> None:
 def test_every_assessment_statement_prints_its_source() -> None:
     assert "function assessProvenance(claim)" in INDEX_HTML
     assert "claim.source_citation || claim.owner" in INDEX_HTML
+
+
+# --- the operability layer --------------------------------------------------
+
+
+def test_the_palette_exists_before_the_script_that_binds_to_it() -> None:
+    """It was placed after the closing script tag first, so every element it
+    binds to was null at boot. Ordering, not logic."""
+    assert INDEX_HTML.index('id="palette"') < INDEX_HTML.index('<script type="module">')
+
+
+def test_the_palette_is_summoned_without_a_pointer() -> None:
+    assert 'event.key === "k" && (event.ctrlKey || event.metaKey)' in INDEX_HTML
+    assert 'event.key === "/" && !inATextField(event.target)' in INDEX_HTML
+
+
+def test_a_bare_slash_does_not_hijack_typing() -> None:
+    """Ctrl+K is safe anywhere. A bare slash is not, and stealing it from a
+    search box makes the search box unusable."""
+    assert "function inATextField(target)" in INDEX_HTML
+    assert "target.isContentEditable" in INDEX_HTML
+
+
+def test_the_palette_is_a_dialog_with_a_listbox() -> None:
+    assert 'role="dialog" aria-modal="true"' in INDEX_HTML
+    assert 'role="listbox"' in INDEX_HTML
+    assert 'role="option"' in INDEX_HTML
+
+
+def test_catalogue_rows_are_real_keyboard_targets() -> None:
+    """Arrow to move, Enter to open, without a pointer."""
+    assert 'tabindex="0" role="button"' in INDEX_HTML
+    assert "function moveTableFocus(step)" in INDEX_HTML
+
+
+def test_an_empty_comparison_cell_says_why_it_is_empty() -> None:
+    """In a comparison a blank is read as a finding. It almost never is."""
+    assert "function comparisonCell(cell)" in INDEX_HTML
+    assert '(cell || {}).absent || "not recorded"' in INDEX_HTML
+
+
+def test_a_failed_clipboard_write_says_so_rather_than_appearing_to_work() -> None:
+    """Clipboard access can be refused. The text stays selectable, which is
+    the fallback that always works."""
+    assert "Select the text and copy" in INDEX_HTML

@@ -658,6 +658,64 @@ store reports no change. Calibrated by restoring the wrong key: caught.
 `family_id`, idempotent by construction, skips a family the store does not
 hold, and never overwrites an edited assessment.
 
+## Phase 6, the operability layer: palette, keyboard, comparison, briefing
+
+`src/routes/operability.py` serves search, comparison and briefing;
+`src/comparison.py` assembles the side-by-side; `src/briefing.py` writes the
+house-style export. The interface adds a command palette and makes the
+catalogue keyboard-operable.
+
+● **The palette is summoned by Ctrl+K or Cmd+K anywhere, and by `/` only
+  outside a text field.** Stealing a bare slash from the search box makes the
+  search box unusable, so `inATextField` guards it.
+● **Search is a substring match, not a fuzzy score.** A palette that reorders
+  on its own is one an analyst cannot learn, and at this catalogue size there
+  is nothing to gain from cleverness. Families sort first: jumping to a class
+  is the coarser and commoner move.
+● **An empty comparison cell says why it is empty.** A comparison is a search
+  for differences, so a blank reads as a finding. "No robotic arm" and
+  "nobody has written down whether it has one" are different claims, and
+  `_cell` never returns a bare blank. Zero is a value, not an absence.
+● **The rows are the union of every subject's attributes.** Objects and
+  families do not share an attribute set, so taking the first subject's rows
+  would silently drop whatever the others carry.
+● **Two to four subjects.** One is not a comparison; past four the columns
+  are too narrow to read. A briefing accepts one, because briefing a single
+  object is the commoner task and refusing it would send an analyst to copy
+  the panel by hand, which is how provenance gets lost.
+
+**House style in the briefing is enforced, not described.** No em-dash, no
+double dash, no horizontal rules, `●` bullets, no `+` as a conjunction, and
+the classification banner then the point. `tests/test_briefing.py` checks
+those against text built from fixture content rather than from the store: the
+rules bind what this application writes, and failing a test because an
+analyst pasted an American spelling into a note would be the wrong scope.
+
+**Every statement in a briefing carries its marker, its confidence and its
+source.** A briefing that drops them turns an inference into a fact on its
+way to somebody else's desk, which is the worst thing this application could
+do. An unvalidated assessment says so twice: in the header count and beside
+the subject.
+
+**An object inherits its family's validation state.** Its baseline and its
+capabilities come from the family assessment, so an object briefing carried
+capabilities from an unvalidated assessment and said nothing about it until
+`_awaiting` was applied to both.
+
+**Two ordering traps, both found by driving the page.** The palette markup
+sat after the closing `</script>`, so every element it binds to was null at
+boot. And `Query(default=[])` in a signature is a mutable default in all but
+name (ruff B008), so the `ids` query parameter is a module-level singleton.
+
+**A mirror correction, with its evidence.** `test_no_duplicated_string_literals`
+began flagging a bare `" "` repeated inside f-strings. SonarQube has never
+reported a short separator against this repository, including on the upload
+that produced 26 findings in `seed_data.py` from a codebase already full of
+them, so the mirror was over-firing. `MIN_LENGTH = 5` is SonarQube's own
+documented default and sits comfortably below the shortest literal the
+platform has actually named here, "4 years" at seven characters. Two tests
+hold both ends of that floor.
+
 ## Architecture, briefly
 
 - `src/app.py` — app factory (`build_app`), CORS, two-tier rate limiting.
