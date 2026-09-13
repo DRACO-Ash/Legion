@@ -499,3 +499,40 @@ def test_the_graph_layout_is_deterministic() -> None:
     """A force layout would place the same neighbourhood differently on every
     visit, and an analyst comparing two objects would re-read it each time."""
     assert "function nodePosition(index, total)" in INDEX_HTML
+
+
+# --- the family assessment panel --------------------------------------------
+
+
+def test_the_headline_statement_carries_its_own_tone() -> None:
+    """A TBC one-line rendered as plain prose reads as established. Caught in
+    a browser on a family with no sourced assessment, which is exactly the
+    one where it matters."""
+    assert 'class="assess-line assess-stmt ${assessTone(a.one_line)}"' in INDEX_HTML
+
+
+def test_fact_and_assessment_are_visually_distinct() -> None:
+    """The reference-entry against analyst-assessment split, done with
+    provenance rather than layout."""
+    for tone in ["assess-fact", "assess-inference", "assess-speculation"]:
+        assert f".{tone}{{" in INDEX_HTML.replace(" ", "")
+    assert "function assessTone(claim)" in INDEX_HTML
+
+
+def test_awaiting_validation_is_decided_by_the_server() -> None:
+    """The most consequential line on the panel. A client-side derivation is
+    one refactor away from silently defaulting to validated."""
+    assert "assessment.awaiting_validation" in INDEX_HTML
+    assert "Awaiting validation" in INDEX_HTML
+
+
+def test_the_class_baseline_is_shown_so_a_deviation_reads_as_one() -> None:
+    """Phase 5's bar: a number in the chart is only legible as a deviation
+    against a stated baseline."""
+    assert "function baselineMarkup(assessment)" in INDEX_HTML
+    assert "Class manoeuvre baseline" in INDEX_HTML
+
+
+def test_every_assessment_statement_prints_its_source() -> None:
+    assert "function assessProvenance(claim)" in INDEX_HTML
+    assert "claim.source_citation || claim.owner" in INDEX_HTML

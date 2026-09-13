@@ -33,7 +33,7 @@ AUDIT_LOGGER_NAME = f"{APP_LOGGER_NAME}.audit"
 logger = logging.getLogger(f"{APP_LOGGER_NAME}.store")
 audit_logger = logging.getLogger(AUDIT_LOGGER_NAME)
 
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 STORE_FILENAME = "tracked_systems.json"
 
 # The compendium layer, added at schema_version 2. Held beside `systems`, never
@@ -271,6 +271,41 @@ def _apply_norad_corrections(data: dict[str, Any]) -> None:
                 record["updated_at"] = _now_iso()
 
 
+FAMILY_ASSESSMENTS = "family_assessments"
+
+
+def _add_family_assessments(data: dict[str, Any], seeds: Records) -> None:
+    """Schema 5 to 6: attach the seeded family assessments.
+
+    Keyed on `family_id`, which is the natural key and unique by definition,
+    so this is idempotent by construction. An analyst's edit to an assessment
+    outranks the shipped text: an existing entry is left exactly as it is.
+
+    A seed for a family the store does not hold is skipped rather than
+    stored, so a hand-pruned catalogue does not accumulate assessments for
+    classes it no longer carries.
+    """
+    compendium = data.setdefault("compendium", {})
+    assessments = compendium.setdefault(FAMILY_ASSESSMENTS, {})
+    families = {
+        str(record.get("family_id"))
+        for record in data.get("systems", {}).values()
+        if record.get("family_id")
+    }
+    now = _now_iso()
+    for seed in seeds:
+        family_id = str(seed.get("family_id") or "")
+        if not family_id or family_id in assessments or family_id not in families:
+            continue
+        assessments[family_id] = {
+            **seed,
+            "id": str(uuid.uuid4()),
+            "archived": False,
+            "created_at": now,
+            "updated_at": now,
+        }
+
+
 class StoreValidationError(Exception):
     """Raised when a record fails boundary validation before being written."""
 
@@ -281,6 +316,7 @@ class TrackedSystemsStore:
         seed_records: Records | None = None,
         candidate_records: Records | None = None,
         pol_seeds: Records | None = None,
+        assessment_seeds: Records | None = None,
     ):
         self._seed_records = seed_records or []
         # Kept apart from the seed records deliberately: these are not from
@@ -290,6 +326,9 @@ class TrackedSystemsStore:
         # Seeded behavioural history. Resolved against whatever catalogue the
         # store actually holds, so a seed naming an absent object is skipped.
         self._pol_seeds = pol_seeds or []
+        # Class-level synthesis, keyed by family_id and attached only to
+        # families the store actually holds.
+        self._assessment_seeds = assessment_seeds or []
         # Warn once per store, not once per write, if rename is unsupported.
         self._warned_rename_fallback = False
 
@@ -326,6 +365,9 @@ class TrackedSystemsStore:
         if version < 5:
             _apply_norad_corrections(data)
             data["schema_version"] = 5
+        if version < 6:
+            _add_family_assessments(data, self._assessment_seeds)
+            data["schema_version"] = 6
         return data
 
     def _seed(self) -> dict[str, Any]:
@@ -346,6 +388,7 @@ class TrackedSystemsStore:
         _add_compendium_layer(data)
         _add_candidate_systems(data, self._candidate_records)
         _add_pol_segments(data, self._pol_seeds)
+        _add_family_assessments(data, self._assessment_seeds)
         self._write_atomic(data)
         logger.info("Seeded tracked-systems store with %d records", len(systems))
         return data

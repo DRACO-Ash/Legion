@@ -604,6 +604,60 @@ Node ids are namespaced so they cannot collide: an object is its store id, a
 family is `family:<family_id>`, and a counterpart outside the catalogue keeps
 its `target:` slug.
 
+## Phase 5, the assessment layer: the reason the tool exists
+
+`src/assessment_seed.py` holds the content, `src/routes/families.py` serves
+it, and the interface renders it in the Family assessment panel. The
+catalogue holds attributes and the timeline holds behaviour; neither can tell
+an analyst whether a manoeuvre signature means inspection, servicing or
+attack. This holds what the class is, what it does, what its baseline is and
+what should raise concern.
+
+The content seed's own provenance self-check is now five tests rather than
+five checkboxes in a markdown file:
+
+● **Nothing loads as a bare fact.** Every statement is a `Claim`.
+● **A single-source claim loads at `moderate`, never `high`.** One stated
+  exception: CSIS calls SJ-21's capture the only confirmed instance in GEO,
+  so it is corroborated in the source itself. A test asserts every `high`
+  claim is that one.
+● **An unknown is a TBC claim with a named owner.** Six of the fifteen
+  families have no sourced assessment. They say so and name who writes one.
+  An absent family would read as nothing to say, which is a different claim.
+● **Nothing arrives validated.** Every seeded record loads with
+  `validated_by` unset. A seed that arrived validated would answer Ash's open
+  decision by default.
+● **A speculation is not quietly promoted.** The Olymp-2 jamming correlation
+  is carried as co-occurrence, with causation marked SPECULATION, because
+  CSIS says explicitly that the link is not clear.
+
+**Every catalogue family has an assessment and no assessment names a family
+the catalogue lacks.** The research writes at line level and the catalogue
+splits some lines across families: Nivelir is four, SY is two. An assessment
+keyed to a line that is not a family would never reach an analyst, and both
+directions are tested.
+
+**Signing off is a separate route from editing.** `POST
+/api/families/{id}/assessment/validation` takes a name, not a boolean,
+because with no application authentication the name is the whole record, and
+whitespace is refused: a validation by nobody is worse than none because it
+looks like one. Folding validation into the PATCH would let a routine
+correction carry a sign-off nobody intended. **Who is entitled to sign one
+off is still [DECISION - Ash] item 3** and is deliberately not encoded.
+
+**Two bugs worth keeping.** The headline statement rendered as plain prose
+while carrying a TBC claim, so a family with no sourced assessment read as
+established: the same mistake the provenance chips made in Phase 2, and
+caught the same way, in a browser. And the validation write was keyed by the
+record's uuid while the collection is keyed by `family_id`, so the store
+changed nothing and the route answered 200: **a silent no-op on a write is
+worse than an error**, and `_write` now refuses to report success when the
+store reports no change. Calibrated by restoring the wrong key: caught.
+
+**The store is at `schema_version` 6.** `_add_family_assessments` is keyed on
+`family_id`, idempotent by construction, skips a family the store does not
+hold, and never overwrites an edited assessment.
+
 ## Architecture, briefly
 
 - `src/app.py` — app factory (`build_app`), CORS, two-tier rate limiting.

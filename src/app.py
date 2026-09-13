@@ -19,6 +19,7 @@ from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from src._version import __version__
+from src.assessment_seed import SEED_ASSESSMENTS
 from src.cache import TTLCache
 from src.candidate_systems import CANDIDATE_RECORDS
 from src.config import Settings, load_settings
@@ -26,6 +27,7 @@ from src.family_elements import CACHE_TTL_SECONDS
 from src.pol_seed import SEED_SEGMENTS
 from src.routes import (
     claims,
+    families,
     graph,
     health,
     satcat,
@@ -172,6 +174,7 @@ def build_app(
         seed_records=SEED_RECORDS,
         candidate_records=CANDIDATE_RECORDS,
         pol_seeds=SEED_SEGMENTS,
+        assessment_seeds=SEED_ASSESSMENTS,
     )
 
     allowed_origins = [settings.allowed_origin] if settings.allowed_origin else []
@@ -191,6 +194,7 @@ def build_app(
     app.include_router(segments.router)
     app.include_router(satcat.router)
     app.include_router(graph.router)
+    app.include_router(families.router)
     app.include_router(ui.router)
 
     return app
