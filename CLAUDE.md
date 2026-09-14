@@ -882,6 +882,36 @@ undo by accident:
 Python, including that every path the UI fetches exists in the app's OpenAPI
 schema, and that catalogue values are escaped before reaching the markup.
 
+## All ten stages passed on 0.15.4
+
+**Confirmed by the platform, 14 September 2026.** Secret Detection,
+Dependencies, SAST, Dependency Scanning, Test, Code Quality, Dockerfile Lint,
+Container Build, Container Scan and Deploy are all green, and the application
+is Active. **Code Quality passed, which is the first time it has**: it was
+skipped at 0.4.3, failed at 0.15.0 with eighteen issues, at 0.15.2 with
+fourteen and at 0.15.3 with one.
+
+What got it there, in the order the effort actually went:
+
+● **The register, not the fixes.** Findings are cheap to fix and expensive to
+  discover. Writing down every rule the platform has fired, and running one
+  command before packaging, is what turned three failed uploads into a pass.
+● **Widening the mirrors to `scripts/`.** Nine of the fourteen findings at
+  0.15.2 were in a tree every local check had been ignoring.
+● **Bundling a real source change.** 0.15.4 would have failed
+  `code-quality-verify` on the coverage condition with no rule broken at all.
+
+The one thing that would have saved the most time is the least technical:
+`bump_version.sh` warned about the coverage condition and the warning was
+missed because its output was piped through `tail`. The script's own text
+warns against that.
+
+**So it is no longer a warning.** A condition no retry can clear should not be
+possible to ship by accident, so `bump_version.sh` now refuses the bump and
+`scripts/package.sh` refuses the build. `--allow-unmeasurable` overrides it,
+which makes shipping one a decision somebody made rather than something nobody
+saw.
+
 ## The rule register, and running the gate before packaging
 
 The 0.15.0 upload failed Code Quality with **eighteen new issues across eight
@@ -898,6 +928,13 @@ now close that:
   over-fires is a defect, not a nuisance; and it never comes out. The two
   conditions no mirror can catch (duplicated lines on new code, hotspots
   reviewed) are named there so nobody hunts for a check that cannot exist.
+● **`scripts/package.sh` is the one command that builds an upload.** It runs
+  every local check, refuses a release that changes no Python under
+  `sonar.sources`, builds the zip from the tag rather than the working tree,
+  checks the package contract the Dependency Scanning analyser needs, and then
+  **extracts the archive and runs the suite from inside it**. That last step is
+  the one that catches a dependency on an `export-ignore`d file, which passes
+  every test in the working tree and fails in the container.
 ● **`scripts/check-quality-gate.sh` is the one command before packaging.**
   Sonar mirrors, UI contracts, the full suite with coverage, `ruff check`,
   `ruff format --check`, `mypy`, `bandit`. It ends by naming what it cannot
@@ -925,9 +962,11 @@ Two things learned fixing them, both of which cost a browser run:
   `.palette{display:flex}` beat `dialog:not([open]){display:none}`, so the
   palette never hid and the slash guard, Escape and the whole catalogue
   keyboard read as broken. Overlay styling belongs on `.palette[open]`.
-● **The route-factory change is INFERENCE, not FACT.** `add_api_route` with
-  literal paths is believed to sit outside the rule, which targets the
-  decorator form. Confirm it on the next upload rather than assuming it.
+● **The route-factory change was INFERENCE and is now FACT.** `add_api_route`
+  with literal paths sits outside the route-path rule. Settled by the platform:
+  `object_lists.py` gained 33 lines in 0.15.2, so those registrations were
+  analysed as new code, and the rule did not fire in that upload's fourteen
+  findings or in either upload since.
 
 **The analysis reaches `scripts/`, whatever `sonar-project.properties` says.**
 The 0.15.2 upload reported fourteen issues and nine were in `scripts/`:
@@ -969,6 +1008,13 @@ entry, commits, tags — one command, don't do these by hand separately):
 
 ```bash
 ./scripts/bump_version.sh 0.5.0 "what changed, in one line"
+```
+
+Building an upload package. Checks, then builds from the tag, then tests the
+extracted archive. It refuses rather than building something that will fail:
+
+```bash
+./scripts/package.sh            # or: ./scripts/package.sh v0.15.4
 ```
 
 ## Standing instructions

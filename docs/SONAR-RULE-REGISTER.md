@@ -163,3 +163,15 @@ end to end.
 
 **Before applying a mechanical fix across a codebase, ask what property the
 old shape was providing by accident.**
+
+## Settled by 0.15.4: the route factory is outside the rule
+
+Carried as INFERENCE since 0.15.2: whether registering routes with
+`add_api_route` and literal paths avoids "a route path should be a literal
+string", which is written against the decorator form.
+
+It does. `src/routes/object_lists.py` gained 33 lines in 0.15.2, so the
+registrations were analysed as new code. The rule did not fire in that
+upload's fourteen findings, nor in 0.15.3, nor in the clean 0.15.4. **All ten
+stages passed on 0.15.4 and Code Quality was among them**, which is the first
+time that gate has ever passed for this application.
