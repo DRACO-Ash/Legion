@@ -47,6 +47,27 @@ FACT = "FACT"
 INFERENCE = "INFERENCE"
 UNKNOWN = "UNKNOWN"
 ALLOWED_SCHEMES = ("https", "http")
+
+# The notification filters the application actually sends. `window_hours` is
+# Legion's own parameter name, not UDL's: the client turns it into a
+# `createdAt` bound and sends three more filters that select the JCO HRR feed.
+# The first version of this script sent `window_hours` straight through, which
+# UDL does not have, and omitted the filters entirely, so it would have tested
+# a parameter that does not exist against a feed it had not selected. A check
+# that queries differently from the application it is checking proves
+# something about the wrong thing.
+NOTIFICATION_FILTERS: dict[str, str] = {
+    "dataMode": "REAL",
+    "msgType": "JCO-HRR-SATELLITES",
+    "source": "JCO",
+}
+
+
+def notification_params(window_hours: int) -> dict[str, str]:
+    """The query the application sends for a given window, reproduced exactly."""
+    return {"createdAt": f">now-{window_hours} hours", **NOTIFICATION_FILTERS}
+
+
 NOT_REACHED = (
     "UDL could not be reached, so this check did not run. Nothing is settled "
     "either way."
@@ -271,10 +292,10 @@ def run(args: argparse.Namespace) -> int:
     )
 
     _, short_body, _ = call(
-        "notification-short-window", "/udl/notification", {"window_hours": 1}
+        "notification-short-window", "/udl/notification", notification_params(1)
     )
     _, long_body, _ = call(
-        "notification-long-window", "/udl/notification", {"window_hours": 24}
+        "notification-long-window", "/udl/notification", notification_params(24)
     )
     window_marker, window_finding = window_verdict(
         count_of(short_body), count_of(long_body), reached=reachable_status != 0
@@ -380,6 +401,18 @@ def self_test() -> int:
         "the window check says the same when nothing was reached",
         NOT_REACHED,
         window_verdict(None, None, reached=False)[1],
+    )
+    check(
+        "T013",
+        "the window is sent as a createdAt bound, which is what UDL has",
+        ">now-6 hours",
+        notification_params(6)["createdAt"],
+    )
+    check(
+        "T014",
+        "the JCO HRR filters travel with it, so the right feed is selected",
+        {"dataMode", "msgType", "source", "createdAt"},
+        set(notification_params(6)),
     )
     check(
         "T011",
