@@ -912,6 +912,55 @@ possible to ship by accident, so `bump_version.sh` now refuses the bump and
 which makes shipping one a decision somebody made rather than something nobody
 saw.
 
+## The application may rank, and only indicatively
+
+**Ash's decision, 14 September 2026**, answering the open question from the
+interface concept: **the application may rank what needs attention as an
+indicative element only, and that ranking goes nowhere else.**
+
+The second half is the load-bearing one. "May rank" alone would let an
+ordering become a score, a score become a field, and a field become something
+a briefing carries to somebody else's desk. At that point the application
+would be asserting a judgement it cannot source, which is the one thing this
+codebase is built not to do.
+
+`src/ranking_policy.py` holds the rule, `GET /api/ranking-policy` serves it,
+and the interface reads the label rather than keeping a copy, exactly as it
+does for the classification marking and the validation policy. Four
+boundaries, each a test in `tests/test_ranking_policy.py`:
+
+● **A rank is computed for display and never stored.** Not a field on a
+  record, claim, segment or assessment, and no migration adds one.
+● **A rank never leaves the screen.** Absent from the briefing and the
+  comparison. A briefing carries every statement's marker, confidence and
+  source so a reader can weigh it; a bare ordinal carries none of those.
+● **A rank is not a claim and never wears a marker.** FACT, INFERENCE and
+  SPECULATION describe how well something is evidenced. An ordering is not
+  evidenced, and dressing it in that vocabulary would debase the vocabulary.
+● **The ordering inputs must themselves be sourced.** Ranking may arrange
+  facts the store already cites. It may not introduce a judgement of its own.
+
+**Three of those guards were worthless when first written, and each failed
+differently.** Worth carrying, because all three are the same trap in
+different clothes: a test that passes because it never looked.
+
+● **Two read the API and the API has a `response_model`.** A rank written
+  into every seeded record was stripped by Pydantic on the way out and the
+  test went green. "Never stored" is a claim about the file, so the guards
+  now read the store file on disk.
+● **One inspected an error body.** `/api/systems` ignores `limit`, so the
+  comparison guard sent all 56 ids, the endpoint answered 400 "compare
+  between 2 and 4 subjects", and the test cheerfully found no ranking in the
+  error message. Every export guard now asserts a 200 and a non-empty body
+  before inspecting it.
+● **One assumed a shape.** Comparison rows are plain label strings, not
+  objects with a `label` key. The guard read `.get("label")` off a string.
+
+All five sabotages are now caught: a rank in a record, a score on a claim, an
+ordering in a briefing, a Priority row in a comparison, and the label
+hard-coded in the markup. **Introduce the violation before believing the
+guard**, every time, and make the guard prove it examined the real thing.
+
 ## The rule register, and running the gate before packaging
 
 The 0.15.0 upload failed Code Quality with **eighteen new issues across eight

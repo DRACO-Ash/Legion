@@ -24,6 +24,7 @@ from src.comparison import (
     _object_subject as object_subject,
 )
 from src.graph import FAMILY_PREFIX
+from src.ranking_policy import policy as ranking_policy
 from src.store import FAMILY_ASSESSMENTS
 
 router = APIRouter(prefix="/api")
@@ -120,6 +121,18 @@ def _family_rows(records: list[dict[str, Any]], needle: str) -> list[dict[str, A
         if not needle or _matches(needle, haystack):
             rows.append(entry)
     return rows
+
+
+@router.get("/ranking-policy")
+def ranking_policy_endpoint():
+    """How far the application may order things, served rather than assumed.
+
+    The interface shows an ordered attention queue, so it has to tell the
+    reader what that order is worth. Those words come from here and not from
+    the markup, so the label an analyst sees and the boundaries the tests
+    enforce cannot drift apart.
+    """
+    return ranking_policy()
 
 
 @router.get("/search")
