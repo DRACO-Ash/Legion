@@ -177,7 +177,7 @@ def update_assessment(request: Request, family_id: str, patch: AssessmentUpdate)
         FamilyAssessment.model_validate(merged)
     except ValidationError as exc:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=readable(exc)
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=readable(exc)
         ) from exc
     _write(store, family_id, merged, actor=client_key(request))
     return _decorated(merged)

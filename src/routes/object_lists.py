@@ -119,7 +119,7 @@ def register_object_list(
             return model.model_validate(merged).model_dump()
         except ValidationError as exc:
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail=readable(exc),
             ) from exc
 
