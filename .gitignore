@@ -8,3 +8,6 @@ htmlcov/
 .venv/
 venv/
 *.egg-info/
+
+# Upload packages built by scripts/package.sh
+dist/
