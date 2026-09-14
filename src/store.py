@@ -19,10 +19,13 @@ queries. Move to Postgres only if that changes.
 
 from __future__ import annotations
 
+import functools
 import json
 import logging
 import os
+import threading
 import uuid
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -306,6 +309,34 @@ def _add_family_assessments(data: dict[str, Any], seeds: Records) -> None:
         }
 
 
+def _serialised(method: Callable[..., Any]) -> Callable[..., Any]:
+    """Hold the store lock across a whole read-modify-write.
+
+    Every writer here reads the file, changes the structure in memory and
+    writes it back. `os.replace` makes the write itself atomic, so nobody
+    ever sees half a store, but it does nothing about two writers reading the
+    same version and the second overwriting the first. That is a lost update,
+    and a lost update is silent: both requests answer 200 and one analyst's
+    edit is simply gone.
+
+    Until 0.15.3 nothing enforced this and nothing needed to, by accident:
+    every route handler was `async def` with no `await` in it, so each one ran
+    to completion on the event loop without yielding. Dropping the redundant
+    `async` keyword moves the handlers into a threadpool, where they really do
+    run at the same time, so the property that was free now has to be paid
+    for.
+
+    An `RLock` rather than a `Lock` because a writer may call another writer.
+    """
+
+    @functools.wraps(method)
+    def guarded(self: Any, *args: Any, **kwargs: Any) -> Any:
+        with self._lock:
+            return method(self, *args, **kwargs)
+
+    return guarded
+
+
 class StoreValidationError(Exception):
     """Raised when a record fails boundary validation before being written."""
 
@@ -331,6 +362,10 @@ class TrackedSystemsStore:
         self._assessment_seeds = assessment_seeds or []
         # Warn once per store, not once per write, if rename is unsupported.
         self._warned_rename_fallback = False
+        # Serialises every read-modify-write. See `_serialised` for why this
+        # became necessary the moment the route handlers stopped being
+        # pointlessly `async`.
+        self._lock = threading.RLock()
 
     def _store_path(self) -> Path:
         return _resolve_data_dir() / STORE_FILENAME
@@ -537,6 +572,7 @@ class TrackedSystemsStore:
         data = self._read_raw()
         return data["systems"].get(record_id)
 
+    @_serialised
     def create(self, record: dict[str, Any], actor: str = "unknown") -> dict[str, Any]:
         data = self._read_raw()
         record_id = str(uuid.uuid4())
@@ -559,6 +595,7 @@ class TrackedSystemsStore:
         )
         return stored
 
+    @_serialised
     def update(
         self, record_id: str, patch: dict[str, Any], actor: str = "unknown"
     ) -> dict[str, Any] | None:
@@ -581,6 +618,7 @@ class TrackedSystemsStore:
         )
         return merged
 
+    @_serialised
     def archive(self, record_id: str, actor: str = "unknown") -> dict[str, Any] | None:
         data = self._read_raw()
         existing = data["systems"].get(record_id)
@@ -621,6 +659,7 @@ class TrackedSystemsStore:
         data = self._read_raw()
         return data["compendium"][COMPENDIUM_OBJECTS].get(system_id)
 
+    @_serialised
     def update_compendium_object(
         self, system_id: str, patch: dict[str, Any], actor: str = "unknown"
     ) -> dict[str, Any] | None:
@@ -661,6 +700,7 @@ class TrackedSystemsStore:
         data = self._read_raw()
         return data["compendium"][self._require_collection(collection)].get(entity_id)
 
+    @_serialised
     def create_compendium(
         self, collection: str, record: dict[str, Any], actor: str = "unknown"
     ) -> dict[str, Any]:
@@ -687,6 +727,7 @@ class TrackedSystemsStore:
         _emit_audit(f"{name}_created", actor, entity_id=entity_id)
         return stored
 
+    @_serialised
     def update_compendium(
         self,
         collection: str,
@@ -713,6 +754,7 @@ class TrackedSystemsStore:
         )
         return merged
 
+    @_serialised
     def archive_compendium(
         self, collection: str, entity_id: str, actor: str = "unknown"
     ) -> dict[str, Any] | None:

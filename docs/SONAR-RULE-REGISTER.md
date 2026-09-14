@@ -9,6 +9,27 @@ before packaging.** The gate's only visible message is "Quality Gate FAILED",
 so a rule that is not in here costs an upload cycle to discover. A rule that
 is in here costs nothing.
 
+## The analysis reaches `scripts/`, whatever the properties file says
+
+The most expensive thing the 0.15.2 upload taught, and the reason nine of its
+fourteen findings were invisible here: **`sonar-project.properties` sets
+`sonar.sources=src`, and the platform reported issues in
+`scripts/check-quality-gate.sh` and `scripts/udl_live_check.py` anyway.**
+
+That is a FACT from a job report, not a theory about the scanner. Every mirror
+in this repository had read that property and scanned `src` and `tests`, so a
+shell script added the day before went to the platform completely unchecked
+and produced six findings on its own.
+
+Every mirror that walks a tree now walks `scripts/` too, and
+`test_scripts_are_scanned_by_every_mirror_that_walks_a_tree` fails if somebody
+narrows the set back on the strength of the properties file.
+
+**`scripts/` is still outside `ruff check src tests`, and that is still
+deliberate**, for the reason `CLAUDE.md` gives: the credentials loader is
+copied verbatim from the Script mode skill. Sonar analysing a tree and ruff
+linting it are separate questions, and the answers differ.
+
 ## The rule for this register
 
 ● **A rule goes in the moment the platform reports it**, never on a guess
@@ -52,6 +73,12 @@ somewhere a person will look.
 | Use `<datalist>` or `<select>` instead of the listbox role | 0.15.0 | `index.html`, the results list | same check as above |
 | "tabIndex" should only be declared on interactive elements | 0.15.0 | `index.html`, the briefing `<pre>` | `test_sonar_platform_rules.py::test_tabindex_only_on_interactive_elements` |
 | Prefer `.some(…)` over `.find(…)` | 0.15.0 | `index.html`, graph list | `test_sonar_platform_rules.py::test_find_is_not_used_as_a_boolean_test` |
+| Use '[[' instead of '[' for conditional tests | 0.15.2 | `check-quality-gate.sh`, 4 findings | `test_sonar_platform_rules.py::test_shell_conditionals_use_double_brackets` |
+| Add an explicit return statement at the end of the function | 0.15.2 | `check-quality-gate.sh`, the `run` helper | `test_sonar_platform_rules.py::test_shell_functions_return_explicitly` |
+| Assign this positional parameter to a local variable | 0.15.2 | `check-quality-gate.sh`, the `run` helper | `test_sonar_platform_rules.py::test_shell_functions_name_their_positional_parameters` |
+| Replace this comprehension with passing the iterable to the dict constructor | 0.15.2 | `udl_live_check.py` | `test_sonar_platform_rules.py::test_no_dict_comprehension_merely_copies` |
+| Use asynchronous features in this function or remove the `async` keyword | 0.15.2 | `object_lists.py`, 4 findings | `test_sonar_platform_rules.py::test_no_route_handler_is_async_without_awaiting` |
+| LLMs running this code with faulty CLI arguments can escape file system restrictions (Vulnerability) | 0.15.2 | `udl_live_check.py`, the `--out` flag | `test_sonar_platform_rules.py::test_a_caller_supplied_path_is_checked_before_it_is_written` |
 
 ## The two things a mirror cannot catch
 
@@ -71,7 +98,54 @@ measurable**, which means a release has to change a Python file under
 ● The nested-template check scanned **line by line** until 0.15.0, so a
   nesting spread across three lines passed. It now scans the whole script.
   Any check written against a single line has this weakness by construction.
+● **The `.find()` mirror missed the same rule twice.** Written at 0.15.0 from
+  the one instance in front of it, a `.find()` wrapped in `(… || {})`, it went
+  green while 0.15.2 reported a second instance that bound the result to a
+  name and then wrote `if(record)`. A mirror written from an example covers
+  the example. It now asks the rule's own question: is the found item ever
+  actually read? Calibrated against the two legitimate `.find()` calls in the
+  same file, where it is.
+● **A rule reported in one file is usually latent in twenty.** The gate counts
+  new issues, so the four async handlers it named were simply the four in the
+  file that changed; twenty-two more carried the identical shape and thirteen
+  single-bracket conditionals sat in two older shell scripts. All were fixed,
+  because each one was a gate failure waiting for its file to be edited. When
+  a mirror fires far beyond what the platform reported, that is usually the
+  mirror being right, not wrong.
 ● The duplicated-literal check has a `MIN_LENGTH` floor of 5, added when it
   began flagging a bare `" "` inside f-strings. That floor is SonarQube's own
   default and sits below the shortest literal the platform has reported here
   ("4 years", seven characters), but it is a judgement and it is recorded.
+
+## One mirror is deliberately narrower than its rule
+
+`test_no_route_handler_is_async_without_awaiting` scans `src` only, while
+every other Python mirror scans `src`, `tests` and `scripts`.
+
+The async test doubles in `tests/conftest.py` stand in for the UDL client's
+async interface and are awaited by the code under test, so they must stay
+`async` and cannot be fixed. The platform has only ever reported this rule in
+`src/routes/`. A mirror demanding an unfixable change is worse than no mirror,
+so the scope follows the evidence. If the platform ever reports it against a
+test double, that is a new entry here and a genuinely different problem.
+
+## Fixing a smell can introduce a defect
+
+Recorded because it nearly happened, and because "the gate asked for it" is
+not a safety argument.
+
+Dropping the redundant `async` keyword is the fix SonarQube names, and it is
+correct: an `async def` handler doing blocking file I/O holds the event loop.
+But it also moves every handler into a threadpool, where they genuinely run at
+once. Every write in `src/store.py` is read-modify-write, `os.replace` makes
+only the write itself atomic, and nothing held a lock. Two concurrent edits
+would both answer 200 and one would vanish.
+
+Proved rather than assumed: with the lock removed on purpose, twelve
+concurrent updates lost ten of themselves.
+`tests/test_store.py::test_concurrent_updates_do_not_lose_each_other` holds
+it, and twelve concurrent PATCHes against a real running server confirmed it
+end to end.
+
+**Before applying a mechanical fix across a codebase, ask what property the
+old shape was providing by accident.**

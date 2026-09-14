@@ -309,20 +309,83 @@ def test_no_nested_template_literal_anywhere_in_the_script() -> None:
     )
 
 
+TEST_SHAPES = (
+    r"if\s*\(\s*!?\s*{name}\s*\)",  # if(x) / if(!x)
+    r"!\s*{name}\b",  # !x anywhere
+    r"\b{name}\s*\?",  # x ? a : b
+    r"(?:&&|\|\|)\s*{name}\b",  # && x
+    r"\b{name}\s*(?:&&|\|\|)",  # x &&
+)
+
+
+def _uses_of(name: str, line: str) -> list[str]:
+    """Classify each mention of `name` as a truthiness test or a real read.
+
+    A read is anything that wants the found object: a dereference, an index,
+    a return, or being passed to something. The distinction is the whole of
+    the rule, and getting it wrong in the lenient direction is what let line
+    2001 through, while getting it wrong in the strict direction would flag
+    line 703, where the found column really is used.
+    """
+    found = []
+    for match in re.finditer(rf"\b{name}\b", line):
+        window = line[max(0, match.start() - 12) : match.end() + 6]
+        if any(re.search(shape.format(name=name), window) for shape in TEST_SHAPES):
+            found.append("test")
+        else:
+            found.append("read")
+    return found
+
+
+FIND_BINDING = re.compile(r"^\s*(?:const|let|var)\s+(\w+)\s*=\s*[\w.]+\.find\(")
+
+
+def _find_results_used_only_as_a_test(body: str) -> list[str]:
+    """Every `.find()` whose result is never actually read.
+
+    The scan stops at the end of the enclosing function, which in this file
+    is an unindented closing brace. Nothing here needs a JavaScript parser:
+    the question is only whether the bound name is ever dereferenced.
+    """
+    lines = body.splitlines()
+    offenders = []
+    for index, line in enumerate(lines):
+        binding = FIND_BINDING.match(line)
+        if not binding:
+            continue
+        name = binding.group(1)
+        uses = []
+        for follower in lines[index + 1 :]:
+            if follower.startswith("}"):
+                break
+            uses.extend(_uses_of(name, follower))
+        if uses and all(kind == "test" for kind in uses):
+            offenders.append(f"index.html script line {index + 1}: {name}")
+    return offenders
+
+
 def test_find_is_not_used_as_a_boolean_test() -> None:
     """SonarQube: "Prefer `.some(…)` over `.find(…)`."
 
     Reported against 0.15.0 where a `.find()` result was immediately
     defaulted and compared. `.some()` says what is meant, stops at the first
     match, and cannot be mistaken for code that wants the found item.
+
+    **Reported again at line 2001 on 0.15.2, and this mirror missed it**,
+    because the first version was written from the one instance in front of
+    it: a `.find()` wrapped in `(… || {})`. The rule is about the result
+    being used only as a truthiness test, and the second instance assigned it
+    to a name first and then wrote `if(record)`. The same mistake as the
+    line-based scanners: a mirror written from an example covers the example.
+
+    This version asks the question the rule asks. It takes every
+    `const NAME = ….find(…)` and looks at how NAME is used for the rest of
+    its function. If it is never dereferenced, never indexed and never
+    returned, then nothing wants the found item and `.some()` is what was
+    meant. Calibrated against the two legitimate uses in this same file,
+    at lines 703 and 800, where the value really is read.
     """
-    body = _script_body(INDEX_HTML)
-    offenders = [
-        match.group(0)[:70]
-        for match in re.finditer(
-            r"\(\s*[\w.]+\.find\([^;]{0,120}?\|\|\s*\{\}\s*\)", body
-        )
-    ]
+    offenders = _find_results_used_only_as_a_test(_script_body(INDEX_HTML))
     assert offenders == [], f"Use .some(...) to test, not .find(...): {offenders}"
 
 
@@ -347,3 +410,227 @@ def test_the_dialog_overlay_is_scoped_to_its_open_state() -> None:
     ]
     assert palette_rules, "The palette overlay rule has moved; re-check this."
     assert all("[open]" in rule for rule in palette_rules), palette_rules
+
+
+# --- scripts/ is analysed too, reported against 0.15.2 -----------------------
+#
+# The headline finding of the 0.15.2 upload, and the reason nine of its
+# fourteen issues were invisible here. `sonar-project.properties` sets
+# `sonar.sources=src`, and every mirror in this repository read that and
+# scanned `src` and `tests`. The platform reported issues in
+# `scripts/check-quality-gate.sh` and `scripts/udl_live_check.py` anyway.
+#
+# That is a FACT from a job report, not a theory about the scanner: whatever
+# the property says, the analysis reaches `scripts/`. Every mirror that walks
+# a tree must therefore walk this one as well.
+
+
+SCRIPTS = ROOT / "scripts"
+
+
+FUNCTION_OPENS = re.compile(r"^\s*(function\s+)?[\w:-]+\s*\(\)\s*\{")
+
+
+def _is_a_plain_copy(node: ast.DictComp) -> bool:
+    """True when the comprehension rebuilds its source unchanged."""
+    if len(node.generators) != 1:
+        return False
+    generator = node.generators[0]
+    if generator.ifs or not isinstance(generator.target, ast.Tuple):
+        return False
+    if not (isinstance(node.key, ast.Name) and isinstance(node.value, ast.Name)):
+        return False
+    names = [e.id for e in generator.target.elts if isinstance(e, ast.Name)]
+    return len(names) == 2 and [node.key.id, node.value.id] == names
+
+
+def _all_python_files() -> list[pathlib.Path]:
+    """Every Python file the platform has been observed to analyse."""
+    return sorted(
+        path
+        for tree in (SRC, ROOT / "tests", SCRIPTS)
+        for path in tree.rglob("*.py")
+        if "__pycache__" not in path.parts
+    )
+
+
+def _shell_files() -> list[pathlib.Path]:
+    return sorted(SCRIPTS.rglob("*.sh"))
+
+
+def _shell_bodies() -> list[tuple[pathlib.Path, list[str]]]:
+    return [
+        (path, path.read_text(encoding="utf-8").splitlines()) for path in _shell_files()
+    ]
+
+
+def test_scripts_are_scanned_by_every_mirror_that_walks_a_tree() -> None:
+    """The 0.15.2 lesson, pinned so it cannot quietly regress.
+
+    If someone narrows the file set back to `src` because the properties file
+    says `sonar.sources=src`, this fails and says why.
+    """
+    assert SCRIPTS.is_dir(), "scripts/ must exist for the mirrors to cover it"
+    scanned = {path.parts[-2] for path in _all_python_files()}
+    assert "scripts" in scanned, (
+        "The platform reported issues in scripts/ on 0.15.2 despite "
+        "sonar.sources=src. Every mirror must scan it."
+    )
+
+
+# --- Shell, reported against 0.15.2 -----------------------------------------
+
+
+def test_shell_conditionals_use_double_brackets() -> None:
+    """SonarQube: "Use '[[' instead of '[' for conditional tests."
+
+    Six of the fourteen findings on 0.15.2, all in one new shell script. The
+    single-bracket form word-splits an unquoted expansion and does not support
+    pattern matching, so the rule is a real one rather than a style
+    preference.
+    """
+    offenders = [
+        f"{path.relative_to(ROOT)}:{number}"
+        for path, lines in _shell_bodies()
+        for number, line in enumerate(lines, 1)
+        if re.search(r"(^|[;&|]|\b(?:if|while|until|elif))\s*!?\s*\[\s", line)
+        and not re.search(r"\[\[", line)
+    ]
+    assert offenders == [], f"Use [[ ]] for shell conditionals: {offenders}"
+
+
+def test_shell_functions_return_explicitly() -> None:
+    """SonarQube: "Add an explicit return statement at the end of the function."
+
+    Without one a function returns the status of whatever ran last, which
+    makes its exit code an accident of its final line rather than a decision.
+    """
+    offenders = []
+    for path, lines in _shell_bodies():
+        open_at = None
+        for number, line in enumerate(lines, 1):
+            if re.match(r"^\s*(function\s+)?[\w:-]+\s*\(\)\s*\{", line):
+                open_at = number
+            elif open_at is not None and re.match(r"^\}", line):
+                body = lines[open_at : number - 1]
+                if not any(re.match(r"^\s*return\b", entry) for entry in body):
+                    offenders.append(f"{path.relative_to(ROOT)}:{open_at}")
+                open_at = None
+    assert offenders == [], f"A shell function needs an explicit return: {offenders}"
+
+
+def _bare_positional(line: str) -> bool:
+    """A positional parameter used directly, rather than named first."""
+    stripped = line.split("#", 1)[0]
+    if not re.search(r"\$\{?[1-9]\}?", stripped):
+        return False
+    return not re.match(r"^\s*local\s+\w+=", stripped)
+
+
+def _function_body_lines(lines: list[str]) -> list[tuple[int, str]]:
+    """Every line inside a shell function, with its 1-based number."""
+    found: list[tuple[int, str]] = []
+    inside = False
+    for number, line in enumerate(lines, 1):
+        if FUNCTION_OPENS.match(line):
+            inside = True
+        elif inside and line.startswith("}"):
+            inside = False
+        elif inside:
+            found.append((number, line))
+    return found
+
+
+def test_shell_functions_name_their_positional_parameters() -> None:
+    """SonarQube: "Assign this positional parameter to a local variable."
+
+    `$1` deep inside a function body says nothing about what it holds. A
+    named local does, and it survives a later `shift`.
+    """
+    offenders = [
+        f"{path.relative_to(ROOT)}:{number}"
+        for path, lines in _shell_bodies()
+        for number, line in _function_body_lines(lines)
+        if _bare_positional(line)
+    ]
+    assert offenders == [], (
+        f"Assign a positional parameter to a named local first: {offenders}"
+    )
+
+
+# --- Python in scripts/, reported against 0.15.2 ----------------------------
+
+
+def test_no_dict_comprehension_merely_copies() -> None:
+    """SonarQube: "Replace this comprehension with passing the iterable to the
+    dict constructor call."
+
+    `{k: v for k, v in items.items()}` is `dict(items)` written long. The
+    comprehension form hides that nothing is being filtered or transformed.
+    """
+    offenders = [
+        f"{path.relative_to(ROOT)}:{node.lineno}"
+        for path in _all_python_files()
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8")))
+        if isinstance(node, ast.DictComp) and _is_a_plain_copy(node)
+    ]
+    assert offenders == [], (
+        f"Use dict(...) rather than a copying comprehension: {offenders}"
+    )
+
+
+def test_a_caller_supplied_path_is_checked_before_it_is_written() -> None:
+    """SonarQube, reported as a Vulnerability on 0.15.2: "LLMs running this
+    code with faulty CLI arguments can escape file system restrictions."
+
+    `--out` is caller input and went straight to `Path(...).write_text`. The
+    same class of hole as the `--base-url` one `checked_url` already closes,
+    and it is closed the same way: a named checker, used at the boundary.
+    """
+    source = (SCRIPTS / "udl_live_check.py").read_text(encoding="utf-8")
+    assert "def checked_out_path(" in source, (
+        "A caller-supplied output path needs a named validator"
+    )
+    written = re.findall(r"Path\(([^)]*)\)\.write_text", source)
+    unchecked = [call for call in written if "checked_out_path" not in call]
+    assert unchecked == [], f"Validate the path before writing to it: {unchecked}"
+
+
+# --- FastAPI async handlers, reported against 0.15.2 ------------------------
+
+
+def test_no_route_handler_is_async_without_awaiting() -> None:
+    """SonarQube: "Use asynchronous features in this function or remove the
+    `async` keyword."
+
+    Four findings on 0.15.2, all in `object_lists.py`, and the rest of the
+    route modules carry the same shape. They were not reported only because
+    the gate counts new issues, so every one of them is a failure waiting for
+    its file to be edited.
+
+    It is not only a smell. An `async def` handler runs on the event loop, so
+    a blocking store read or write holds every other request. A plain `def`
+    handler runs in a threadpool, which is what this application actually
+    wants.
+
+    **Scoped to `src` on purpose, and this is the one over-fire correction
+    made when the mirror was calibrated.** The test doubles in
+    `tests/conftest.py` stand in for the UDL client's async interface and are
+    awaited by the code under test, so they must stay `async` and cannot be
+    fixed. The platform has only ever reported this rule in `src/routes/`. If
+    it ever reports it against a test double, that is a new register entry
+    and a different problem: a mirror demanding an unfixable change is worse
+    than no mirror.
+    """
+    offenders = []
+    for path in _python_files():
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+            if not isinstance(node, ast.AsyncFunctionDef):
+                continue
+            awaits = any(
+                isinstance(inner, (ast.Await, ast.AsyncFor, ast.AsyncWith))
+                for inner in ast.walk(node)
+            )
+            if not awaits:
+                offenders.append(f"{path.relative_to(ROOT)}:{node.lineno} {node.name}")
+    assert offenders == [], f"Drop the async keyword or await something: {offenders}"

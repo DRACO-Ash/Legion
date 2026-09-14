@@ -17,5 +17,5 @@ _UI_PATH = Path(__file__).resolve().parent.parent / "static" / "index.html"
 
 
 @router.get("/", response_class=HTMLResponse)
-async def root():
+def root():
     return _UI_PATH.read_text(encoding="utf-8")

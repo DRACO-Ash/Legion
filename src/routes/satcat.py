@@ -19,7 +19,7 @@ NOT_IN_SNAPSHOT = "That catalogue number is not in the snapshot"
 
 
 @router.get("/reconciliation")
-async def satcat_reconciliation(request: Request):
+def satcat_reconciliation(request: Request):
     """Where the catalogue and the snapshot disagree.
 
     A wrong catalogue number is the failure nothing else here catches: it
@@ -31,7 +31,7 @@ async def satcat_reconciliation(request: Request):
 
 
 @router.get("/{norad_id}")
-async def satcat_object(norad_id: str):
+def satcat_object(norad_id: str):
     """One row, for looking something up without leaving the application."""
     row = load_extract().get(norad_id)
     if row is None:

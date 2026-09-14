@@ -37,7 +37,7 @@ def _gate_write(request: Request) -> None:
 
 
 @router.get("", response_model=TrackedSystemList)
-async def list_systems(
+def list_systems(
     request: Request,
     nation: str | None = None,
     regime: str | None = None,
@@ -57,7 +57,7 @@ async def list_systems(
 
 
 @router.get("/{system_id}", response_model=TrackedSystem)
-async def get_system(request: Request, system_id: str):
+def get_system(request: Request, system_id: str):
     store = request.app.state.systems_store
     record = store.get(system_id)
     if record is None:
@@ -68,14 +68,14 @@ async def get_system(request: Request, system_id: str):
 
 
 @router.post("", response_model=TrackedSystem, status_code=status.HTTP_201_CREATED)
-async def create_system(request: Request, payload: TrackedSystemCreate):
+def create_system(request: Request, payload: TrackedSystemCreate):
     _gate_write(request)
     store = request.app.state.systems_store
     return store.create(payload.model_dump(), actor=client_key(request))
 
 
 @router.patch("/{system_id}", response_model=TrackedSystem)
-async def update_system(request: Request, system_id: str, payload: TrackedSystemUpdate):
+def update_system(request: Request, system_id: str, payload: TrackedSystemUpdate):
     _gate_write(request)
     store = request.app.state.systems_store
     updated = store.update(
@@ -89,7 +89,7 @@ async def update_system(request: Request, system_id: str, payload: TrackedSystem
 
 
 @router.delete("/{system_id}", response_model=TrackedSystem)
-async def archive_system(request: Request, system_id: str):
+def archive_system(request: Request, system_id: str):
     """Archives rather than deletes, per data-layer: a lifecycle-ended
     record stays auditable instead of vanishing."""
     _gate_write(request)

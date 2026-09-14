@@ -20,7 +20,12 @@ SRC = ROOT / "src"
 # sonar-project.properties sets sonar.tests=tests, so the platform counts
 # duplicated literals in the test tree too. Scanning only src let a new issue
 # through in 0.4.7 and failed the gate.
-SCANNED_TREES = (SRC, ROOT / "tests")
+#
+# scripts/ was added after 0.15.2, where the platform reported issues in
+# scripts/udl_live_check.py and scripts/check-quality-gate.sh even though
+# sonar-project.properties says sonar.sources=src. Whatever that property
+# says, the analysis reaches scripts/. Observed, not theorised.
+SCANNED_TREES = (SRC, ROOT / "tests", ROOT / "scripts")
 INDEX_HTML = SRC / "static" / "index.html"
 
 # S1192 fires on a literal repeated three or more times. Empirically the

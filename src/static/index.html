@@ -1998,8 +1998,8 @@ async function choosePaletteRow(addToComparison){
     await focusGraphNode(row.id);
     return;
   }
-  const record = currentList.find(s => s.id === row.id);
-  if(record) selectSystem(row.id); else await focusGraphNode(row.id);
+  const inCatalogue = currentList.some(s => s.id === row.id);
+  if(inCatalogue) selectSystem(row.id); else await focusGraphNode(row.id);
 }
 
 function addToCompare(row){

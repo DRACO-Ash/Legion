@@ -1,4 +1,6 @@
 import json
+import threading
+from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 
@@ -306,3 +308,57 @@ def test_corrupt_store_file_falls_back_to_reseed(tmp_path, monkeypatch):
     )
     records = store.list()
     assert len(records) == 1
+
+
+def test_concurrent_updates_do_not_lose_each_other(store):
+    """The lock earns its place, or it comes out.
+
+    Every writer here reads the whole store, changes it in memory and writes
+    it back. `os.replace` makes the write atomic, so no reader sees half a
+    store, but two writers that both read version N and both write N+1 lose
+    one of the two edits, and lose it silently: both calls answer 200.
+
+    That could not happen while every route handler was `async def` with no
+    `await` in it, because each ran to completion on the event loop without
+    yielding. Dropping the redundant `async` moves them into a threadpool,
+    where they genuinely run at once, so the property has to be enforced
+    rather than inherited.
+
+    Calibrated by removing `@_serialised` from `Store.update`: this fails,
+    reporting the writes that went missing.
+    """
+    record = store.create(
+        {
+            "family_id": "race",
+            "family_title": "Race",
+            "family_sub": "s",
+            "nation": "RU",
+            "designator": None,
+            "catalogue_name": "RACESAT",
+            "launch_year": 2020,
+            "launch_site": None,
+            "norad_id": None,
+            "regime": "LEO",
+            "delta_v": None,
+            "status": "unknown",
+            "life": None,
+            "coplanar": None,
+            "notes": None,
+            "flag": None,
+        }
+    )
+
+    writers = 12
+    barrier = threading.Barrier(writers)
+
+    def write(index: int) -> None:
+        barrier.wait()  # start together, so the reads really do overlap
+        store.update(record["id"], {f"note_{index}": index})
+
+    with ThreadPoolExecutor(max_workers=writers) as pool:
+        list(pool.map(write, range(writers)))
+
+    stored = store.get(record["id"])
+    assert stored is not None
+    missing = [index for index in range(writers) if f"note_{index}" not in stored]
+    assert missing == [], f"Updates were silently lost: {missing}"

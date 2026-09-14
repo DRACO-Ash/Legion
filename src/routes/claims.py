@@ -31,7 +31,7 @@ CLAIM_NOT_FOUND = "No claim with that id on this system"
 
 
 @router.get("/provenance/legend")
-async def provenance_legend():
+def provenance_legend():
     """What the markers, confidence levels and source classes mean.
 
     Served rather than hard-coded in the interface so the words an analyst

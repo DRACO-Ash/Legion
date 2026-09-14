@@ -15,8 +15,8 @@ set -uo pipefail
 cd "$(dirname "$0")/.."
 
 PY="${PYTHON:-}"
-if [ -z "$PY" ]; then
-  if [ -x .venv/bin/python ]; then PY=.venv/bin/python; else PY=python3; fi
+if [[ -z "$PY" ]]; then
+  if [[ -x .venv/bin/python ]]; then PY=.venv/bin/python; else PY=python3; fi
 fi
 echo "Interpreter: $("$PY" -c 'import sys; print(sys.executable, sys.version.split()[0])')"
 
@@ -24,7 +24,7 @@ missing=""
 for module in pytest ruff mypy bandit fastapi; do
   "$PY" -c "import $module" 2>/dev/null || missing="$missing $module"
 done
-if [ -n "$missing" ]; then
+if [[ -n "$missing" ]]; then
   echo
   echo "This interpreter cannot import:$missing"
   echo "Activate the project venv, or run: PYTHON=/path/to/python $0"
@@ -34,9 +34,11 @@ fi
 
 fail=0
 run() {
-  printf '\n=== %s ===\n' "$1"
+  local label="$1"
   shift
+  printf '\n=== %s ===\n' "$label"
   if "$@"; then :; else fail=1; fi
+  return 0
 }
 
 run "SonarQube rule mirrors" \
@@ -50,7 +52,7 @@ run "Types" "$PY" -m mypy src
 run "Security" "$PY" -m bandit -q -r src
 
 printf '\n========================================================\n'
-if [ "$fail" -ne 0 ]; then
+if [[ "$fail" -ne 0 ]]; then
   echo "FAIL. Fix the above before packaging."
   exit 1
 fi

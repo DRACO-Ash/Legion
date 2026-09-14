@@ -18,7 +18,7 @@ STORAGE_PROBE_TIMEOUT_SECONDS = 3.0
 
 
 @router.get("/version")
-async def version():
+def version():
     """Service identity, and the classification posture it operates under.
 
     The marking is served rather than hard-coded in the interface so one
@@ -35,7 +35,7 @@ async def version():
 
 
 @router.get("/healthz")
-async def healthz():
+def healthz():
     # Liveness: dependency-free, never checks storage or UDL, so a transient
     # storage or upstream outage never restarts an otherwise-healthy container.
     return {"status": "ok"}

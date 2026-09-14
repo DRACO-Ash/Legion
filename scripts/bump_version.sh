@@ -9,7 +9,7 @@
 
 set -euo pipefail
 
-if [ $# -lt 2 ]; then
+if [[ $# -lt 2 ]]; then
   echo "Usage: $0 <new_version> \"<changelog summary>\"" >&2
   exit 1
 fi
@@ -25,12 +25,12 @@ if ! [[ "$NEW_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
   exit 1
 fi
 
-if [ ! -d "$REPO_ROOT/.git" ]; then
+if [[ ! -d "$REPO_ROOT/.git" ]]; then
   echo "Error: no git repository at $REPO_ROOT. Run 'git init' first." >&2
   exit 1
 fi
 
-if [ -n "$(git -C "$REPO_ROOT" status --porcelain)" ] && [ -n "$(git -C "$REPO_ROOT" status --porcelain -- . ':!src/VERSION' ':!CHANGELOG.md' ':!pyproject.toml')" ]; then
+if [[ -n "$(git -C "$REPO_ROOT" status --porcelain)" && -n "$(git -C "$REPO_ROOT" status --porcelain -- . ':!src/VERSION' ':!CHANGELOG.md' ':!pyproject.toml')" ]]; then
   echo "Error: working tree has uncommitted changes beyond VERSION/CHANGELOG. Commit or stash first." >&2
   exit 1
 fi
@@ -49,7 +49,7 @@ TODAY="$(date -u +%Y-%m-%d)"
 # Quality gate has five conditions".
 PREV_TAG="v$CURRENT_VERSION"
 if git -C "$REPO_ROOT" rev-parse -q --verify "$PREV_TAG" >/dev/null 2>&1; then
-  if [ -z "$(git -C "$REPO_ROOT" diff --name-only "$PREV_TAG" HEAD -- 'src/**.py' 'src/*.py')" ]; then
+  if [[ -z "$(git -C "$REPO_ROOT" diff --name-only "$PREV_TAG" HEAD -- 'src/**.py' 'src/*.py')" ]]; then
     echo "WARNING: no Python file under src/ has changed since $PREV_TAG." >&2
     echo "         SonarQube measures coverage on new code, so if $PREV_TAG is" >&2
     echo "         what the App Store already holds, code-quality-verify will" >&2
@@ -81,7 +81,7 @@ mv "$TMP_CHANGELOG" "$CHANGELOG_FILE"
 # pyproject.toml carries the version too (it pairs with requirements.txt for
 # the Dependency Scanning analyser). Keep it in step here rather than by hand.
 PYPROJECT_FILE="$REPO_ROOT/pyproject.toml"
-if [ -f "$PYPROJECT_FILE" ]; then
+if [[ -f "$PYPROJECT_FILE" ]]; then
   python3 - "$PYPROJECT_FILE" "$NEW_VERSION" <<'PY'
 import re, sys
 path, version = sys.argv[1], sys.argv[2]

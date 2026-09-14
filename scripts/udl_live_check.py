@@ -139,6 +139,29 @@ def checked_url(candidate: str) -> str:
     return candidate.rstrip("/")
 
 
+def checked_out_path(candidate: str) -> Path:
+    """An output path that is safe to write to.
+
+    `--out` is caller input, and the same reasoning as `checked_url` applies:
+    a mistyped or hostile flag should not be able to write outside the
+    directory the operator is standing in. The path is resolved first, so
+    `../` and a symlink in the middle are both taken into account rather than
+    pattern-matched away, and then it must still sit under the working
+    directory.
+
+    Resolving before comparing is the whole of it. A check on the raw string
+    can be walked straight past with a symlink, which is why this refuses on
+    the resolved path and nothing else.
+    """
+    root = Path.cwd().resolve()
+    resolved = (root / candidate).resolve()
+    if resolved == root or root not in resolved.parents:
+        raise ValueError(
+            f"Output path must be inside {root}, not {candidate!r}"
+        )
+    return resolved
+
+
 def _request(url: str, auth_header: str) -> tuple[int, Any, str]:
     """One GET. Returns (status, parsed body or None, note).
 
@@ -256,7 +279,7 @@ def run(args: argparse.Namespace) -> int:
     try:
         base = checked_url(args.base_url)
     except ValueError as exc:
-        logging.error("%s", exc)
+        logging.exception("Refusing the base URL: %s", exc)
         return 1
     checks: list[dict[str, Any]] = []
 
@@ -269,7 +292,7 @@ def run(args: argparse.Namespace) -> int:
             {
                 "check": name,
                 "path": path,
-                "parameters": {k: v for k, v in params.items()},
+                "parameters": dict(params),
                 "status": status,
                 "records": count_of(body),
                 "note": note,
@@ -322,8 +345,13 @@ def run(args: argparse.Namespace) -> int:
     }
     text = json.dumps(report, indent=2)
     if args.out:
-        Path(args.out).write_text(text + "\n", encoding="utf-8")
-        logging.info("Wrote %s", args.out)
+        try:
+            destination = checked_out_path(args.out)
+        except ValueError as exc:
+            logging.exception("Refusing the output path: %s", exc)
+            return 1
+        destination.write_text(text + "\n", encoding="utf-8")
+        logging.info("Wrote %s", destination)
     else:
         print(text)
     return 0 if report["reachable"] else 1
@@ -336,6 +364,15 @@ def _refuses(candidate: str) -> bool:
     """True when `checked_url` rejects a candidate. Used by the self-test."""
     try:
         checked_url(candidate)
+    except ValueError:
+        return True
+    return False
+
+
+def _refuses_out(candidate: str) -> bool:
+    """True when `checked_out_path` rejects a candidate."""
+    try:
+        checked_out_path(candidate)
     except ValueError:
         return True
     return False
@@ -419,6 +456,24 @@ def self_test() -> int:
         "a file: base URL is refused before any request is made",
         True,
         _refuses("file:///etc/passwd"),
+    )
+    check(
+        "T015",
+        "an absolute --out path outside the working directory is refused",
+        True,
+        _refuses_out("/etc/passwd"),
+    )
+    check(
+        "T016",
+        "a traversing --out path is refused on the resolved path, not the text",
+        True,
+        _refuses_out("reports/../../escape.json"),
+    )
+    check(
+        "T017",
+        "an ordinary relative --out path is still accepted",
+        False,
+        _refuses_out("udl-check.json"),
     )
     check(
         "T012",

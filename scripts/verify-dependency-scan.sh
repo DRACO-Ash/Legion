@@ -41,7 +41,7 @@ REPO="https://gitlab.com/gitlab-org/security-products/analyzers/dependency-scann
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
-if [ -n "${DS_ANALYZER_BIN:-}" ]; then
+if [[ -n "${DS_ANALYZER_BIN:-}" ]]; then
   ANALYZER="$DS_ANALYZER_BIN"
 else
   echo "Cloning and building the analyser (this takes a few minutes)..."
@@ -65,14 +65,14 @@ GITLAB_FEATURES=dependency_scanning SECURE_LOG_LEVEL=debug "$ANALYZER" run 2>&1 
 status=${PIPESTATUS[0]}
 set -e
 
-if [ "$status" -ne 0 ]; then
+if [[ "$status" -ne 0 ]]; then
   echo "DIAGNOSTIC ONLY (see header): analyser exited $status."
   echo "      This does NOT mean the platform gate will fail."
   exit 1
 fi
 
 sbom=$(ls gl-sbom-*.cdx.json 2>/dev/null | head -1 || true)
-if [ -z "$sbom" ]; then
+if [[ -z "$sbom" ]]; then
   echo "FAIL: analyser exited 0 but produced no SBOM. The gate needs one."
   exit 1
 fi

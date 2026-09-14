@@ -123,16 +123,14 @@ def register_object_list(
                 detail=readable(exc),
             ) from exc
 
-    async def list_entries(
-        request: Request, system_id: str, include_archived: bool = False
-    ):
+    def list_entries(request: Request, system_id: str, include_archived: bool = False):
         entries = layer_or_404(request, system_id).get(field, [])
         shown = entries if include_archived else _live(entries)
         return {"system_id": system_id, "count": len(shown), plural: shown}
 
     # mypy cannot follow a type held in a closure variable, which is the
     # whole point of the factory. FastAPI resolves it at decoration time.
-    async def create_entry(request: Request, system_id: str, entry: model):  # type: ignore[valid-type]
+    def create_entry(request: Request, system_id: str, entry: model):  # type: ignore[valid-type]
         """The body is the full model, so every rule runs at the boundary
         before anything is written and the store never sees a bad entry."""
         layer = layer_or_404(request, system_id)
@@ -140,7 +138,7 @@ def register_object_list(
         _write(request, system_id, [*layer.get(field, []), stored])
         return stored
 
-    async def update_entry(
+    def update_entry(
         request: Request,
         system_id: str,
         entry_id: str,
@@ -162,7 +160,7 @@ def register_object_list(
         )
         return merged
 
-    async def archive_entry(request: Request, system_id: str, entry_id: str):
+    def archive_entry(request: Request, system_id: str, entry_id: str):
         """Archive, never delete. A withdrawn entry stays visible to anyone
         who asks for archived ones, so an analyst can see that something was
         asserted and later pulled rather than finding a silent gap."""

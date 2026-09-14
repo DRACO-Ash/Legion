@@ -123,7 +123,7 @@ def _family_rows(records: list[dict[str, Any]], needle: str) -> list[dict[str, A
 
 
 @router.get("/search")
-async def search(request: Request, q: Search = ""):
+def search(request: Request, q: Search = ""):
     """Everything an analyst might jump to, ranked plainly.
 
     Deliberately a substring match rather than a fuzzy score. A palette that
@@ -154,13 +154,13 @@ def _subjects_or_400(request: Request, ids: list[str]) -> list[dict[str, Any]]:
 
 
 @router.get("/compare")
-async def compare(request: Request, ids: Ids = None):
+def compare(request: Request, ids: Ids = None):
     """Two to four objects or families, side by side."""
     return build_comparison(_subjects_or_400(request, ids or []))
 
 
 @router.get("/briefing")
-async def briefing(request: Request, ids: Ids = None):
+def briefing(request: Request, ids: Ids = None):
     """The paste-ready write-up, in house style, provenance carried.
 
     One subject is allowed here although a comparison needs two: briefing a

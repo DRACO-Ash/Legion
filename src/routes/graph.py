@@ -27,20 +27,20 @@ def _graph(request: Request) -> dict:
 
 
 @router.get("/vocabulary")
-async def graph_vocabulary():
+def graph_vocabulary():
     """What each edge kind and node type means."""
     return edge_vocabulary()
 
 
 @router.get("")
-async def whole_graph(request: Request):
+def whole_graph(request: Request):
     """Every node and edge. The interface navigates it a step at a time, but
     the counts and the filters need the whole thing."""
     return _graph(request)
 
 
 @router.get("/{node_id:path}")
-async def node_neighbourhood(request: Request, node_id: str):
+def node_neighbourhood(request: Request, node_id: str):
     """One node, its edges, and what is on the other end of them."""
     result = neighbourhood(_graph(request), node_id)
     if result["focus"] is None:

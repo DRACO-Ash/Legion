@@ -929,6 +929,31 @@ Two things learned fixing them, both of which cost a browser run:
   literal paths is believed to sit outside the rule, which targets the
   decorator form. Confirm it on the next upload rather than assuming it.
 
+**The analysis reaches `scripts/`, whatever `sonar-project.properties` says.**
+The 0.15.2 upload reported fourteen issues and nine were in `scripts/`:
+`check-quality-gate.sh` produced six on its own, the day after it was written.
+`sonar.sources=src` had been taken at face value by every mirror here. Whatever
+that property configures, the analysis covers `scripts/` as well, so every
+mirror walks it now. That is separate from linting: `scripts/` stays outside
+`ruff check src tests` for the Script mode reason given above.
+
+**Route handlers are plain `def`, not `async def`, and the store holds a lock
+because of it.** Sonar's "remove the `async` keyword" is correct on its own
+terms, and it is also the more correct shape: an `async def` handler doing
+blocking file I/O holds the event loop for every other request. But a plain
+`def` handler runs in a threadpool, and until 0.15.3 the only thing serialising
+the store's read-modify-write cycles was that no handler ever yielded. With
+that gone, two concurrent edits both answer 200 and one disappears. `_serialised`
+in `src/store.py` wraps every writer, and it was calibrated by removing it:
+twelve concurrent updates lost ten. Do not take the decorator off, and do not
+put `async` back on a handler that awaits nothing.
+
+**The general lesson, which is bigger than either:** before applying a
+mechanical fix across a codebase, ask what property the old shape was providing
+by accident. And when a mirror fires far beyond what the platform reported,
+that is usually the mirror being right: the gate counts new issues, so it names
+only the instances in the file that changed.
+
 ## Working in this repo
 
 ```bash

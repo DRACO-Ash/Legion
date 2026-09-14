@@ -24,7 +24,7 @@ SEGMENT_NOT_FOUND = "No segment with that id on this system"
 
 
 @router.get("/pol/modes")
-async def pol_modes():
+def pol_modes():
     """What each behavioural mode means, and how it is drawn.
 
     Served rather than hard-coded so the words an analyst reads cannot drift
@@ -35,7 +35,7 @@ async def pol_modes():
 
 
 @router.get("/objects/{system_id}/timeline")
-async def object_timeline(request: Request, system_id: str):
+def object_timeline(request: Request, system_id: str):
     """The object's assessed history, placed on a time axis and sorted.
 
     A read-side assembler rather than work the interface does. The epoch

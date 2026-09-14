@@ -128,7 +128,7 @@ def _write(store, family_id: str, merged: dict[str, Any], actor: str) -> None:
 
 
 @router.get("/validation-policy")
-async def validation_policy():
+def validation_policy():
     """Who may sign an assessment off, served rather than hard-coded.
 
     The interface must not carry its own copy of the rule: the words an
@@ -139,7 +139,7 @@ async def validation_policy():
 
 
 @router.get("")
-async def list_families(request: Request):
+def list_families(request: Request):
     """Every family, whether it has an assessment, and whether it is signed."""
     assessments = _assessments(request)
     rows = []
@@ -157,7 +157,7 @@ async def list_families(request: Request):
 
 
 @router.get("/{family_id}/assessment")
-async def family_assessment(request: Request, family_id: str):
+def family_assessment(request: Request, family_id: str):
     entry = _assessments(request).get(family_id)
     if entry is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=NO_ASSESSMENT)
@@ -165,7 +165,7 @@ async def family_assessment(request: Request, family_id: str):
 
 
 @router.patch("/{family_id}/assessment")
-async def update_assessment(request: Request, family_id: str, patch: AssessmentUpdate):
+def update_assessment(request: Request, family_id: str, patch: AssessmentUpdate):
     """Anti-shrink merge, then re-validate the whole assessment."""
     store = request.app.state.systems_store
     enforce_rate_limit(request.app.state.strict_limiter, request)
@@ -184,7 +184,7 @@ async def update_assessment(request: Request, family_id: str, patch: AssessmentU
 
 
 @router.post("/{family_id}/assessment/validation")
-async def validate_assessment(request: Request, family_id: str, body: Validation):
+def validate_assessment(request: Request, family_id: str, body: Validation):
     """Record who signed this assessment off.
 
     Deliberately a separate route from the edit. Signing an assessment off is
