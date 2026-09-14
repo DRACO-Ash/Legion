@@ -60,7 +60,8 @@ async def object_timeline(request: Request, system_id: str):
 register_object_list(
     router,
     field="pol_segments",
-    path="segments",
+    collection_path="/objects/{system_id}/segments",
+    entry_path="/objects/{system_id}/segments/{entry_id}",
     model=PatternOfLifeSegment,
     update_model=PatternOfLifeSegmentUpdate,
     plural="segments",

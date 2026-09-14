@@ -137,6 +137,11 @@ keeps its version in step with `src/VERSION`; do not edit that line by hand.
 
 ## The Code Quality gate has five conditions, not one
 
+**Every rule the gate has actually fired is listed in
+`docs/SONAR-RULE-REGISTER.md`, and `scripts/check-quality-gate.sh` runs every
+local check in one command. Read the first and run the second before
+packaging.**
+
 Learned the hard way across 0.4.7, 0.4.8 and 0.8.2. The SonarQube gate fails on
 any of these, and only the first produces anything resembling an error message:
 
@@ -876,6 +881,53 @@ undo by accident:
 `tests/test_ui_contracts.py` pins the parts of this that are checkable from
 Python, including that every path the UI fetches exists in the app's OpenAPI
 schema, and that catalogue values are escaped before reaching the markup.
+
+## The rule register, and running the gate before packaging
+
+The 0.15.0 upload failed Code Quality with **eighteen new issues across eight
+rules**, and every local check passed first. The mirrors were not wrong; they
+only ever covered rules something had already been caught by, which means the
+set is always one upload behind unless it is deliberately grown. Two things
+now close that:
+
+● **`docs/SONAR-RULE-REGISTER.md` is the record.** Every rule the platform has
+  ever fired here, the upload that reported it, where it fired, and the local
+  check that catches it. **Read it before writing code**, not after a failure.
+  Its own rules: a rule goes in the moment the platform reports it and never on
+  a guess; it is calibrated against the upload that reported it; a mirror that
+  over-fires is a defect, not a nuisance; and it never comes out. The two
+  conditions no mirror can catch (duplicated lines on new code, hotspots
+  reviewed) are named there so nobody hunts for a check that cannot exist.
+● **`scripts/check-quality-gate.sh` is the one command before packaging.**
+  Sonar mirrors, UI contracts, the full suite with coverage, `ruff check`,
+  `ruff format --check`, `mypy`, `bandit`. It ends by naming what it cannot
+  check, so a PASS is not read as a promise the gate will pass.
+
+**A line-based check is a blind spot by construction.** The nested-template
+mirror scanned one line at a time and went green through 0.15.0 while the
+platform reported a nesting spread across three. It now walks the whole
+script tracking backtick and `${` depth. The same mistake was then made again
+within the hour, in a new CSS test written line by line against a rule whose
+`display:flex` sat on a continuation line. Parse the structure, never the
+line.
+
+**The eight rules that were new at 0.15.0** are worth knowing by shape rather
+than by lookup, because they are the ones this codebase keeps generating:
+a route path built by string concatenation instead of written out literally;
+a FastAPI parameter defaulted to `Query(...)` instead of `Annotated`; an input
+with no label; `role="dialog"` where `<dialog>` belongs; `role="listbox"` and
+`role="option"` on non-interactive elements; `tabindex` on a non-interactive
+element; and `.find(...)` used as a boolean test where `.some(...)` says it.
+
+Two things learned fixing them, both of which cost a browser run:
+
+● **A native `<dialog>` is hidden by a UA rule the stylesheet can override.**
+  `.palette{display:flex}` beat `dialog:not([open]){display:none}`, so the
+  palette never hid and the slash guard, Escape and the whole catalogue
+  keyboard read as broken. Overlay styling belongs on `.palette[open]`.
+● **The route-factory change is INFERENCE, not FACT.** `add_api_route` with
+  literal paths is believed to sit outside the rule, which targets the
+  decorator form. Confirm it on the next upload rather than assuming it.
 
 ## Working in this repo
 

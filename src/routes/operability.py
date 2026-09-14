@@ -7,7 +7,7 @@ it lives, put two to four of them side by side, and produce the write-up.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Annotated, Any
 
 from fastapi import APIRouter, HTTPException, Query, Request, status
 
@@ -36,9 +36,15 @@ UNKNOWN_SUBJECT = "No object or family with that id"
 SEARCH_LIMIT = 12
 SPACE = " "
 SEPARATOR = " · "
-# A module-level singleton: FastAPI needs the Query object, and evaluating it
-# in the signature is a mutable default in all but name (ruff B008).
-IDS_QUERY = Query(default=[])
+# Annotated rather than a default argument. `ids: list[str] = Query(...)`
+# puts a call in a default, which ruff calls B008 and SonarQube reported
+# against 0.15.0; the Annotated form says the same thing without one.
+# `list[str] | None` with a None default, rather than `= []`: FastAPI wants
+# the default set with `=` alongside Annotated, and a list literal there is a
+# mutable default (ruff B006). None means "nothing asked for", which the
+# routes already have to handle.
+Ids = Annotated[list[str] | None, Query()]
+Search = Annotated[str, Query(max_length=120)]
 
 
 def _assessments(request: Request) -> dict[str, Any]:
@@ -117,7 +123,7 @@ def _family_rows(records: list[dict[str, Any]], needle: str) -> list[dict[str, A
 
 
 @router.get("/search")
-async def search(request: Request, q: str = Query(default="", max_length=120)):
+async def search(request: Request, q: Search = ""):
     """Everything an analyst might jump to, ranked plainly.
 
     Deliberately a substring match rather than a fuzzy score. A palette that
@@ -148,13 +154,13 @@ def _subjects_or_400(request: Request, ids: list[str]) -> list[dict[str, Any]]:
 
 
 @router.get("/compare")
-async def compare(request: Request, ids: list[str] = IDS_QUERY):
+async def compare(request: Request, ids: Ids = None):
     """Two to four objects or families, side by side."""
-    return build_comparison(_subjects_or_400(request, ids))
+    return build_comparison(_subjects_or_400(request, ids or []))
 
 
 @router.get("/briefing")
-async def briefing(request: Request, ids: list[str] = IDS_QUERY):
+async def briefing(request: Request, ids: Ids = None):
     """The paste-ready write-up, in house style, provenance carried.
 
     One subject is allowed here although a comparison needs two: briefing a
@@ -162,7 +168,7 @@ async def briefing(request: Request, ids: list[str] = IDS_QUERY):
     to copy the panel by hand, which is how provenance gets lost.
     """
     subjects = []
-    for subject_id in ids[:MAX_SUBJECTS]:
+    for subject_id in (ids or [])[:MAX_SUBJECTS]:
         subject = _subject(request, subject_id)
         if subject is None:
             raise HTTPException(

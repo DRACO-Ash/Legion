@@ -83,13 +83,23 @@ def register_object_list(
     router: APIRouter,
     *,
     field: str,
-    path: str,
+    collection_path: str,
+    entry_path: str,
     model: type[BaseModel],
     update_model: type[BaseModel],
     plural: str,
     not_found: str,
 ) -> None:
-    """Add read, create, edit and archive for one per-object list."""
+    """Add read, create, edit and archive for one per-object list.
+
+    Both route paths are passed in as literal strings rather than built here
+    from a fragment. An f-string in a route decorator cannot be evaluated by
+    any tool reading the source, which is why SonarQube reported ten missing
+    path parameters against 0.15.0 for parameters that were all present: it
+    read the template and took every brace token in it as a parameter name.
+    The finding was a false positive about the signature and a true one about
+    the code, because a computed route is unreadable to a person too.
+    """
 
     def _write(request: Request, system_id: str, entries: list[dict[str, Any]]) -> None:
         enforce_rate_limit(request.app.state.strict_limiter, request)
@@ -113,7 +123,6 @@ def register_object_list(
                 detail=readable(exc),
             ) from exc
 
-    @router.get(f"/objects/{{system_id}}/{path}")
     async def list_entries(
         request: Request, system_id: str, include_archived: bool = False
     ):
@@ -121,7 +130,6 @@ def register_object_list(
         shown = entries if include_archived else _live(entries)
         return {"system_id": system_id, "count": len(shown), plural: shown}
 
-    @router.post(f"/objects/{{system_id}}/{path}", status_code=status.HTTP_201_CREATED)
     # mypy cannot follow a type held in a closure variable, which is the
     # whole point of the factory. FastAPI resolves it at decoration time.
     async def create_entry(request: Request, system_id: str, entry: model):  # type: ignore[valid-type]
@@ -132,7 +140,6 @@ def register_object_list(
         _write(request, system_id, [*layer.get(field, []), stored])
         return stored
 
-    @router.patch(f"/objects/{{system_id}}/{path}/{{entry_id}}")
     async def update_entry(
         request: Request,
         system_id: str,
@@ -155,7 +162,6 @@ def register_object_list(
         )
         return merged
 
-    @router.delete(f"/objects/{{system_id}}/{path}/{{entry_id}}")
     async def archive_entry(request: Request, system_id: str, entry_id: str):
         """Archive, never delete. A withdrawn entry stays visible to anyone
         who asks for archived ones, so an analyst can see that something was
@@ -171,3 +177,24 @@ def register_object_list(
             [archived if e.get("id") == entry_id else e for e in entries],
         )
         return archived
+
+    # Registered rather than decorated. A decorator inside a factory can only
+    # ever carry a variable, and SonarQube reads the decorator's source: it
+    # reported ten missing path parameters against 0.15.0 for parameters that
+    # were all present, because it took the f-string template literally.
+    # `add_api_route` is FastAPI's own documented registration call and takes
+    # the same literal paths the caller already passes in.
+    #
+    # INFERENCE, flagged rather than assumed: the rule that fired is written
+    # against the decorator form, so this should sit outside it. Confirm on
+    # the next upload before trusting it, and if it fires again the fallback
+    # is four literal decorators per collection in the calling module.
+    router.add_api_route(collection_path, list_entries, methods=["GET"])
+    router.add_api_route(
+        collection_path,
+        create_entry,
+        methods=["POST"],
+        status_code=status.HTTP_201_CREATED,
+    )
+    router.add_api_route(entry_path, update_entry, methods=["PATCH"])
+    router.add_api_route(entry_path, archive_entry, methods=["DELETE"])

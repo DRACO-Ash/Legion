@@ -43,7 +43,8 @@ async def provenance_legend():
 register_object_list(
     router,
     field="claims",
-    path="claims",
+    collection_path="/objects/{system_id}/claims",
+    entry_path="/objects/{system_id}/claims/{entry_id}",
     model=Claim,
     update_model=ClaimUpdate,
     plural="claims",

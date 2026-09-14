@@ -559,10 +559,20 @@ def test_a_bare_slash_does_not_hijack_typing() -> None:
     assert "target.isContentEditable" in INDEX_HTML
 
 
-def test_the_palette_is_a_dialog_with_a_listbox() -> None:
-    assert 'role="dialog" aria-modal="true"' in INDEX_HTML
-    assert 'role="listbox"' in INDEX_HTML
-    assert 'role="option"' in INDEX_HTML
+def test_the_palette_is_a_real_dialog_with_real_buttons() -> None:
+    """Roles replaced by elements, after 0.15.0 reported three accessibility
+    smells on this markup.
+
+    A `<dialog>` brings focus trapping, Escape handling and inertness; the
+    role brought the promise of all three and none of the behaviour. The
+    results were already buttons, so the listbox and option roles were
+    promising keyboard semantics a `<ul>` does not have.
+    """
+    assert '<dialog id="palette"' in INDEX_HTML
+    assert 'role="dialog"' not in INDEX_HTML
+    assert 'role="listbox"' not in INDEX_HTML
+    assert 'role="option"' not in INDEX_HTML
+    assert '<label class="sr-only" for="paletteInput">' in INDEX_HTML
 
 
 def test_catalogue_rows_are_real_keyboard_targets() -> None:
