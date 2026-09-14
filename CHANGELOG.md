@@ -5,6 +5,11 @@ All notable changes to this project are documented here. Format follows
 [Semantic Versioning](https://semver.org/). Pre-1.0: minor bumps may include
 breaking changes, since nothing has shipped to the App Store yet.
 
+## [0.16.0] - 2026-09-14
+
+The belt console: GEO belt stage, indicative attention queue, and a re-validated palette
+
+
 ## [0.15.4] - 2026-09-14
 
 Merge the nested if in bump_version.sh, and retire the deprecated 422 constant
