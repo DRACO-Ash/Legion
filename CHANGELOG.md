@@ -5,6 +5,11 @@ All notable changes to this project are documented here. Format follows
 [Semantic Versioning](https://semver.org/). Pre-1.0: minor bumps may include
 breaking changes, since nothing has shipped to the App Store yet.
 
+## [0.15.2] - 2026-09-14
+
+Sonar rule register, the eighteen Code Quality findings fixed, and one command that checks every local condition before packaging
+
+
 ## [0.15.1] - 2026-09-14
 
 Record the DOK sign-off entitlement and add the UDL live-check script.
