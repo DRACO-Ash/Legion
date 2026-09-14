@@ -80,6 +80,8 @@ somewhere a person will look.
 | Use asynchronous features in this function or remove the `async` keyword | 0.15.2 | `object_lists.py`, 4 findings | `test_sonar_platform_rules.py::test_no_route_handler_is_async_without_awaiting` |
 | LLMs running this code with faulty CLI arguments can escape file system restrictions (Vulnerability) | 0.15.2 | `udl_live_check.py`, the `--out` flag | `test_sonar_platform_rules.py::test_a_caller_supplied_path_is_checked_before_it_is_written` |
 | Merge this if statement with the enclosing one | 0.15.3 | `bump_version.sh`, the coverage warning | `test_sonar_platform_rules.py::test_no_shell_if_wraps_only_another_if` |
+| Duplicate property "display" (**Bug**, not a smell) | 0.16.0 | `index.html`, the queue entry's line clamp | `test_sonar_platform_rules.py::test_no_css_rule_sets_a_property_twice` |
+| Replace with dict fromkeys method call | 0.16.0 | `attention.py`, the category counters | `test_sonar_platform_rules.py::test_no_dict_comprehension_just_seeds_a_constant` |
 
 ## The two things a mirror cannot catch
 
@@ -176,3 +178,26 @@ registrations were analysed as new code. The rule did not fire in that
 upload's fourteen findings, nor in 0.15.3, nor in the clean 0.15.4. **All ten
 stages passed on 0.15.4 and Code Quality was among them**, which is the first
 time that gate has ever passed for this application.
+
+## 0.16.0: two findings, and what they say about hand-written CSS
+
+Both were in code written the day before, and both are the same shape as rules
+already in this register rather than anything new in kind.
+
+● **The `display` duplicate is a Bug, not a smell**, and the platform is right
+  to grade it that way: the first declaration was dead, so the rule did not do
+  what it appeared to say. It arrived by editing a rule in place, with
+  `display:block` already present when `display:-webkit-box` was added for a
+  line clamp. A vendor fallback looks identical to a checker, so if one is ever
+  genuinely needed the exemption has to be argued in the mirror rather than the
+  mirror weakened.
+● **`{key: 0 for key in KEYS}` is `dict.fromkeys(KEYS, 0)`.** Distinct from the
+  copying-comprehension rule already listed, which catches
+  `{k: v for k, v in items.items()}`. Same family, different shape, reported on
+  a different upload. That is the pattern to expect: a rule family arrives one
+  shape at a time.
+
+The fix was verified in a browser rather than assumed. Removing a `display`
+declaration from a rule that clamps text is exactly the kind of change that
+looks safe and is not, so the clamp was confirmed still rendering three lines
+with an ellipsis before the release was cut.

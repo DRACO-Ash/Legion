@@ -227,7 +227,7 @@ def build_attention(
     )
     entries.sort(key=lambda entry: CATEGORY_ORDER.index(entry["category"]))
 
-    counts = {category: 0 for category in CATEGORY_ORDER}
+    counts = dict.fromkeys(CATEGORY_ORDER, 0)
     for entry in entries:
         counts[entry["category"]] += 1
 

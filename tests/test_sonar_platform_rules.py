@@ -708,3 +708,69 @@ def test_no_shell_if_wraps_only_another_if() -> None:
             if inner is not None:
                 offenders.append(f"{path.relative_to(ROOT)}:{inner + 1}")
     assert offenders == [], f"Merge the nested if with its enclosing one: {offenders}"
+
+
+# --- reported against 0.16.0 -------------------------------------------------
+
+
+def test_no_css_rule_sets_a_property_twice() -> None:
+    """SonarQube, reported as a Bug on 0.16.0: "Duplicate property "display"".
+
+    A Bug rather than a smell, and rightly: the first declaration is dead, so
+    the rule does not do what it appears to say. This one was written by hand
+    while adding a line clamp, where `display:block` was left in front of
+    `display:-webkit-box`.
+
+    Legitimate vendor fallbacks would trip this, and none exists in this file
+    today. If one is ever needed, the exemption has to be argued here rather
+    than the check weakened, because the platform calls this a Bug.
+    """
+    styles = INDEX_HTML.split("<style>", 1)[1].split("</style>", 1)[0]
+    # Comments are stripped first, or the offender is reported against the
+    # comment above the rule and the reader is sent to the wrong line.
+    styles = re.sub(r"/\*.*?\*/", "", styles, flags=re.DOTALL)
+    offenders = []
+    for selector, body in re.findall(r"([^{}]+)\{([^{}]*)\}", styles):
+        seen: dict[str, int] = {}
+        for declaration in body.split(";"):
+            if ":" not in declaration:
+                continue
+            name = declaration.split(":", 1)[0].strip().lower()
+            if not name or name.startswith("--"):
+                continue
+            seen[name] = seen.get(name, 0) + 1
+        repeated = sorted(name for name, count in seen.items() if count > 1)
+        if repeated:
+            offenders.append(f"{selector.strip()[:60]}: {repeated}")
+    assert offenders == [], f"A property is set twice in one rule: {offenders}"
+
+
+def _is_fromkeys_shape(node: ast.DictComp) -> bool:
+    """A comprehension that only builds one constant value per key."""
+    if len(node.generators) != 1:
+        return False
+    generator = node.generators[0]
+    if generator.ifs or not isinstance(generator.target, ast.Name):
+        return False
+    if not isinstance(node.key, ast.Name) or not isinstance(node.value, ast.Constant):
+        return False
+    return node.key.id == generator.target.id
+
+
+def test_no_dict_comprehension_just_seeds_a_constant() -> None:
+    """SonarQube: "Replace with dict fromkeys method call".
+
+    Reported against 0.16.0, on the attention queue's category counters.
+    `{key: 0 for key in KEYS}` is `dict.fromkeys(KEYS, 0)` written long.
+
+    Distinct from `test_no_dict_comprehension_merely_copies`, which catches
+    `{k: v for k, v in items.items()}`. Same family of rule, different shape,
+    and the platform reported them on different uploads.
+    """
+    offenders = [
+        f"{path.relative_to(ROOT)}:{node.lineno}"
+        for path in _all_python_files()
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8")))
+        if isinstance(node, ast.DictComp) and _is_fromkeys_shape(node)
+    ]
+    assert offenders == [], f"Use dict.fromkeys(...) instead: {offenders}"

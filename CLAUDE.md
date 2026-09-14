@@ -996,6 +996,13 @@ analyst-created; the collection is `pol_segments`, not `segments`; and TBC is a
 therefore asserts the queue found something at all, from more than one
 category, because an empty queue satisfies every boundary test ever written.
 
+**0.16.0 drew two Code Quality findings, both in the new code and both now
+mirrored:** a duplicate `display` property in the queue's line-clamp rule,
+which the platform grades a **Bug** because the first declaration is dead, and
+a `{key: 0 for key in KEYS}` that is `dict.fromkeys` written long. Removing a
+`display` from a clamping rule looks safe and is not, so the clamp was
+re-confirmed in a browser before the release was cut.
+
 **Two defects that only a browser found, and neither was visible to 66 passing
 contract tests:**
 
