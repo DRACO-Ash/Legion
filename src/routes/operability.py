@@ -11,6 +11,7 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, HTTPException, Query, Request, status
 
+from src.attention import build_attention
 from src.briefing import build_briefing
 from src.comparison import (
     MAX_SUBJECTS,
@@ -133,6 +134,23 @@ def ranking_policy_endpoint():
     enforce cannot drift apart.
     """
     return ranking_policy()
+
+
+@router.get("/attention")
+def attention(request: Request):
+    """What needs looking at, in an indicative order.
+
+    Rebuilt from the store on every request and written back nowhere, which is
+    what makes the policy's first boundary true rather than merely intended.
+    The response carries the policy with it, so a caller cannot show the order
+    without also being handed the words that say what the order is worth.
+    """
+    store = request.app.state.systems_store
+    return build_attention(
+        records=store.list(),
+        objects=store.compendium_objects(),
+        assessments=_assessments(request),
+    )
 
 
 @router.get("/search")

@@ -92,7 +92,8 @@ Both are Code Quality gate conditions, and neither is a rule:
 
 And one that is a process condition rather than a rule: **coverage must be
 measurable**, which means a release has to change a Python file under
-`sonar.sources`. `bump_version.sh` warns when a release would not.
+`sonar.sources`. `bump_version.sh` and `scripts/package.sh` both refuse a
+release that would not; `--allow-unmeasurable` overrides the bump.
 
 ## Known blind spots, recorded rather than hidden
 

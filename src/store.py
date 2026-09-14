@@ -659,6 +659,16 @@ class TrackedSystemsStore:
         data = self._read_raw()
         return data["compendium"][COMPENDIUM_OBJECTS].get(system_id)
 
+    def compendium_objects(self) -> dict[str, Any]:
+        """Every system's compendium layer, keyed by system id, in one read.
+
+        The attention queue walks the whole catalogue, and calling
+        `compendium_object` per system would re-read and re-migrate the store
+        fifty-six times for one request.
+        """
+        data = self._read_raw()
+        return dict(data["compendium"][COMPENDIUM_OBJECTS])
+
     @_serialised
     def update_compendium_object(
         self, system_id: str, patch: dict[str, Any], actor: str = "unknown"

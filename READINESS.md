@@ -299,7 +299,7 @@ and tests it for the coverage condition. Every step succeeded: the scan ran and
 the gate file was there. Only the coverage value was missing, which also rules
 out the coverage report never reaching the scanner.
 
-`scripts/bump_version.sh` now warns when a release changes nothing under
+`scripts/bump_version.sh` now refuses a release that changes nothing under
 `src/**.py`, naming the consequence, so this costs a warning rather than an
 upload cycle next time.
 

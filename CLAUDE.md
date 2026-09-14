@@ -172,9 +172,10 @@ any of these, and only the first produces anything resembling an error message:
   every time, and retrying cannot help because there is nothing to measure. A
   change under `tests/` does not count either: `sonar.tests=tests`, and
   coverage on new code is measured on sources, not tests. `bump_version.sh`
-  warns when a release would land in this state. The route out is to bundle the
-  change with a real source change, or to have the platform treat "nothing
-  analysed" as a pass, which its own message already says it is.
+  **refuses** a release that would land in this state, as does
+  `scripts/package.sh`; `--allow-unmeasurable` overrides it. The route out is to
+  bundle the change with a real source change, or to have the platform treat
+  "nothing analysed" as a pass, which its own message already says it is.
 
   The job log confirms the mechanism. `code-quality-verify` checks that
   `.scannerwork/report-task.txt` exists, finds `sonar-quality-gate.json`,
@@ -960,6 +961,52 @@ All five sabotages are now caught: a rank in a record, a score on a claim, an
 ordering in a briefing, a Priority row in a comparison, and the label
 hard-coded in the markup. **Introduce the violation before believing the
 guard**, every time, and make the guard prove it examined the real thing.
+
+## The belt console: the interface Ash chose
+
+Ash picked Orbital Atlas over Watch Floor 70/30 and asked for a merge, so the
+interface is now a console: a signal strip, then the attention queue, the GEO
+belt and an inspector side by side, with the existing panels beneath as the
+detail surfaces. The Bluestaq navy ground is gone on his instruction.
+
+● **The palette was re-validated, not re-picked.** The eight series slots went
+  through the dataviz skill's `validate_palette.js` against the new panel
+  surface (`#0C121B`): worst adjacent CVD pair ΔE 9.2, above the target of 8.
+  Interface and status colours sit **above** the series lightness band
+  (L 0.73 to 0.90 against 0.48 to 0.67) so a chrome colour cannot be misread as
+  an object identity. `tests/test_ui_contracts.py` pins the set and carries the
+  evidence. **Never change it without running the validator again.**
+● **`src/belt.py` reuses the charts' rank gate rather than reimplementing it.**
+  `hrr_ranks` and `_skip_reason` are imported, so Ash's JCO HRR 0 to 3 rule
+  cannot drift between the charts and the belt. A feed failure stops the pull.
+● **An object that cannot be placed is listed, never dropped.** Not GEO, no
+  element set, or an element set missing a field the derivation needs: each has
+  its own reason. A satellite drawn at the wrong slot looks entirely normal.
+● **An unreachable UDL and an empty belt look identical on a circle**, so the
+  endpoint answers 503 and the interface says which it is. That is the whole of
+  what an analyst needs to know.
+● **`src/attention.py` is the queue, and every input is a stored field.** A
+  `tbc` source class, an unset `validated_by`, a `pol_segment` with no
+  `end_epoch`, a record with no `norad_id`. No severity, no weight, no score.
+
+**Three shapes were guessed wrong and all three would have shipped a queue that
+was silently always empty.** Object `claims` are empty because claims are
+analyst-created; the collection is `pol_segments`, not `segments`; and TBC is a
+`source_class`, not a marker. The first test in `tests/test_attention.py`
+therefore asserts the queue found something at all, from more than one
+category, because an empty queue satisfies every boundary test ever written.
+
+**Two defects that only a browser found, and neither was visible to 66 passing
+contract tests:**
+
+● **`svgEl` was declared twice.** A redeclaration throws at parse time and
+  kills the whole module script, so every panel came up blank while every test
+  passed, because each one reads the markup rather than running it.
+  `test_no_top_level_name_is_declared_twice` now catches it.
+● **A strict prefix hid two whole categories.** Seventeen unverified plus
+  fifteen unsigned meant the first fourteen entries were all assessments and
+  the twenty open behaviours were unreachable, while the counts told the
+  analyst they were there. The queue now takes the head of each category.
 
 ## The rule register, and running the gate before packaging
 

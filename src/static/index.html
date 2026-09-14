@@ -7,23 +7,33 @@
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23162646'/%3E%3Cellipse cx='16' cy='16' rx='12' ry='5.5' fill='none' stroke='%23739BCF' stroke-width='2.4' transform='rotate(-28 16 16)'/%3E%3Ccircle cx='16' cy='16' r='4.6' fill='%23385FAF'/%3E%3Ccircle cx='26.3' cy='11.1' r='2.5' fill='%23E8A33D'/%3E%3C/svg%3E">
 <style>
 :root{
-  --navy:#162646; --blue-1:#385FAF; --blue-2:#739BCF;
-  --green:#27AE60; --green-bright:#3FCB7C;
-  --amber:#E8A33D; --amber-bright:#F5B95A;
-  --china:#C0574A; --china-bright:#DD7264;
-  --surface:#0f1a30; --surface-2:#152238; --surface-3:#1c2c48;
-  --line:#27406e; --line-soft:#1f3358;
-  --text:#e6ecf6; --text-dim:#9fb2cf; --text-faint:#7d8fb3;
+  /* Ground: near-black, cooled very slightly rather than navy, so a luminous
+     mark carries. Replaced the Bluestaq navy set on Ash's instruction,
+     14 September 2026. */
+  --navy:#05080C; --surface:#080D13; --surface-2:#0C121B; --surface-3:#18222F;
+  --line:#1F2B3C; --line-soft:#151E2B;
+  --text:#E9EFF5; --text-dim:#9AA8BC; --text-faint:#6A7A90;
+
+  /* Interface chrome. --signal is the bright accent and carries dark text on
+     it; --blue-1 stays the dark fill the two white-on-colour controls need.
+     Neither is ever a data mark. */
+  --signal:#A8E9F7; --signal-dim:#3E6B78;
+  --blue-1:#1B6E85; --blue-2:#6FC8DE;
+
+  /* State only, never a series slot, and always with an icon and a word. */
+  --green:#27AE60; --green-bright:#55E0A0;
+  --amber:#E8A33D; --amber-bright:#FFC94D;
+  --china:#C0574A; --china-bright:#FF6B5A;
   --radius:3px; --motion:150ms;
   /* Categorical series slots, in fixed order, for the family charts. These
      are the dark steps of the validated reference palette, checked against
-     this panel surface (#152238): lightness band, chroma floor, adjacent
+     this panel surface (#0C121B): lightness band, chroma floor, adjacent
      colour-vision-deficiency separation, normal-vision separation and
      contrast all pass. The order is the colour-blind-safety mechanism, so
      do not reorder them, and never add a ninth: a family past eight members
      lists the remainder instead of reusing a colour. */
-  --series-1:#3987e5; --series-2:#d95926; --series-3:#199e70; --series-4:#c98500;
-  --series-5:#d55181; --series-6:#008300; --series-7:#9085e9; --series-8:#e66767;
+  --series-1:#2699bb; --series-2:#ce7a22; --series-3:#1e9e74; --series-4:#9169d9;
+  --series-5:#d8517c; --series-6:#9e8d1e; --series-7:#6e8fe8; --series-8:#d9564b;
   /* Provenance markers. Deliberately NOT drawn from the series slots above:
      those identify a satellite in a chart, these identify the epistemic
      status of a claim, and an analyst must never read one as the other. They
@@ -31,9 +41,9 @@
      series set is untouched and nothing needs re-validating. Colour is only
      ever one of four encodings here: colour, icon, text label and border
      style all carry the same meaning. */
-  --marker-fact:#3FCB7C; --marker-inference:#739BCF; --marker-speculation:#F5B95A;
+  --marker-fact:#55E0A0; --marker-inference:#6FC8DE; --marker-speculation:#FFC94D;
   --marker-unverified:#7d8fb3;
-  --entity-object:#739BCF; --entity-family:#C9A227; --entity-target:#B58A9B;
+  --entity-object:#6FC8DE; --entity-family:#C9A227; --entity-target:#B58A9B;
 }
 @media (prefers-reduced-motion: reduce){ *{ transition-duration:.001ms !important; } }
 *{ box-sizing:border-box; }
@@ -194,6 +204,75 @@ tbody tr.row:focus-visible{ outline:2px solid var(--blue-2); outline-offset:-2px
 .prov-legend dt{ margin:0; }
 .prov-legend dd{ margin:0; color:var(--text-dim); line-height:1.45; }
 
+/* ---------------------------------------------------------------- console
+   The belt is the stage and everything else earns its place by serving it.
+   Three columns: the queue is the belt's ranked index, the stage is the belt,
+   the inspector is the current selection. Selecting in the queue selects on
+   the belt and the other way round, so this is one instrument rather than
+   three panels. */
+.strip{ display:grid; grid-template-columns:repeat(5,1fr); gap:1px;
+  background:var(--line-soft); border:1px solid var(--line);
+  border-radius:var(--radius); margin-bottom:14px; }
+.fig{ background:var(--surface); padding:11px 14px; display:flex;
+  align-items:baseline; gap:11px; }
+.fig .v{ font-size:19px; font-weight:600; line-height:1;
+  font-variant-numeric:tabular-nums; }
+.fig .of{ display:grid; gap:1px; min-width:0; }
+.fig .k{ font-size:9.5px; letter-spacing:.12em; text-transform:uppercase;
+  color:var(--text-faint); }
+.fig .d{ font-size:10.5px; color:var(--text-dim); }
+.fig.watch .v{ color:var(--amber-bright); }
+.fig.ok .v{ color:var(--green-bright); }
+
+.console{ display:grid; grid-template-columns:270px minmax(0,1fr) 316px;
+  gap:1px; background:var(--line-soft); border:1px solid var(--line);
+  border-radius:var(--radius); margin-bottom:20px; }
+.pane{ background:var(--surface-2); padding:14px; min-width:0; }
+.pane.stage-pane{ background:var(--surface); }
+.pane h2{ display:flex; align-items:center; gap:7px; font-size:12px;
+  text-transform:uppercase; letter-spacing:.08em; color:var(--text-dim);
+  margin:0 0 10px; }
+@media (max-width:1100px){ .console{ grid-template-columns:1fr; }
+  .strip{ grid-template-columns:repeat(2,1fr); } }
+
+.caption{ margin:0 0 10px; font-size:10.5px; line-height:1.45;
+  color:var(--text-faint); }
+.caption b{ color:var(--text-dim); font-weight:600; }
+
+.queue{ display:grid; max-height:430px; overflow-y:auto; }
+.qi{ display:grid; grid-template-columns:2px 1fr; gap:11px; width:100%;
+  text-align:left; padding:10px 4px 10px 0; background:none; border:0;
+  border-bottom:1px solid var(--line-soft); cursor:pointer;
+  color:var(--text); font:inherit; }
+.qi:hover{ background:var(--surface-3); }
+.qi[aria-current="true"]{ background:var(--surface-3); }
+.qi .band{ align-self:stretch; border-radius:1px; background:var(--line); }
+.qi.c0 .band{ background:var(--amber-bright); }
+.qi.c1 .band{ background:var(--blue-2); }
+.qi.c2 .band{ background:var(--marker-fact); }
+.qi .nm{ display:block; font-weight:600; font-size:12.5px; }
+/* Clamped rather than truncated server-side: the whole statement is the
+   claim, and an analyst opening the entry must see all of it. Three lines is
+   enough to recognise which one this is. */
+.qi .why{ display:block; color:var(--text-dim); font-size:11px; margin-top:3px;
+  display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical;
+  overflow:hidden; }
+.qi .cat{ font-size:9.5px; letter-spacing:.06em; text-transform:uppercase;
+  color:var(--text-faint); margin-top:5px; display:block; }
+
+#beltCanvas{ display:block; width:100%; height:auto; }
+.caveat{ margin:8px 0 0; font-size:10.5px; color:var(--text-faint);
+  line-height:1.45; }
+
+.insp-pane .kv{ display:grid; margin-bottom:12px; }
+.insp-pane .kv div{ display:flex; justify-content:space-between; gap:10px;
+  padding:6px 0; border-bottom:1px solid var(--line-soft); }
+.insp-pane .kv .k{ font-size:9.5px; letter-spacing:.1em; text-transform:uppercase;
+  color:var(--text-faint); }
+.insp-pane .kv .v{ font-size:12px; font-variant-numeric:tabular-nums; }
+.insp-pane h3{ font-size:18px; margin:0 0 2px; letter-spacing:-.01em; }
+.insp-pane .fam{ color:var(--text-dim); font-size:11.5px; margin-bottom:12px; }
+
 .layout{ display:grid; grid-template-columns:1fr 380px; gap:20px; align-items:start; }
 @media (max-width:900px){ .layout{ grid-template-columns:1fr; } }
 
@@ -254,7 +333,7 @@ form textarea{ min-height:56px; resize:vertical; }
    hidden button on screen until a browser test caught it. */
 [hidden]{ display:none !important; }
 .btn-primary{ background:var(--blue-1); border-color:var(--blue-1); color:#fff; }
-.btn-primary:hover{ background:#4571c7; }
+.btn-primary:hover{ background:#2A8BA6; }
 .btn-ghost{ background:none; border-color:var(--line); color:var(--text-dim); }
 .btn-ghost:hover{ color:var(--text); border-color:var(--blue-2); }
 .btn-danger{ background:none; border-color:var(--china); color:var(--china-bright); }
@@ -383,6 +462,41 @@ svg.chart{ width:100%; height:auto; display:block; overflow:visible; }
       </div>
     </div>
   </header>
+
+  <!-- The shift summary, compressed to one band. These are counts of things
+       the store holds, not an assessment of anything, so they carry no
+       marker and no confidence. -->
+  <div class="strip" id="signalStrip" aria-label="Catalogue summary"></div>
+
+  <!-- The console: the belt is the stage, the queue is its index, and
+       selecting in either selects in the other. -->
+  <div class="console">
+    <section class="pane queue-pane" aria-labelledby="queueHead">
+      <h2 id="queueHead"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-status"/></svg>Needs attention</h2>
+      <output class="msg" id="queueMsg">Loading.</output>
+      <p class="caption" id="queueCaption"></p>
+      <div id="queueList" class="queue"></div>
+    </section>
+
+    <section class="pane stage-pane" aria-labelledby="beltHead">
+      <h2 id="beltHead"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-graph"/></svg><span id="beltTitle">GEO belt</span></h2>
+      <output class="msg" id="beltMsg">Loading.</output>
+      <svg id="beltCanvas" viewBox="0 0 700 468" role="img" aria-labelledby="beltAlt"></svg>
+      <p id="beltAlt" class="sr-only"></p>
+      <p class="caveat" id="beltCaveat" hidden></p>
+      <details class="prov-legend" id="beltOffPlot" hidden>
+        <summary>Not on the belt, and why</summary>
+        <ul id="beltOffPlotList" class="graph-list"></ul>
+      </details>
+    </section>
+
+    <section class="pane insp-pane" aria-labelledby="inspHead">
+      <h2 id="inspHead"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-provenance"/></svg>Selected</h2>
+      <output class="msg" id="inspMsg">Choose an object on the belt or in the queue.</output>
+      <div id="inspBody"></div>
+    </section>
+  </div>
+
   <main id="main-content" class="layout">
     <div class="panel">
       <h2><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-catalogue"/></svg>Catalogue</h2>
@@ -815,6 +929,11 @@ function selectSystem(id){
   void showObjectProvenance(record);
   void showObjectTimeline(record);
   void focusGraphNode(record.id);
+  // The console follows the same selection, so choosing a row, a queue entry
+  // or a mark on the belt all land in the same place. One instrument, not
+  // three panels that happen to sit together.
+  renderInspector(record);
+  void highlightOnBelt(record.id);
   void showFamilyAssessment(record.family_id, record.family_title);
 }
 
@@ -1707,9 +1826,10 @@ function edgeSentence(edge, focusId, labels){
   return outbound ? `${edge.label} ${other}` : `${other} ${edge.label} this`;
 }
 
-function svgEl(name, attrs){
+function svgEl(name, attrs, text){
   const el = document.createElementNS("http://www.w3.org/2000/svg", name);
   for(const [key, value] of Object.entries(attrs)) el.setAttribute(key, value);
+  if(text !== undefined) el.textContent = text;
   return el;
 }
 
@@ -2294,6 +2414,221 @@ async function loadClassification(){
   }
 }
 
+/* ------------------------------------------------------------------ console
+   The signal strip, the attention queue and the belt. Three fetches, and each
+   one degrades on its own: a belt that cannot be drawn must not take the
+   catalogue down with it. */
+
+const BELT_CX = 350, BELT_CY = 232, BELT_R = 158;
+
+// East positive, zero at the top, clockwise. The same convention the JCO
+// reference material uses, and the one the server derives against.
+function beltPoint(lonEast, radius){
+  const angle = (lonEast - 90) * Math.PI / 180;
+  return [BELT_CX + radius * Math.cos(angle), BELT_CY + radius * Math.sin(angle)];
+}
+
+function beltFrame(canvas){
+  for(let lon = 0; lon < 360; lon += 30){
+    const [x1,y1] = beltPoint(lon, BELT_R - 7), [x2,y2] = beltPoint(lon, BELT_R + 7);
+    canvas.appendChild(svgEl("line", {x1,y1,x2,y2, stroke:"var(--line)", "stroke-width":1}));
+  }
+  canvas.appendChild(svgEl("circle", {cx:BELT_CX, cy:BELT_CY, r:BELT_R, fill:"none",
+    stroke:"var(--line)", "stroke-width":1}));
+  [[0,"0\u00b0"],[90,"90\u00b0E"],[180,"180\u00b0"],[270,"90\u00b0W"]].forEach(([lon,label]) => {
+    const [x,y] = beltPoint(lon, BELT_R + 26);
+    canvas.appendChild(svgEl("text", {x, y:y + 3.5, "text-anchor":"middle",
+      fill:"var(--text-faint)", "font-size":9.5}, label));
+  });
+  canvas.appendChild(svgEl("circle", {cx:BELT_CX, cy:BELT_CY, r:38,
+    fill:"var(--surface-2)", stroke:"var(--line)", "stroke-width":1}));
+  canvas.appendChild(svgEl("text", {x:BELT_CX, y:BELT_CY + 62, "text-anchor":"middle",
+    fill:"var(--text-faint)", "font-size":8.5, "letter-spacing":"1.6"}, "EARTH"));
+}
+
+function drawBeltObject(canvas, entry, selected){
+  const [x,y] = beltPoint(entry.longitude, BELT_R);
+  // SERIES_COLOURS is the validated eight-slot set, read from the CSS custom
+  // properties so the interface and the stylesheet cannot hold two palettes.
+  const colour = SERIES_COLOURS[entry.colour_index % SERIES_SLOTS];
+  if(selected){
+    canvas.appendChild(svgEl("circle", {cx:x, cy:y, r:11, fill:"none",
+      stroke:"var(--signal)", "stroke-width":1, opacity:".6"}));
+  }
+  // A ground-coloured ring keeps two adjacent objects separable, which is the
+  // whole question the belt answers.
+  canvas.appendChild(svgEl("circle", {cx:x, cy:y, r:7, fill:"var(--surface)"}));
+  const mark = svgEl("circle", {cx:x, cy:y, r:5, fill:colour});
+  mark.style.cursor = "pointer";
+  mark.addEventListener("click", () => selectSystem(entry.id));
+  canvas.appendChild(mark);
+
+  const [lx,ly] = beltPoint(entry.longitude, BELT_R + 20);
+  const east = Math.cos((entry.longitude - 90) * Math.PI / 180) >= 0;
+  canvas.appendChild(svgEl("text", {x:lx, y:ly + 3.5,
+    "text-anchor": east ? "start" : "end",
+    fill: selected ? "var(--text)" : "var(--text-dim)", "font-size":10.5},
+    entry.name));
+}
+
+function beltTextEquivalent(placed){
+  // The SVG carries a text equivalent, like the graph does. Read in belt
+  // order, which is the order the picture is in.
+  return placed.length
+    ? "The geostationary belt, zero degrees at the top and ninety east to the "
+      + "right. " + placed.length + " objects placed at their derived mean "
+      + "longitude: " + placed.map(e => e.name + " at " + e.longitude
+      + " degrees").join(", ") + "."
+    : "No objects are placed on the belt.";
+}
+
+async function loadBelt(){
+  const canvas = document.getElementById("beltCanvas");
+  const msg = document.getElementById("beltMsg");
+  const caveat = document.getElementById("beltCaveat");
+  const offWrap = document.getElementById("beltOffPlot");
+  canvas.replaceChildren();
+  beltFrame(canvas);
+
+  let res;
+  try {
+    res = await fetch("/api/udl/belt");
+  } catch {
+    msg.textContent = "The belt request did not complete. The catalogue below "
+      + "is unaffected.";
+    msg.className = "msg error";
+    return;
+  }
+
+  if(!res.ok){
+    // Name the actual cause. An empty belt and an unreachable UDL look
+    // identical on a circle, and the difference is what an analyst needs.
+    const body = await res.json().catch(() => ({}));
+    msg.textContent = res.status === 503
+      ? "No positions: this deployment has no UDL credentials, so no element "
+        + "sets can be pulled. Everything below works without them."
+      : "No positions: " + (body.detail || ("UDL answered " + res.status)) + ".";
+    msg.className = "msg error";
+    document.getElementById("beltAlt").textContent = beltTextEquivalent([]);
+    return;
+  }
+
+  const body = await res.json();
+  msg.textContent = body.count
+    ? body.count + " objects placed. Ranks 0 to 3 only."
+    : "Nothing cleared the checks, so nothing is placed.";
+  msg.className = "msg";
+  beltPlaced = body.placed;
+  body.placed.forEach(entry => drawBeltObject(canvas, entry, entry.id === selectedId));
+  document.getElementById("beltAlt").textContent = beltTextEquivalent(body.placed);
+
+  caveat.textContent = body.derivation;
+  caveat.hidden = false;
+
+  const list = document.getElementById("beltOffPlotList");
+  list.replaceChildren();
+  body.off_plot.forEach(entry => {
+    const li = document.createElement("li");
+    li.textContent = entry.name + " \u2014 " + entry.reason;
+    list.appendChild(li);
+  });
+  offWrap.hidden = body.off_plot.length === 0;
+}
+
+let beltPlaced = [];
+
+function highlightOnBelt(id){
+  // Repaint from the placements already held, never by re-fetching: a click
+  // in the catalogue must not cost a UDL call.
+  if(!beltPlaced.length) return;
+  const canvas = document.getElementById("beltCanvas");
+  canvas.replaceChildren();
+  beltFrame(canvas);
+  beltPlaced.forEach(entry => drawBeltObject(canvas, entry, entry.id === id));
+}
+
+async function loadSignalStrip(){
+  const strip = document.getElementById("signalStrip");
+  const [systems, queue] = await Promise.all([
+    fetch("/api/systems").then(r => r.json()),
+    fetch("/api/attention").then(r => r.json()),
+  ]);
+  const live = systems.systems.filter(s => !s.archived);
+  const counted = name => (queue.categories.find(c => c.name === name) || {}).count || 0;
+  const figures = [
+    ["Tracked", live.length, "systems in the catalogue", ""],
+    ["On orbit", live.filter(s => s.status === "onorbit").length, "status on-orbit", "ok"],
+    ["Unverified", counted(queue.categories[0].name), "needs re-checking", "watch"],
+    ["Unsigned", counted(queue.categories[1].name), "awaiting DOK sign-off", "watch"],
+    ["Off-plot", live.filter(s => !s.norad_id).length, "no catalogue number", ""],
+  ];
+  strip.innerHTML = figures.map(([key, value, detail, tone]) => (
+    '<div class="fig ' + tone + '"><span class="v">' + esc(value) + '</span>'
+    + '<span class="of"><span class="k">' + esc(key) + '</span>'
+    + '<span class="d">' + esc(detail) + '</span></span></div>'
+  )).join("");
+}
+
+async function loadAttention(){
+  const msg = document.getElementById("queueMsg");
+  const caption = document.getElementById("queueCaption");
+  const list = document.getElementById("queueList");
+  const body = await fetch("/api/attention").then(r => r.json());
+
+  // The label and the boundaries are served, never written into the markup,
+  // so the words an analyst reads and the rule the tests enforce are one
+  // thing. Ash's decision, 14 September 2026.
+  msg.textContent = body.count
+    ? "Showing " + body.shown + " of " + body.count + "."
+    : "Nothing is outstanding.";
+  caption.innerHTML = "<b>" + esc(body.label) + ".</b> "
+    + esc(body.policy.caveat);
+
+  const order = body.categories.map(c => c.name);
+  list.replaceChildren();
+  body.entries.forEach(entry => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "qi c" + Math.min(order.indexOf(entry.category), 2);
+    button.innerHTML = '<span class="band"></span><span>'
+      + '<span class="nm">' + esc(entry.subject) + '</span>'
+      + '<span class="why">' + esc(entry.detail) + '</span>'
+      + '<span class="cat">' + esc(entry.category) + '</span></span>';
+    button.addEventListener("click", () => {
+      if(String(entry.subject_id || "").startsWith("family:")){
+        showFamilyAssessment(entry.subject_id.replace("family:", ""), entry.subject);
+      } else if(entry.subject_id){
+        selectSystem(entry.subject_id);
+      }
+    });
+    list.appendChild(button);
+  });
+}
+
+function renderInspector(record){
+  const msg = document.getElementById("inspMsg");
+  const target = document.getElementById("inspBody");
+  if(!record){
+    msg.hidden = false;
+    target.replaceChildren();
+    return;
+  }
+  msg.hidden = true;
+  const rows = [
+    ["NORAD", record.norad_id || "\u2014"],
+    ["Regime", record.regime || "\u2014"],
+    ["Status", record.status || "\u2014"],
+    ["Launched", record.launch_year || "\u2014"],
+    ["Site", record.launch_site || "\u2014"],
+  ];
+  target.innerHTML = '<h3>' + esc(record.catalogue_name) + '</h3>'
+    + '<p class="fam">' + esc(record.family_title || "") + '</p>'
+    + '<div class="kv">' + rows.map(([k,v]) => (
+        '<div><span class="k">' + esc(k) + '</span><span class="v">' + esc(v) + '</span></div>'
+      )).join("") + '</div>'
+    + (record.notes ? '<p class="why">' + esc(record.notes) + '</p>' : "");
+}
+
 // Top-level await: a module script is deferred, so the DOM is already parsed,
 // and awaiting means a failed first load surfaces rather than becoming an
 // unhandled rejection.
@@ -2303,6 +2638,9 @@ installKeyboard();
 await loadValidationPolicy();
 await loadSystems();
 await loadFamilies();
+await loadSignalStrip();
+await loadAttention();
+await loadBelt();
 
 const configurationGap = await missingConfiguration();
 if(configurationGap){

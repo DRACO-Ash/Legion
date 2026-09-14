@@ -4,6 +4,7 @@ import logging
 
 from fastapi import APIRouter, HTTPException, Request, status
 
+from src.belt import build_belt
 from src.family_elements import build_family_charts, clamp_window_days
 from src.models import (
     ClashCandidate,
@@ -364,3 +365,47 @@ async def diagnostics(request: Request, sat_no: str | None = None):
         username=settings.udl_username,
         password=settings.udl_password,
     )
+
+
+@router.get("/belt")
+async def belt(request: Request):
+    """Every catalogued GEO object at its derived mean longitude.
+
+    The stage of the interface. It costs one JCO HRR feed call for the whole
+    catalogue plus one element-set lookup per eligible object, so it sits
+    behind the strict limiter like every other UDL-facing route.
+
+    With UDL unconfigured this answers 503 and says so, rather than returning
+    an empty belt: an empty belt and an unreachable UDL look identical on a
+    circle, and the difference is the whole of what an analyst needs to know.
+    """
+    _gate(request)
+    client = request.app.state.udl_client
+    if not client.configured:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=UDL_NOT_CONFIGURED_DETAIL,
+        )
+
+    settings = request.app.state.settings
+    store = request.app.state.systems_store
+    try:
+        return await build_belt(
+            client=client,
+            cache=request.app.state.elset_cache,
+            records=store.list(),
+            hrr_window_hours=settings.udl_jco_hrr_window_hours,
+        )
+    except UDLNotConfigured as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=UDL_NOT_CONFIGURED_DETAIL,
+        ) from exc
+    except UDLError as exc:
+        # The rank feed failing is not survivable: a gate that cannot be
+        # applied must stop the pull rather than quietly open.
+        logger.warning("Belt assembly failed: %s", safe_detail(exc))
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"UDL did not answer: {safe_detail(exc)}",
+        ) from exc

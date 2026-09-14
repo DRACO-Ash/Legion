@@ -64,5 +64,5 @@ Two gate conditions still cannot be checked locally:
   - Security hotspots reviewed. A person must review these in SonarQube.
 And one process condition: the release must change a Python file under
 sonar.sources (src), or coverage is unmeasurable and code-quality-verify
-fails. bump_version.sh warns when a release would land in that state.
+fails. bump_version.sh REFUSES such a bump; --allow-unmeasurable overrides.
 NOTE

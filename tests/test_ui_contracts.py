@@ -21,15 +21,21 @@ INDEX_HTML = (ROOT / "src" / "static" / "index.html").read_text(encoding="utf-8"
 # The validated dark palette, in the order the validator was run on. The order
 # is the colour-vision-deficiency safety mechanism, so a reorder is a change
 # that has to be re-validated, not a tidy-up.
+# Replaced on 14 September 2026 when the interface dropped the Bluestaq navy
+# ground. A palette change is only legitimate with a fresh validator run, and
+# this set was run through the dataviz skill's validate_palette.js against the
+# new panel surface (#0C121B) in dark mode: lightness band, chroma floor,
+# adjacent CVD separation (worst pair 9.2, above the target of 8),
+# normal-vision separation and contrast all pass.
 SERIES_PALETTE = [
-    "#3987e5",
-    "#d95926",
-    "#199e70",
-    "#c98500",
-    "#d55181",
-    "#008300",
-    "#9085e9",
-    "#e66767",
+    "#2699bb",
+    "#ce7a22",
+    "#1e9e74",
+    "#9169d9",
+    "#d8517c",
+    "#9e8d1e",
+    "#6e8fe8",
+    "#d9564b",
 ]
 
 SORTABLE_COLUMNS = [
@@ -605,3 +611,21 @@ def test_a_signed_assessment_states_the_rule_it_was_signed_under() -> None:
     is not necessarily the rule the sign-off was made under."""
     assert "assessment.validated_entitlement" in INDEX_HTML
     assert "Recorded, not authenticated" in INDEX_HTML
+
+
+def test_no_top_level_name_is_declared_twice() -> None:
+    """A redeclaration kills the whole module script, silently.
+
+    Added after `svgEl` was defined twice: the second declaration threw at
+    parse time, every panel the script binds came up blank, and all sixty-six
+    checks in this file still passed because each one reads the markup rather
+    than running it.
+
+    Calibrated by declaring `esc` a second time: caught, naming it.
+    """
+    script = INDEX_HTML.split("<script", 1)[1]
+    declarations = re.findall(
+        r"^(?:function|const|let|class)\s+([A-Za-z_$][\w$]*)", script, re.MULTILINE
+    )
+    repeated = sorted({name for name in declarations if declarations.count(name) > 1})
+    assert repeated == [], f"declared more than once at the top level: {repeated}"

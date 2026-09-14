@@ -226,6 +226,32 @@ def fake_udl():
     )
 
 
+def geo_satellites(records, *, rank=2):
+    """A JCO HRR feed and element sets for every GEO record in a catalogue.
+
+    Shared here rather than built in each test file: the belt tests and any
+    future chart test need the same shape, and a copied fixture is exactly
+    what trips the gate's duplicated-lines-on-new-code condition.
+
+    The element-set fields are the four the longitude derivation reads, spread
+    so no two objects land on the same slot.
+    """
+    return [
+        {
+            "commonName": record["catalogue_name"],
+            "satNo": record["norad_id"],
+            "rank": rank,
+            "orbitRegime": "GEO",
+            "epoch": "2026-09-01T00:00:00Z",
+            "raan": 30.0 + index * 7,
+            "argOfPerigee": 10.0 + index * 3,
+            "meanAnomaly": 5.0 + index * 11,
+            "meanMotion": 1.0027,
+        }
+        for index, record in enumerate(records)
+    ]
+
+
 @pytest.fixture
 def client(fake_udl, tmp_path, monkeypatch):
     # readyz now probes real storage writability - isolate every test's
