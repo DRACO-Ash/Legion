@@ -634,3 +634,77 @@ def test_no_route_handler_is_async_without_awaiting() -> None:
             if not awaits:
                 offenders.append(f"{path.relative_to(ROOT)}:{node.lineno} {node.name}")
     assert offenders == [], f"Drop the async keyword or await something: {offenders}"
+
+
+# --- Shell nesting, reported against 0.15.3 ---------------------------------
+
+
+def _matching_fi(lines: list[str], start: int) -> int:
+    """Index of the `fi` closing the `if` that opens at `start`, or -1."""
+    depth = 0
+    for index in range(start, len(lines)):
+        stripped = lines[index].strip()
+        if re.match(r"^(if|elif)\b", stripped) and stripped != "elif":
+            depth += 1 if stripped.startswith("if") else 0
+        if stripped == "fi" or stripped.startswith("fi "):
+            depth -= 1
+            if depth == 0:
+                return index
+    return -1
+
+
+def _meaningful(lines: list[str], first: int, last: int) -> list[int]:
+    """Line indices in a body, skipping blanks and comments."""
+    return [
+        index
+        for index in range(first, last)
+        if lines[index].strip() and not lines[index].strip().startswith("#")
+    ]
+
+
+def _only_wraps_an_if(lines: list[str], index: int) -> int | None:
+    """The inner `if`'s index when the `if` at `index` holds nothing else.
+
+    Returns None unless the outer block's whole body is one inner `if` and
+    the outer carries no `else` or `elif` of its own. With an `else` the
+    nesting is doing real work and the rule does not fire.
+    """
+    if not re.match(r"^\s*if\b", lines[index]):
+        return None
+    closing = _matching_fi(lines, index)
+    if closing == -1:
+        return None
+    body = _meaningful(lines, index + 1, closing)
+    if not body or not re.match(r"^\s*if\b", lines[body[0]]):
+        return None
+    inner_close = _matching_fi(lines, body[0])
+    if inner_close != body[-1]:
+        return None
+    outer_branches = [
+        number
+        for number in body
+        if re.match(r"^\s*(else|elif)\b", lines[number])
+        and not body[0] < number < inner_close
+    ]
+    return None if outer_branches else body[0]
+
+
+def test_no_shell_if_wraps_only_another_if() -> None:
+    """SonarQube: "Merge this if statement with the enclosing one."
+
+    Reported against 0.15.3, in `bump_version.sh`, where an outer `if` did
+    nothing but hold an inner one. Two conditions that must both hold read as
+    one `&&`, and writing them nested invites an `else` later that silently
+    attaches to the wrong branch.
+
+    Only fires when the outer has no `else` or `elif` of its own, because
+    then the nesting really is carrying nothing.
+    """
+    offenders = []
+    for path in _shell_files():
+        lines = path.read_text(encoding="utf-8").splitlines()
+        for index in range(len(lines)):
+            inner = _only_wraps_an_if(lines, index)
+            if inner is not None:
+                offenders.append(f"{path.relative_to(ROOT)}:{inner + 1}")
+    assert offenders == [], f"Merge the nested if with its enclosing one: {offenders}"

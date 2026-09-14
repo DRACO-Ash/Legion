@@ -79,6 +79,7 @@ somewhere a person will look.
 | Replace this comprehension with passing the iterable to the dict constructor | 0.15.2 | `udl_live_check.py` | `test_sonar_platform_rules.py::test_no_dict_comprehension_merely_copies` |
 | Use asynchronous features in this function or remove the `async` keyword | 0.15.2 | `object_lists.py`, 4 findings | `test_sonar_platform_rules.py::test_no_route_handler_is_async_without_awaiting` |
 | LLMs running this code with faulty CLI arguments can escape file system restrictions (Vulnerability) | 0.15.2 | `udl_live_check.py`, the `--out` flag | `test_sonar_platform_rules.py::test_a_caller_supplied_path_is_checked_before_it_is_written` |
+| Merge this if statement with the enclosing one | 0.15.3 | `bump_version.sh`, the coverage warning | `test_sonar_platform_rules.py::test_no_shell_if_wraps_only_another_if` |
 
 ## The two things a mirror cannot catch
 
@@ -116,6 +117,19 @@ measurable**, which means a release has to change a Python file under
   began flagging a bare `" "` inside f-strings. That floor is SonarQube's own
   default and sits below the shortest literal the platform has reported here
   ("4 years", seven characters), but it is a judgement and it is recorded.
+
+## Fixing a finding can produce the next one
+
+0.15.3 reported a single issue, and it was in a line 0.15.2 had just changed:
+the nested `if` in `bump_version.sh` had been there all along, but converting
+its inner test from `[` to `[[` made the block new code, so the enclosing-`if`
+rule counted for the first time.
+
+Nothing went wrong here, and the fix was a one-liner. It is recorded because
+it is the shape to expect: **touching a file exposes every latent rule in the
+lines you touch.** A first upload after a long quiet period will find more
+than the change itself warrants, and the way through is to keep fixing rather
+than to conclude the mirrors are failing.
 
 ## One mirror is deliberately narrower than its rule
 
