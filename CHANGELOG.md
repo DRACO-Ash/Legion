@@ -5,6 +5,11 @@ All notable changes to this project are documented here. Format follows
 [Semantic Versioning](https://semver.org/). Pre-1.0: minor bumps may include
 breaking changes, since nothing has shipped to the App Store yet.
 
+## [0.15.3] - 2026-09-14
+
+Fourteen Code Quality findings fixed, scripts/ brought inside every mirror, and a store lock so dropping async cannot lose a write
+
+
 ## [0.15.2] - 2026-09-14
 
 Sonar rule register, the eighteen Code Quality findings fixed, and one command that checks every local condition before packaging
