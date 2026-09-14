@@ -1774,6 +1774,19 @@ async function focusGraphNode(nodeId){
   });
 }
 
+let validationEntitlement = "";
+
+async function loadValidationPolicy(){
+  // Served, never hard-coded: the words an analyst reads before signing and
+  // the rule recorded against the signature come from one place.
+  try{
+    const res = await fetch("/api/families/validation-policy");
+    if(res.ok) validationEntitlement = (await res.json()).entitlement;
+  } catch {
+    validationEntitlement = "";
+  }
+}
+
 function assessTone(claim){
   // The BattlePolicy split, done with provenance rather than layout: a
   // reference fact and an analyst's assessment must not read the same.
@@ -1804,10 +1817,18 @@ function validationBanner(assessment){
   if(assessment.awaiting_validation){
     return `<p class="awaiting"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-speculation"/></svg>
       <span><b>Awaiting validation.</b> Reconstructed from public sources and not signed
-      off by a role holder. It is not authoritative because it is written down.</span></p>`;
+      off. It is not authoritative because it is written down.
+      ${esc(validationEntitlement)}</span></p>`;
   }
+  // The entitlement is printed beside the name, and read off the record
+  // rather than the live policy: a sign-off states the rule it was made
+  // under, which is not necessarily the rule in force today.
+  const under = assessment.validated_entitlement
+    ? ` ${esc(assessment.validated_entitlement)}`
+    : "";
   return `<p class="awaiting signed"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-fact"/></svg>
-    <span><b>Validated</b> by ${esc(assessment.validated_by)}.</span></p>`;
+    <span><b>Validated</b> by ${esc(assessment.validated_by)}.${under}
+    Recorded, not authenticated: the name is asserted.</span></p>`;
 }
 
 function baselineMarkup(assessment){
@@ -2238,6 +2259,7 @@ async function loadClassification(){
 await loadClassification();
 await loadProvenanceLegend();
 installKeyboard();
+await loadValidationPolicy();
 await loadSystems();
 await loadFamilies();
 

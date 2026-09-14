@@ -17,6 +17,7 @@ from src.candidate_systems import CANDIDATE_RECORDS
 from src.compendium_models import FamilyAssessment
 from src.seed_data import SEED_RECORDS
 from src.store import FAMILY_ASSESSMENTS, _add_family_assessments
+from src.validation_policy import ENTITLED_TEAM, ENTITLEMENT
 
 CATALOGUE_FAMILIES = {
     str(record["family_id"]) for record in [*SEED_RECORDS, *CANDIDATE_RECORDS]
@@ -239,3 +240,42 @@ def test_signing_off_is_a_separate_act_from_editing(client) -> None:
     validation nobody intended."""
     client.patch(FAMILY, json={"open_questions": ["Still open."]})
     assert client.get(FAMILY).json()["awaiting_validation"] is True
+
+
+# --- who may sign off -------------------------------------------------------
+
+
+def test_the_entitlement_is_served_rather_than_hard_coded(client) -> None:
+    """The words an analyst reads before signing and the rule recorded
+    against the signature must come from one place."""
+    body = client.get("/api/families/validation-policy").json()
+
+    assert body["team"] == ENTITLED_TEAM
+    assert "may sign off" in body["entitlement"]
+    assert body["decided_on"] == "2026-09-14"
+
+
+def test_the_policy_says_plainly_that_it_is_not_authenticated(client) -> None:
+    """Ash's decision widens who may sign. It does not create a way to check
+    that the signer is who they say, and the application must not imply it
+    has one."""
+    body = client.get("/api/families/validation-policy").json()
+    assert "not authenticated" in body["caveat"]
+
+
+def test_a_signature_records_the_entitlement_beside_the_name(client) -> None:
+    """A sign-off made today still states the rule it was made under if the
+    policy later changes."""
+    signed = client.post(f"{FAMILY}/validation", json={"validated_by": SIGNER}).json()
+
+    assert signed["validated_by"] == SIGNER
+    assert signed["validated_team"] == ENTITLED_TEAM
+    assert signed["validated_entitlement"] == ENTITLEMENT
+    assert signed["awaiting_validation"] is False
+
+
+def test_the_entitlement_survives_a_reread(client) -> None:
+    client.post(f"{FAMILY}/validation", json={"validated_by": SIGNER})
+    stored = client.get(FAMILY).json()
+
+    assert stored["validated_entitlement"] == ENTITLEMENT

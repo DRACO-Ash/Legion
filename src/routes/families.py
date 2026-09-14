@@ -24,6 +24,7 @@ from src.compendium_models import FamilyAssessment
 from src.routes.object_lists import readable
 from src.security import client_key, enforce_rate_limit
 from src.store import FAMILY_ASSESSMENTS
+from src.validation_policy import NAME_REQUIRED, policy, signature
 
 router = APIRouter(prefix="/api/families")
 
@@ -47,16 +48,18 @@ class AssessmentUpdate(BaseModel):
 
 def _named(value: str) -> str:
     if not value.strip():
-        raise ValueError("Name whoever is signing this off; whitespace is not a name.")
+        raise ValueError(NAME_REQUIRED)
     return value.strip()
 
 
 class Validation(BaseModel):
     """Who is signing this assessment off.
 
-    A name, not a boolean. With no application-level authentication the name
-    is the whole of the record, so an empty one would be a validation by
-    nobody, which is worse than none at all.
+    A name, not a boolean. Ash's decision of 14 September 2026 is that any
+    member of the DOK team may sign one off, and `src/validation_policy.py`
+    holds that rule. With no application-level authentication the name is the
+    whole of the record, so an empty one would be a validation by nobody,
+    which is worse than none at all.
     """
 
     validated_by: Annotated[str, AfterValidator(_named)]
@@ -124,6 +127,17 @@ def _write(store, family_id: str, merged: dict[str, Any], actor: str) -> None:
         )
 
 
+@router.get("/validation-policy")
+async def validation_policy():
+    """Who may sign an assessment off, served rather than hard-coded.
+
+    The interface must not carry its own copy of the rule: the words an
+    analyst reads before signing and the rule recorded against the signature
+    have to come from one place.
+    """
+    return policy()
+
+
 @router.get("")
 async def list_families(request: Request):
     """Every family, whether it has an assessment, and whether it is signed."""
@@ -176,12 +190,15 @@ async def validate_assessment(request: Request, family_id: str, body: Validation
     Deliberately a separate route from the edit. Signing an assessment off is
     a different act from correcting a sentence in it, and folding the two
     together would let a routine edit carry a validation nobody intended.
+
+    The entitlement is stored alongside the name, so a sign-off made today
+    still states the rule it was made under if that rule later changes.
     """
     store = request.app.state.systems_store
     enforce_rate_limit(request.app.state.strict_limiter, request)
     existing = _assessments(request).get(family_id)
     if existing is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=NO_ASSESSMENT)
-    merged = {**existing, "validated_by": body.validated_by.strip()}
+    merged = {**existing, **signature(body.validated_by)}
     _write(store, family_id, merged, actor=client_key(request))
     return _decorated(merged)

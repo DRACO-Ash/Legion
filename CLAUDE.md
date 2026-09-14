@@ -716,6 +716,66 @@ documented default and sits comfortably below the shortest literal the
 platform has actually named here, "4 years" at seven characters. Two tests
 hold both ends of that floor.
 
+## Who may sign off, and the UDL call that still cannot be made
+
+**Ash's decision, 14 September 2026, answering [DECISION - Ash] item 3: any
+member of the DOK team may sign off a family assessment.**
+`src/validation_policy.py` holds the rule, `GET /api/families/validation-policy`
+serves it, and the interface reads it rather than keeping a copy.
+
+Three things follow and should not be undone:
+
+● **A sign-off records an assertion; it does not authenticate one.** There is
+  no application-level authentication and that was a decision, so the name a
+  signer types is the whole of the record, exactly as `asserted_by` is on
+  every claim. Both banner states say "recorded, not authenticated". If a
+  sign-off ever needs to be provably restricted to the DOK team, that needs
+  identity from the platform, which is where the team token ended up in 0.9.0.
+● **The entitlement is stored beside the name.** `signature()` writes
+  `validated_by`, `validated_team` and `validated_entitlement` together, so a
+  sign-off made today still states the rule it was made under if the policy
+  later changes. The panel reads the entitlement off the record, not off the
+  live policy, for the same reason.
+● **Whitespace is still refused.** A validation by nobody is worse than none,
+  because it looks like one.
+
+**The real UDL call still cannot be made from this environment, and it is not
+a credentials problem.** `unifieddatalibrary.com:443` is refused at the
+organisation proxy: `connect_rejected`, "gateway answered 403 to CONNECT".
+The same policy denial that blocks `celestrak.org` and `www.space-track.org`.
+No `UDL_USERNAME` or `UDL_PASSWORD` is visible to this container either, and
+no `.env` or `credentials.ini` is present, but the egress denial is the
+binding constraint: credentials would not change it.
+
+So `scripts/udl_live_check.py` exists to settle both INFERENCE items the
+moment it is run somewhere that can reach UDL. Built to the Script mode
+standard: stdlib only, single file, credentials from the environment first
+and the shared file second, matching the application, results to stdout and
+progress to stderr, and `--self-test` with a twelve-assertion manifest.
+
+What it reports, and why the wording is careful:
+
+● **A 4xx on `satNo=` is a FACT that the filter is unsupported. A 200 with
+  records is not a FACT that it works**, because a parameter that is accepted
+  and ignored returns a perfectly normal-looking payload for the wrong
+  satellites. The script says to check every `satNo` in the response.
+● **Equal counts across two `window_hours` values settle nothing.** They are
+  consistent with a delta feed and with a quiet period alike, and counts alone
+  cannot separate them, so it reports INFERENCE and says to compare record ids
+  across two runs an hour apart.
+● **An unreachable endpoint is reported as unreachable.** The first version
+  said the response "was not a JSON array", which was true and useless: the
+  connection never happened, and a message naming the wrong cause sends the
+  reader after the wrong fault. Found by running it, not by reading it.
+
+`--base-url` is caller input, so `checked_url` refuses anything but http and
+https: `urlopen` would otherwise open `file:` and a mistyped flag would report
+a local file as a UDL response.
+
+**`scripts/` is outside the `ruff check src tests` set on purpose.** The
+credentials loader is copied verbatim from the Script mode skill, which says
+not to restyle it, and linting it would force exactly that.
+
 ## Architecture, briefly
 
 - `src/app.py` — app factory (`build_app`), CORS, two-tier rate limiting.

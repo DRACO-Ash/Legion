@@ -581,3 +581,17 @@ def test_a_failed_clipboard_write_says_so_rather_than_appearing_to_work() -> Non
     """Clipboard access can be refused. The text stays selectable, which is
     the fallback that always works."""
     assert "Select the text and copy" in INDEX_HTML
+
+
+def test_the_sign_off_entitlement_is_read_from_the_server() -> None:
+    """A second copy of the rule in the interface would drift from the rule
+    recorded against the signature."""
+    assert "/api/families/validation-policy" in INDEX_HTML
+    assert "let validationEntitlement" in INDEX_HTML
+
+
+def test_a_signed_assessment_states_the_rule_it_was_signed_under() -> None:
+    """Read off the record, not off the live policy: the rule in force today
+    is not necessarily the rule the sign-off was made under."""
+    assert "assessment.validated_entitlement" in INDEX_HTML
+    assert "Recorded, not authenticated" in INDEX_HTML
