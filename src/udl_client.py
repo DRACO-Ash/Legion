@@ -23,13 +23,23 @@ bStar, dataMode, classificationMarking, origObjectId, source. No target
 field. Epoch range needs the trailing-Z microsecond form if filtering by
 time.
 
-INFERENCE, flagged for Ash to confirm: whether /udl/elset accepts a direct
-`satNo=` equality filter for a single-object lookup (the LEARNED register
-documents the response field names, not this specific query parameter).
-Also inference: the notification window semantics (does a wider
-window_hours return the full current baseline, or only deltas created in
-that window). Both are marked as assumptions in the docstrings below, not
-asserted as fact.
+FACT, settled by Ash against live UDL on 14 September 2026, replacing the
+INFERENCE that stood here since the first version: /udl/elset REQUIRES an
+`epoch` qualifier and accepts `satNo` alongside it. Both of these answer:
+
+    /udl/elset?epoch=>now-10 hours&satNo=40258
+    /udl/elset?epoch=>now-1 hours
+
+Without the epoch it answers HTTP 400, which is what the deployment's own
+diagnostics reported and what stopped every chart and the belt from drawing
+anything. `satNo` was never the problem. The second form shows `satNo` is
+optional, so a bulk pull is available; it is not used here, because the
+response size of a catalogue-wide window has not been measured.
+
+Still INFERENCE, and still unsettled: the notification window semantics, ie
+whether a wider window_hours returns the full current baseline or only the
+deltas created in that window. Counts alone cannot separate the two; it
+needs record ids compared across two runs an hour apart.
 
 The client never logs or returns credentials; upstream failures are logged
 with detail server-side and surfaced to callers as a generic UDLError so a
@@ -70,6 +80,47 @@ ELSET_HISTORY_CAP = 20_000
 UNEXPECTED_SHAPE = "UDL returned an unexpected response shape"
 
 NOTIFICATION_LIST_CAP = 30_000  # FACT, CONTEXT-001 Section 5 - slice by time above this
+
+# FACT, confirmed against live UDL by Ash on 14 September 2026: /udl/elset
+# REQUIRES an epoch qualifier. Without one it answers HTTP 400, which is what
+# the deployed diagnostics reported and what blocked every chart and the belt.
+# `satNo` was never the problem: it is accepted, but only alongside an epoch
+# bound. The working call is:
+#
+#     /udl/elset?epoch=>now-10 hours&satNo=40258
+#
+# The window here is wider than the one that proved the syntax, deliberately.
+# Ten hours proves the endpoint works; it is the wrong production default,
+# because any object whose most recent element set is older than the window
+# returns nothing and the belt would report "no element set came back" for an
+# object that has one. Seven days is generous enough to catch any actively
+# tracked object and still bounds the response to a handful of records.
+ELSET_EPOCH_WINDOW_HOURS = 168
+
+
+def hours_ago(hours: int) -> str:
+    """UDL's relative time operator: everything from N hours ago to now.
+
+    One function rather than three f-strings, so the syntax UDL requires is
+    written down once. The space in "now-24 hours" is part of the operator and
+    httpx percent-encodes it; it must not be stripped.
+    """
+    return f">now-{hours} hours"
+
+
+def elset_history_params(
+    sat_no: str, *, since: datetime | None = None
+) -> dict[str, Any]:
+    """The query `/udl/elset/history` is asked, built in exactly one place.
+
+    `src/udl_diagnostics.py` probes this path raw, so that a 4xx reaches the
+    report as a status rather than as a swallowed None. That only tells the
+    truth if the probe sends the same query the real call sends, which is why
+    this is a function and not a second copy of the dict.
+    """
+    if since is None:
+        return {"epoch": hours_ago(ELSET_EPOCH_WINDOW_HOURS), "satNo": sat_no}
+    return {"epoch": f">{since.strftime(UDL_EPOCH_FORMAT)}", "satNo": sat_no}
 
 
 class UDLError(Exception):
@@ -146,6 +197,22 @@ class UDLClient:
             logger.warning("UDL returned a non-JSON body from %s", path)
             raise UDLError("UDL returned an unexpected response body") from exc
 
+    async def probe(self, path: str, params: dict[str, Any]) -> Any:
+        """One raw call, with the UDLError let through, status code and all.
+
+        Every other method here is shaped for the charts, which means some of
+        them turn a 4xx into a fallback: `get_elset_history` answers None so a
+        chart can still draw a single point. That is right for a chart and
+        wrong for a diagnostic, and it produced a real defect. The deployment's
+        report read "history not available at this path, which is expected"
+        with an HTTP 200 beside it. UDL never sent a 200 and it was never
+        established as expected: a 4xx had been swallowed and the status was
+        fabricated further down the line. This method exists so a probe can
+        report what UDL actually answered.
+        """
+        self._require_configured()
+        return await self._get_json(path, params)
+
     async def fetch_jco_hrr(self, *, window_hours: int = 24) -> list[dict[str, Any]]:
         """Fetch the JCO HRR high-interest feed and flatten every record's msgBody
         into a single list of satellite entries: {commonName, country, satNo,
@@ -158,7 +225,7 @@ class UDLClient:
         """
         self._require_configured()
         params = {
-            "createdAt": f">now-{window_hours} hours",
+            "createdAt": hours_ago(window_hours),
             "dataMode": "REAL",
             "msgType": "JCO-HRR-SATELLITES",
             "source": "JCO",
@@ -207,15 +274,37 @@ class UDLClient:
     async def get_elset(self, sat_no: str) -> dict[str, Any] | None:
         """Look up the latest element set for a NORAD/satNo.
 
-        INFERENCE: assumes /udl/elset accepts a direct `satNo=` equality
-        filter and returns the most recent element set first. Neither is
-        confirmed in the LEARNED register - flagged for you to check against
-        a live pull before trusting this beyond a smoke test.
+        FACT, from a live call on 14 September 2026: the endpoint takes both
+        an `epoch` qualifier and `satNo`, and answers HTTP 400 without the
+        epoch. That 400 is what the deployment reported and what stopped every
+        chart and the belt from drawing anything.
+
+        The "latest" in the name is now earned rather than assumed. The
+        previous version took `payload[0]` on the stated INFERENCE that UDL
+        returns the most recent first, which was never confirmed and is worse
+        now that the epoch window returns a range rather than one record. The
+        newest epoch is selected explicitly, the same way `get_elset_history`
+        already sorts rather than trusting an undocumented order.
+
+        A record with an unparsable epoch sorts oldest, so it can never be
+        chosen over a record that carries a readable one.
         """
         self._require_configured()
-        payload = await self._get_json(ENDPOINT_ELSET, {"satNo": sat_no})
+        payload = await self._get_json(
+            ENDPOINT_ELSET,
+            {
+                "epoch": hours_ago(ELSET_EPOCH_WINDOW_HOURS),
+                "satNo": sat_no,
+            },
+        )
         if isinstance(payload, list):
-            return payload[0] if payload else None
+            records = [record for record in payload if isinstance(record, dict)]
+            if not records:
+                return None
+            return max(
+                records,
+                key=lambda record: parse_epoch(record.get("epoch")) or _EARLIEST,
+            )
         if isinstance(payload, dict):
             return payload
         logger.warning(
@@ -229,8 +318,9 @@ class UDLClient:
     ) -> list[dict[str, Any]] | None:
         """Fetch element sets for a satNo, oldest first.
 
-        `since` bounds the epoch. Passing None omits the filter entirely and
-        asks UDL for the full history it holds.
+        `since` bounds the epoch. Passing None does not omit the filter: an
+        epoch qualifier is mandatory on /udl/elset, so None falls back to the
+        same default window rather than asking for everything.
 
         INFERENCE, and the load-bearing one for the family movement charts:
         that UDL exposes `/udl/elset/history` and that it accepts `satNo` and
@@ -247,9 +337,14 @@ class UDLClient:
         failure still raises, because those are real outages worth showing.
         """
         self._require_configured()
-        params: dict[str, Any] = {"satNo": sat_no}
-        if since is not None:
-            params["epoch"] = f">{since.strftime(UDL_EPOCH_FORMAT)}"
+        # An epoch qualifier is mandatory on /udl/elset and this path very
+        # probably inherits that: the bare satNo call below is what the
+        # deployment's diagnostics reported as "history not available", and a
+        # missing required parameter produces exactly the 4xx that reading was
+        # built on. So `since=None` now sends a default window rather than no
+        # filter at all, and a 4xx from here is a finding to investigate
+        # rather than a settled fact about the endpoint.
+        params = elset_history_params(sat_no, since=since)
         try:
             payload = await self._get_json(ENDPOINT_ELSET_HISTORY, params)
         except UDLError as exc:

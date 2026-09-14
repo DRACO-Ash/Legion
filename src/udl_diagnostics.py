@@ -28,6 +28,7 @@ from src.udl_client import (
     ENDPOINT_NOTIFICATION,
     UDLError,
     UDLNotConfigured,
+    elset_history_params,
 )
 
 # What kind of thing went wrong, which is what decides who fixes it.
@@ -127,11 +128,16 @@ async def _probe(
             "detail": str(exc),
             "advice": FAULT_ADVICE[fault],
         }
+    # No status is reported on the success path, because none was observed:
+    # a probe calls a client method and gets a parsed object back, not a
+    # response. This used to say 200, which was a value UDL never sent and
+    # which appeared beside a swallowed 4xx in a real deployment report. A
+    # diagnostic that invents a status is worse than one that omits it.
     return {
         "name": name,
         "path": path,
         "ok": True,
-        "http_status": 200,
+        "http_status": None,
         "elapsed_ms": round((time.monotonic() - started) * 1000),
         "result": describe(result),
         "fault": None,
@@ -151,13 +157,22 @@ def _describe_elset(record: dict[str, Any] | None) -> str:
     return f"latest element set, epoch {record.get('epoch') or 'not stated'}"
 
 
-def _describe_history(records: list[dict[str, Any]] | None) -> str:
-    if records is None:
-        return (
-            "not available at this path, which is expected: the app falls back "
-            "to the latest element set"
-        )
-    return f"{len(records)} element sets"
+def _describe_history(payload: Any) -> str:
+    """What the raw /udl/elset/history call actually returned.
+
+    This probe bypasses `get_elset_history`, so a 4xx never reaches here: it
+    raises and is reported with its status. Anything arriving here is a body
+    UDL sent, and a shape the app cannot read is worth naming rather than
+    counting.
+    """
+    if isinstance(payload, list):
+        return f"{len(payload)} element sets"
+    return f"answered, but not with a list: {type(payload).__name__}"
+
+
+# Faults on /udl/elset/history the charts survive, because any 4xx sends them
+# down the latest-element-set fallback. Not a list of faults that are fine.
+HISTORY_FALLBACK = frozenset({FAULT_NOT_FOUND, FAULT_CLIENT})
 
 
 def _verdict(credentials: dict[str, Any], probes: list[dict[str, Any]]) -> str:
@@ -170,18 +185,26 @@ def _verdict(credentials: dict[str, Any], probes: list[dict[str, Any]]) -> str:
             "and the endpoints answer in the shape this app expects. A chart "
             "that still fails is not failing here."
         )
-    # History returning 4xx is a designed fallback, not a fault, so it never
-    # decides the verdict on its own.
+    # A 4xx on the history path does not block a chart, because the app falls
+    # back to the latest element set. It is still a finding rather than the
+    # settled fact this used to call it: the identical reading on /udl/elset
+    # turned out to be a missing mandatory `epoch`, not an absent endpoint, so
+    # the verdict names the status and says it is unresolved.
     blocking = [
         probe
         for probe in failed
-        if not (probe["name"] == "elset_history" and probe["fault"] == FAULT_NOT_FOUND)
+        if not (probe["name"] == "elset_history" and probe["fault"] in HISTORY_FALLBACK)
     ]
     if not blocking:
+        status = next(
+            (p["http_status"] for p in failed if p["name"] == "elset_history"), None
+        )
         return (
-            "Element-set history is not available at that path, which is "
-            "expected and handled: charts fall back to the latest element set "
-            "and show a single point per object."
+            f"Element-set history answered HTTP {status}. Charts still work: "
+            "they fall back to the latest element set and show a single point "
+            "per object. Whether that path is absent or the query is wrong is "
+            "not settled, and the same reading on /udl/elset turned out to be "
+            "a wrong query."
         )
     first = blocking[0]
     return f"{first['name']} failed: {first['advice']}"
@@ -221,10 +244,14 @@ async def run_diagnostics(
             lambda: client.get_elset(sat_no),
             _describe_elset,
         ),
+        # Raw, not through `get_elset_history`, which swallows a 4xx and
+        # answers None so a chart can still draw. The whole job here is to
+        # report what UDL said, so the wrapper that hides it is bypassed and
+        # the query is built by the one function both callers share.
         await _probe(
             "elset_history",
             ENDPOINT_ELSET_HISTORY,
-            lambda: client.get_elset_history(sat_no),
+            lambda: client.probe(ENDPOINT_ELSET_HISTORY, elset_history_params(sat_no)),
             _describe_history,
         ),
     ]

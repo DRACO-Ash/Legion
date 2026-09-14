@@ -782,17 +782,72 @@ a local file as a UDL response.
 credentials loader is copied verbatim from the Script mode skill, which says
 not to restyle it, and linting it would force exactly that.
 
+## The elset call needs an epoch, and the app had never sent one
+
+**Ash settled it against live UDL on 14 September 2026**, and it is the first
+genuinely verified thing this file can say about `/udl/elset`. Both of these
+answer:
+
+```
+/udl/elset?epoch=>now-10 hours&satNo=40258
+/udl/elset?epoch=>now-1 hours
+```
+
+Without an `epoch` the endpoint returns **HTTP 400**. The application had been
+sending `satNo` alone since the first version, so **every chart and the whole
+belt were blocked on a malformed query**, not on credentials, not on egress,
+and not on the endpoint being wrong. `ELSET_EPOCH_WINDOW_HOURS = 168` is the
+production default: seven days catches any actively tracked object, where the
+ten hours that proved the syntax would report "no element set came back" for
+an object that has one.
+
+Three things follow:
+
+● **The `satNo` INFERENCE is closed.** It was never the problem. It is
+  accepted, and only alongside an epoch bound.
+● **`get_elset` now selects the newest epoch explicitly.** It used to take
+  `payload[0]` on an unconfirmed assumption that UDL returns newest first.
+  That was survivable when the call returned one record and is not now that an
+  epoch window returns a range. An unparsable epoch sorts oldest, so it can
+  never win.
+● **`epoch` alone works, so `satNo` is optional and a bulk pull exists.** The
+  belt makes one element-set call per object, around twenty, where one call
+  could serve them all. **It is not built, because the response size of a
+  catalogue-wide window has not been measured**, and the two constraints pull
+  opposite ways: the window must be short enough to bound the payload and long
+  enough that every object has a record in it. Measure before building.
+
+**A diagnostic that invents a value is worse than no diagnostic**, and this
+codebase shipped one. The deployment's report read "history not available at
+this path, which is expected" with an HTTP 200 beside it. UDL sent neither:
+`get_elset_history` swallows a 4xx and answers None so a chart can still draw,
+and `_probe` hard-coded `200` on its success path. That fallback is right for
+a chart and exactly wrong for the one module whose readers have nothing else
+to go on. Now:
+
+● **A successful probe reports no status at all**, because none was observed.
+● **The history probe calls the path raw** through `UDLClient.probe`, which
+  lets the `UDLError` through with its status. `elset_history_params` builds
+  the query in one place so the probe cannot report on a different request
+  from the one the application makes.
+● **The verdict names the status and says the cause is unsettled**, rather
+  than calling a refusal expected.
+
+`src/udl_diagnostics.py` had **no test file and 56% coverage**, which is how
+the fabricated 200 survived. It is at 94% now, calibrated by putting both
+defects back: the 200 fails one named test, routing through the wrapper fails
+five.
+
 ## Architecture, briefly
 
 - `src/app.py` — app factory (`build_app`), CORS, two-tier rate limiting.
 - `src/udl_client.py` — talks to UDL's `/udl/notification` (JCO HRR feed)
   and `/udl/elset` endpoints. These paths and field names are copied from
   CONTEXT-001's verified LEARNED register (a separate Claude.ai project's
-  context file Ash maintains) — treat them as fact, not guesses, **except**
-  two things explicitly flagged INFERENCE in that file's docstrings: (1)
-  whether `/udl/elset` accepts a direct `satNo=` filter, (2) the
-  notification `window_hours` semantics (full baseline vs. deltas only).
-  Confirm both against a live UDL session before trusting them further.
+  context file Ash maintains) — treat them as fact, not guesses. Of the two
+  items this bullet used to flag INFERENCE, the first is now settled (see
+  "The elset call needs an epoch" below) and the second, the notification
+  `window_hours` semantics, full baseline against deltas only, is still open.
 - `src/store.py` — atomic JSON store for the tracked-systems catalogue
   (not a database — deliberate, per Bluestaq's data-layer standard for
   low-concurrency, non-relational state). Anti-shrink merges, archive not
@@ -833,12 +888,19 @@ undo by accident:
   GMST(epoch)`, which holds for a near-circular, near-equatorial orbit. It is
   good for drift and station-keeping, not for conjunction assessment. Do not
   quietly promote it to fact anywhere.
-● **`/udl/elset/history` is INFERENCE, not FACT.** CONTEXT-001's LEARNED
-  register documents neither the path nor a `satNo`/`epoch` filter on it; it
-  is a pattern-match against UDL's general `/history` convention. The client
-  therefore treats a 4xx as "not available here" and falls back to the latest
-  element set, while a 5xx or a timeout still raises. Confirm the endpoint
-  against a live pull before trusting a chart's history depth.
+● **`/udl/elset/history` is INFERENCE, not FACT, and the one report that
+  looked like evidence was our own artefact.** CONTEXT-001's LEARNED register
+  documents neither the path nor a `satNo`/`epoch` filter on it; it is a
+  pattern-match against UDL's general `/history` convention. The client
+  treats a 4xx as "not available here" and falls back to the latest element
+  set, while a 5xx or a timeout still raises. The deployment's diagnostics
+  reported "not available at this path, which is expected" beside an HTTP
+  200, and **both halves were invented here**: the 4xx had been swallowed by
+  that very fallback and the 200 was hard-coded on the probe's success path.
+  Since the identical reading on `/udl/elset` turned out to be a missing
+  mandatory `epoch` rather than an absent endpoint, this one is open. The
+  diagnostics now calls the path raw through `UDLClient.probe` and reports
+  the real status, so the next run settles it.
 ● **Relative mode anchors on each object's latest element set, never its
   first.** Ash's rule, 10 September 2026. The question is "where has this come
   from to get where it is now", so now is the fixed point and history reads

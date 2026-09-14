@@ -1,11 +1,25 @@
 #!/usr/bin/env python3
-"""Settle the two UDL behaviours Legion still carries as INFERENCE.
+"""Settle the UDL behaviours Legion still carries as INFERENCE.
 
 Makes a small number of authenticated calls against UDL and reports, as
-evidence rather than assurance, whether `/udl/elset` accepts a direct
-`satNo=` filter and what the `/udl/notification` `window_hours` parameter
-actually returns. Both are flagged INFERENCE in `src/udl_client.py` and in
-CLAUDE.md, and neither can be settled from the container this application is
+evidence rather than assurance, what `/udl/notification`'s `window_hours`
+parameter actually returns, and whether `/udl/elset` HONOURS a `satNo=`
+filter rather than merely accepting it.
+
+That second question changed on 14 September 2026, when Ash confirmed against
+live UDL that `/udl/elset` requires an `epoch` qualifier and answers HTTP 400
+without one, and that `satNo` is accepted alongside it. Acceptance is settled.
+What is not settled is whether the filter is honoured, which is the dangerous
+half: a parameter accepted and ignored returns a perfectly normal-looking
+payload for the wrong satellites, and the chart drawn from it looks entirely
+normal. So this script now reads every `satNo` in the response rather than
+telling its reader to.
+
+Every call here carries the epoch, because a probe that omitted it would earn
+the 400 itself and report an unsupported filter: a message naming the wrong
+cause, which is the mistake this script was already rewritten once to avoid.
+
+Neither question can be settled from the container this application is
 developed in, because `unifieddatalibrary.com:443` is refused at the
 organisation proxy.
 
@@ -63,9 +77,30 @@ NOTIFICATION_FILTERS: dict[str, str] = {
 }
 
 
+def hours_ago(hours: int) -> str:
+    """UDL's relative time operator, written once.
+
+    Mirrors `hours_ago` in src/udl_client.py. This script is stdlib-only and
+    standalone by design, so it cannot import it; the duplication is between
+    two trees deliberately, not within one.
+    """
+    return f">now-{hours} hours"
+
+
 def notification_params(window_hours: int) -> dict[str, str]:
     """The query the application sends for a given window, reproduced exactly."""
-    return {"createdAt": f">now-{window_hours} hours", **NOTIFICATION_FILTERS}
+    return {"createdAt": hours_ago(window_hours), **NOTIFICATION_FILTERS}
+
+
+# FACT, Ash against live UDL on 14 September 2026: /udl/elset answers HTTP 400
+# without an epoch bound. This mirrors ELSET_EPOCH_WINDOW_HOURS in
+# src/udl_client.py so the probe asks what the application asks.
+ELSET_EPOCH_WINDOW_HOURS = 168
+
+
+def elset_params(**extra: object) -> dict[str, object]:
+    """The mandatory epoch bound, plus whatever this particular probe adds."""
+    return {"epoch": hours_ago(ELSET_EPOCH_WINDOW_HOURS), **extra}
 
 
 NOT_REACHED = (
@@ -156,9 +191,7 @@ def checked_out_path(candidate: str) -> Path:
     root = Path.cwd().resolve()
     resolved = (root / candidate).resolve()
     if resolved == root or root not in resolved.parents:
-        raise ValueError(
-            f"Output path must be inside {root}, not {candidate!r}"
-        )
+        raise ValueError(f"Output path must be inside {root}, not {candidate!r}")
     return resolved
 
 
@@ -201,13 +234,32 @@ def count_of(body: Any) -> int | None:
     return len(body) if isinstance(body, list) else None
 
 
-def satno_verdict(status: int, count: int | None, asked_for: str) -> tuple[str, str]:
+def foreign_satnos(body: object, asked_for: str) -> list[str] | None:
+    """Every satNo in the response that is not the one asked for.
+
+    None means there was no array to read. An empty list means every record
+    belongs to the requested satellite, which is the only shape that proves
+    the filter was honoured rather than merely accepted.
+    """
+    if not isinstance(body, list):
+        return None
+    return sorted(
+        {
+            str(record.get("satNo"))
+            for record in body
+            if isinstance(record, dict) and str(record.get("satNo")) != str(asked_for)
+        }
+    )
+
+
+def satno_verdict(status: int, body: object, asked_for: str) -> tuple[str, str]:
     """What a `satNo=` response proves about the filter.
 
-    Three outcomes, and the middle one is the important one: a 200 that
-    returns records for other satellites means the parameter was accepted and
-    ignored, which is worse than a rejection because the chart would look
-    entirely normal while plotting the wrong object.
+    Acceptance is settled: Ash confirmed on 14 September 2026 that `satNo` is
+    taken alongside the mandatory epoch. The open question is whether it is
+    HONOURED, so this reads the payload instead of counting it. A parameter
+    accepted and ignored is worse than one rejected, because the chart drawn
+    from the wrong satellites looks entirely normal.
     """
     if status == 0:
         # The first version of this said the response "was not a JSON array",
@@ -215,26 +267,42 @@ def satno_verdict(status: int, count: int | None, asked_for: str) -> tuple[str, 
         # that names the wrong cause sends the reader after the wrong fault.
         return UNKNOWN, NOT_REACHED
     if status >= 400:
+        # No longer read as "the filter is unsupported": a 400 here is much
+        # more likely to be a malformed query, which is exactly what a missing
+        # epoch produced for the life of this application.
         refused = (
-            f"/udl/elset refused satNo with HTTP {status}. The filter is not "
-            "supported and the client must not rely on it."
+            f"/udl/elset answered HTTP {status} for a query carrying both an "
+            "epoch bound and satNo. That is a rejected request, not a verdict "
+            "on the filter. Compare against the reachability check, which "
+            "sends the epoch alone."
         )
-        return FACT, refused
-    if count is None:
+        return INFERENCE, refused
+    foreign = foreign_satnos(body, asked_for)
+    if foreign is None:
         return UNKNOWN, "Response was not a JSON array; inspect it by hand."
+    count = count_of(body)
     if count == 0:
         empty = (
-            f"Accepted, but returned nothing for satNo={asked_for}. Either the "
-            "filter works and there is no current element set, or it silently "
-            "matched nothing. Retry with a satellite known to be current."
+            f"Accepted, but returned nothing for satNo={asked_for} inside a "
+            f"{ELSET_EPOCH_WINDOW_HOURS}-hour window. Either the satellite has "
+            "no recent element set or the filter silently matched nothing. "
+            "Retry with a satellite known to be current."
         )
         return INFERENCE, empty
-    accepted = (
-        f"Accepted and returned {count} record(s). Check every satNo in the "
-        f"payload equals {asked_for}: a filter that is accepted and ignored is "
-        "the dangerous case."
+    if foreign:
+        ignored = (
+            f"ACCEPTED AND IGNORED. {count} record(s) came back and "
+            f"{len(foreign)} other satNo(s) are among them: "
+            f"{', '.join(foreign[:5])}. The client must not rely on this "
+            "filter, and any chart built on it has been plotting the wrong "
+            "objects."
+        )
+        return FACT, ignored
+    honoured = (
+        f"Honoured. All {count} record(s) carry satNo={asked_for} and no "
+        "other. Read from the payload, not inferred from the status."
     )
-    return FACT, accepted
+    return FACT, honoured
 
 
 def window_verdict(
@@ -302,16 +370,18 @@ def run(args: argparse.Namespace) -> int:
         return status, body, note
 
     reachable_status, _, reachable_note = call(
-        "reachability", "/udl/elset", {"maxResults": 1}
+        "reachability", "/udl/elset", elset_params(maxResults=1)
     )
     if reachable_status == 0:
         logging.error("UDL is not reachable from here: %s", reachable_note)
 
     satno_status, satno_body, _ = call(
-        "elset-satno-filter", "/udl/elset", {"satNo": args.norad, "maxResults": 5}
+        "elset-satno-filter",
+        "/udl/elset",
+        elset_params(satNo=args.norad, maxResults=5),
     )
     satno_marker, satno_finding = satno_verdict(
-        satno_status, count_of(satno_body), str(args.norad)
+        satno_status, satno_body, str(args.norad)
     )
 
     _, short_body, _ = call(
@@ -332,7 +402,7 @@ def run(args: argparse.Namespace) -> int:
         "checks": checks,
         "findings": [
             {
-                "question": "Does /udl/elset accept a direct satNo= filter?",
+                "question": "Does /udl/elset HONOUR a satNo= filter, not just accept it?",
                 "marker": satno_marker,
                 "finding": satno_finding,
             },
@@ -399,15 +469,39 @@ def self_test() -> int:
     check("T002", "a non-array yields no count", None, count_of({"a": 1}))
     check(
         "T003",
-        "a 4xx on satNo is a FACT that the filter is unsupported",
-        FACT,
+        "a 4xx on a query carrying the epoch settles nothing about the filter",
+        INFERENCE,
         satno_verdict(400, None, "49330")[0],
     )
     check(
         "T004",
         "an accepted satNo returning nothing is only an INFERENCE",
         INFERENCE,
-        satno_verdict(200, 0, "49330")[0],
+        satno_verdict(200, [], "49330")[0],
+    )
+    check(
+        "T020",
+        "a payload of only the asked-for satNo proves the filter is honoured",
+        FACT,
+        satno_verdict(200, [{"satNo": "49330"}, {"satNo": 49330}], "49330")[0],
+    )
+    check(
+        "T021",
+        "one foreign satNo in the payload means accepted and ignored",
+        "ACCEPTED AND IGNORED",
+        satno_verdict(200, [{"satNo": "49330"}, {"satNo": "40258"}], "49330")[1][:20],
+    )
+    check(
+        "T022",
+        "the foreign-satNo reader names the intruder, not the count",
+        ["40258"],
+        foreign_satnos([{"satNo": "49330"}, {"satNo": "40258"}], "49330"),
+    )
+    check(
+        "T023",
+        "the mandatory epoch bound travels on every elset call",
+        hours_ago(ELSET_EPOCH_WINDOW_HOURS),
+        elset_params(maxResults=1)["epoch"],
     )
     check(
         "T005",

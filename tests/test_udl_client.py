@@ -289,8 +289,20 @@ async def test_get_elset_history_returns_records_oldest_first(client):
 
 
 @pytest.mark.anyio
-async def test_no_since_asks_udl_for_the_whole_history(client):
-    """Full history is the absence of an epoch filter, not a very wide one."""
+async def test_no_since_still_sends_an_epoch_window(client):
+    """This test used to assert the opposite, and the opposite was the bug.
+
+    It read "full history is the absence of an epoch filter, not a very wide
+    one", which is a reasonable-sounding rule and wrong about this API. Ash
+    confirmed against live UDL on 14 September 2026 that /udl/elset answers
+    HTTP 400 without an epoch qualifier, and the history path is built on the
+    same collection.
+
+    That matters more than a parameter: the deployment's diagnostics reported
+    "elset history not available at this path", the client reached that
+    conclusion from a 4xx, and a missing mandatory parameter produces exactly
+    that 4xx. The endpoint may have been fine the whole time.
+    """
     with respx.mock(base_url=BASE_URL) as mock:
         route = mock.get(ENDPOINT_ELSET_HISTORY).mock(
             return_value=httpx.Response(200, json=[])
@@ -298,7 +310,7 @@ async def test_no_since_asks_udl_for_the_whole_history(client):
         await client.get_elset_history("43874")
     params = route.calls[0].request.url.params
     assert params["satNo"] == "43874"
-    assert "epoch" not in params
+    assert params["epoch"] == f">now-{udl_client.ELSET_EPOCH_WINDOW_HOURS} hours"
     await client.aclose()
 
 
@@ -354,3 +366,70 @@ async def test_get_elset_history_not_configured_raises(unconfigured_client):
 @pytest.fixture
 def anyio_backend():
     return "asyncio"
+
+
+@pytest.mark.anyio
+async def test_get_elset_sends_the_epoch_qualifier_udl_requires(client):
+    """FACT, from a live call on 14 September 2026.
+
+    /udl/elset answers HTTP 400 without an epoch qualifier. `satNo` was never
+    the problem and the INFERENCE that it might be unsupported was wrong: it
+    is accepted, but only alongside an epoch bound. The working call Ash
+    matched against UDL direct was:
+
+        /udl/elset?epoch=>now-10 hours&satNo=40258
+
+    This is the single defect that stopped every chart and the belt from
+    drawing anything against real data.
+    """
+    with respx.mock(base_url=BASE_URL) as mock:
+        route = mock.get(ENDPOINT_ELSET).mock(
+            return_value=httpx.Response(200, json=[{"satNo": "40258"}])
+        )
+        await client.get_elset("40258")
+    params = route.calls[0].request.url.params
+    assert params["satNo"] == "40258"
+    assert params["epoch"] == f">now-{udl_client.ELSET_EPOCH_WINDOW_HOURS} hours"
+    await client.aclose()
+
+
+@pytest.mark.anyio
+async def test_get_elset_returns_the_newest_epoch_not_the_first_record(client):
+    """ "Latest" is now earned rather than assumed.
+
+    The previous version took `payload[0]` on a stated INFERENCE that UDL
+    returns the most recent first, which was never confirmed. It matters more
+    now: an epoch window returns a range rather than one record, so trusting
+    the order could put a week-old element set on the belt and the mark would
+    look entirely normal sitting at the wrong longitude.
+
+    The payload here is deliberately in the wrong order.
+    """
+    payload = [
+        {"satNo": "40258", "epoch": "2026-09-01T00:00:00.000000Z", "raan": 1.0},
+        {"satNo": "40258", "epoch": "2026-09-14T00:00:00.000000Z", "raan": 2.0},
+        {"satNo": "40258", "epoch": "2026-09-07T00:00:00.000000Z", "raan": 3.0},
+    ]
+    with respx.mock(base_url=BASE_URL) as mock:
+        mock.get(ENDPOINT_ELSET).mock(return_value=httpx.Response(200, json=payload))
+        elset = await client.get_elset("40258")
+    assert elset["epoch"] == "2026-09-14T00:00:00.000000Z"
+    await client.aclose()
+
+
+@pytest.mark.anyio
+async def test_an_unreadable_epoch_never_wins_the_selection(client):
+    """A record with no usable epoch sorts oldest and can never be chosen.
+
+    Otherwise a malformed record would silently become "the latest" and be
+    plotted, which is the failure this whole module is shaped around.
+    """
+    payload = [
+        {"satNo": "40258", "epoch": "not a date"},
+        {"satNo": "40258", "epoch": "2026-09-14T00:00:00.000000Z"},
+    ]
+    with respx.mock(base_url=BASE_URL) as mock:
+        mock.get(ENDPOINT_ELSET).mock(return_value=httpx.Response(200, json=payload))
+        elset = await client.get_elset("40258")
+    assert elset["epoch"] == "2026-09-14T00:00:00.000000Z"
+    await client.aclose()

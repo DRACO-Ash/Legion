@@ -6,7 +6,7 @@ from fastapi.testclient import TestClient
 from src.app import build_app
 from src.config import Settings
 from src.orbits import parse_epoch
-from src.udl_client import UDLNotConfigured
+from src.udl_client import ENDPOINT_ELSET_HISTORY, UDLError, UDLNotConfigured
 
 
 class FakeUDLClient:
@@ -85,6 +85,23 @@ class FakeUDLClient:
             for e in self._satellites
             if needle in str(e.get("commonName", "")).strip().casefold()
         ]
+
+    async def probe(self, path: str, params: dict):
+        """The raw call the diagnostics uses, with the error let through.
+
+        `history_supported=False` means UDL refuses this path, so here it
+        raises with a status rather than answering None. That distinction is
+        the whole point of the real `probe`: the wrapper's None is what a
+        chart needs and what a diagnostic must never be handed.
+        """
+        self.calls.append({"op": "probe", "path": path, "params": params})
+        self._check()
+        if path == ENDPOINT_ELSET_HISTORY:
+            if not self._history_supported:
+                raise UDLError("UDL upstream error (HTTP 404)", status_code=404)
+            sat_no = str(params.get("satNo"))
+            return list(self._elset_history.get(sat_no, []))
+        raise UDLError("no probe double for this path", status_code=404)
 
     async def get_elset_history(self, sat_no: str, *, since=None):
         self.calls.append({"op": "get_elset_history", "sat_no": sat_no, "since": since})
