@@ -1,0 +1,826 @@
+<!--
+  TEMPLATE ASSET, not a report. This is the 14-15 September 2026 first
+  edition, kept as the starting point for its CSS, fonts and component
+  shapes (see references/design-system.md for why these are reused
+  unchanged). Before publishing a new week's edition:
+    1. Change the <title> to "Legion Retrospective, <D Month YYYY>".
+    2. Replace every section's content with this week's evidence, gathered
+       fresh per references/evidence-checklist.md. Do not carry forward a
+       stat, count, or finding from this file into a new edition.
+    3. Drop any section this week has nothing for (see SKILL.md Step 4).
+    4. Update the masthead date and the footer.
+  The CSS custom properties, fonts, and component classes below may be
+  reused verbatim.
+-->
+<title>Legion Retrospective</title>
+<style>
+  :root{
+    color-scheme: light;
+    --navy:#162646;
+    --blue1:#385FAF;
+    --blue2:#739BCF;
+    --copper:#C67C00;
+    --green:#27AE60;
+    --brick:#A6433D;
+    --ink:#2C3E50;
+    --ink-soft:#5B6B80;
+    --paper:#F6F4EE;
+    --card:#FFFFFF;
+    --card-tint:#EFEDE4;
+    --hairline:#DEDACC;
+    --hairline-strong:#C9C4B2;
+    --navy-tint:#EAEEF6;
+    --cat-1:#2a78d6; /* false-confidence tests */
+    --cat-2:#1baf7a; /* browser-only defects */
+    --cat-3:#e87ba4; /* fabricated / assumed values */
+    --cat-4:#4a3aa7; /* gate / mirror lag */
+  }
+  *{box-sizing:border-box;}
+  body{
+    background:var(--paper);
+    color:var(--ink);
+    font-family:"IBM Plex Sans", -apple-system, "Segoe UI", sans-serif;
+    line-height:1.55;
+    -webkit-font-smoothing:antialiased;
+  }
+  h1,h2,h3,h4{
+    font-family:"Spectral", Georgia, "Times New Roman", serif;
+    color:var(--navy);
+    font-weight:600;
+    text-wrap:balance;
+    margin:0;
+  }
+  .mono{font-family:"IBM Plex Mono", ui-monospace, "SF Mono", Consolas, monospace;}
+  a{color:var(--blue1);}
+  a:focus-visible, button:focus-visible, .navlink:focus-visible{
+    outline:2.5px solid var(--blue1);
+    outline-offset:2px;
+    border-radius:3px;
+  }
+
+  /* ---------- masthead ---------- */
+  .masthead{
+    background:var(--navy);
+    color:#EDEFF6;
+    padding-block:14px;
+    padding-inline:max(20px, calc((100vw - 900px)/2));
+  }
+  .masthead-inner{
+    display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap;
+  }
+  .brand{display:flex; align-items:center; gap:10px;}
+  .brand-mark{
+    width:30px;height:30px;border-radius:7px;
+    background:linear-gradient(155deg, var(--blue2), var(--blue1));
+    display:flex;align-items:center;justify-content:center;
+    font-size:15px; flex:none;
+  }
+  .brand-text{font-family:"Spectral",serif; font-size:15px; letter-spacing:.02em; color:#fff;}
+  .brand-text b{font-weight:700;}
+  .masthead-meta{
+    font-family:"IBM Plex Mono", monospace;
+    font-size:11.5px;
+    color:#B9C3DC;
+    letter-spacing:.03em;
+    text-align:right;
+  }
+
+  /* ---------- section nav ---------- */
+  .toc-wrap{
+    background:var(--card-tint);
+    border-block:1px solid var(--hairline);
+  }
+  .toc{
+    display:flex; gap:4px; overflow-x:auto; padding-inline:max(20px, calc((100vw - 900px)/2));
+    padding-block:9px;
+    scrollbar-width:thin;
+  }
+  .toc a{
+    flex:none;
+    font-size:12.5px;
+    color:var(--ink-soft);
+    text-decoration:none;
+    padding:5px 11px;
+    border-radius:100px;
+    white-space:nowrap;
+    border:1px solid transparent;
+  }
+  .toc a:hover{background:#fff; border-color:var(--hairline-strong); color:var(--navy);}
+  .toc a.active{background:var(--navy); color:#fff;}
+
+  /* ---------- layout scaffolding ---------- */
+  main{max-width:900px; margin-inline:auto; padding-inline:20px;}
+  section{padding-block:44px;}
+  section + section{border-top:1px solid var(--hairline);}
+  .eyebrow{
+    font-family:"IBM Plex Mono", monospace;
+    font-size:11.5px;
+    letter-spacing:.09em;
+    text-transform:uppercase;
+    color:var(--blue1);
+    font-weight:600;
+    margin-bottom:8px;
+  }
+  h2{font-size:26px; margin-bottom:6px;}
+  h2 + .dek{color:var(--ink-soft); font-size:15px; max-width:62ch; margin-top:2px;}
+  h3{font-size:17px; margin-bottom:4px;}
+  p{margin:0 0 12px; max-width:70ch;}
+  p:last-child{margin-bottom:0;}
+  ul.blt{list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:9px;}
+  ul.blt li{padding-left:1.4em; position:relative; max-width:68ch;}
+  ul.blt li::before{content:"●"; position:absolute; left:0; top:.05em; color:var(--blue1); font-size:.7em;}
+  ul.blt.sq li::before{content:"■"; font-size:.62em; top:.15em;}
+
+  /* ---------- BLUF banner ---------- */
+  .bluf{
+    background:var(--navy);
+    color:#EDEFF6;
+    border-radius:14px;
+    padding:26px 28px;
+    margin-top:26px;
+    display:flex; flex-direction:column; gap:16px;
+  }
+  .bluf .eyebrow{color:var(--blue2);}
+  .bluf h1{color:#fff; font-size:30px; margin-bottom:10px;}
+  .bluf p{color:#D7DCEA; max-width:66ch; font-size:15px;}
+  .bluf-stats{display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-top:6px;}
+  .bluf-stat{
+    background:rgba(255,255,255,.06);
+    border:1px solid rgba(255,255,255,.14);
+    border-radius:10px; padding:12px 14px;
+  }
+  .bluf-stat .num{font-family:"Spectral",serif; font-size:26px; font-weight:600; color:#fff; line-height:1;}
+  .bluf-stat .lbl{font-size:11.5px; color:#AEB8CF; margin-top:5px; line-height:1.35;}
+  @media (max-width:640px){.bluf-stats{grid-template-columns:repeat(2,1fr);}}
+
+  /* ---------- callout ---------- */
+  .callout{
+    border-radius:12px;
+    padding:20px 22px;
+    display:flex; gap:16px; align-items:flex-start;
+    margin-block:18px;
+  }
+  .callout .glyph{font-size:22px; line-height:1; flex:none; margin-top:1px;}
+  .callout h3{margin-bottom:6px;}
+  .callout p{font-size:14.5px;}
+  .callout.critical{background:#F7ECEA; border:1px solid #E3C4BE;}
+  .callout.critical h3{color:var(--brick);}
+  .callout.critical .glyph{color:var(--brick);}
+  .callout.warn{background:#FBF1DF; border:1px solid #EAD3A1;}
+  .callout.warn h3{color:#8A5A00;}
+  .callout.warn .glyph{color:var(--copper);}
+  .callout.good{background:#E9F6EE; border:1px solid #BFE1CC;}
+  .callout.good h3{color:#1E7E48;}
+  .callout.good .glyph{color:var(--green);}
+  .callout.info{background:var(--navy-tint); border:1px solid #C9D3E8;}
+  .callout.info h3{color:var(--blue1);}
+  .callout.info .glyph{color:var(--blue1);}
+
+  /* ---------- timeline ---------- */
+  .timeline{display:flex; flex-direction:column; gap:0; margin-top:22px;}
+  .tl-item{display:flex; gap:16px;}
+  .tl-rail{display:flex; flex-direction:column; align-items:center; flex:none; width:34px;}
+  .tl-dot{
+    width:30px;height:30px;border-radius:50%;
+    background:var(--card); border:2px solid var(--blue1); color:var(--blue1);
+    display:flex;align-items:center;justify-content:center;
+    font-family:"IBM Plex Mono",monospace; font-size:12.5px; font-weight:600;
+    flex:none;
+  }
+  .tl-item.turn .tl-dot{background:var(--brick); border-color:var(--brick); color:#fff;}
+  .tl-line{flex:1; width:2px; background:var(--hairline-strong); margin-block:2px;}
+  .tl-item:last-child .tl-line{display:none;}
+  .tl-body{padding-bottom:26px; padding-top:2px;}
+  .tl-body h3{font-size:15.5px;}
+  .tl-body p{font-size:14px; color:var(--ink-soft); margin-top:4px;}
+  .tl-tag{
+    display:inline-block; font-family:"IBM Plex Mono",monospace; font-size:10.5px;
+    color:var(--blue1); background:var(--navy-tint); border-radius:5px;
+    padding:2px 7px; margin-bottom:6px; letter-spacing:.02em;
+  }
+
+  /* ---------- pattern instance cards ---------- */
+  .grid-2{display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-top:20px;}
+  @media (max-width:680px){.grid-2{grid-template-columns:1fr;}}
+  .instance{
+    background:var(--card); border:1px solid var(--hairline); border-radius:12px;
+    padding:16px 18px;
+  }
+  .instance .where{
+    font-family:"IBM Plex Mono",monospace; font-size:10.5px; letter-spacing:.03em;
+    color:#fff; background:var(--ink-soft); border-radius:5px; padding:2px 7px;
+    display:inline-block; margin-bottom:9px;
+  }
+  .instance .where.browser{background:var(--copper);}
+  .instance .where.live{background:var(--brick);}
+  .instance .where.audit{background:var(--blue1);}
+  .instance h4{font-family:"IBM Plex Sans",sans-serif; font-weight:700; font-size:14.5px; color:var(--navy); margin-bottom:5px;}
+  .instance p{font-size:13.5px; color:var(--ink-soft); margin:0;}
+  .instance code{
+    font-family:"IBM Plex Mono",monospace; font-size:.92em; background:var(--card-tint);
+    padding:.1em .35em; border-radius:4px; color:var(--navy);
+  }
+
+  /* ---------- bar chart ---------- */
+  .chart-card{
+    background:var(--card); border:1px solid var(--hairline); border-radius:14px;
+    padding:22px 24px 18px; margin-top:22px;
+  }
+  .chart-title{font-size:13.5px; font-weight:700; color:var(--navy); margin-bottom:2px;}
+  .chart-sub{font-size:12.5px; color:var(--ink-soft); margin-bottom:16px;}
+  .bar-row{display:flex; align-items:center; gap:12px; margin-bottom:14px;}
+  .bar-row:last-child{margin-bottom:0;}
+  .bar-label{width:230px; flex:none; font-size:13px; color:var(--ink); text-align:right;}
+  .bar-track{flex:1; background:var(--card-tint); border-radius:5px; height:26px; position:relative;}
+  .bar-fill{height:100%; border-radius:5px; display:flex; align-items:center; min-width:34px;}
+  .bar-fill .count{
+    color:#fff; font-family:"IBM Plex Mono",monospace; font-weight:600; font-size:12.5px;
+    margin-left:10px;
+  }
+  @media (max-width:640px){.bar-label{width:120px; font-size:11.5px;}}
+
+  /* ---------- stat comparison ---------- */
+  .stat-compare{
+    display:flex; align-items:stretch; gap:0; margin-top:22px;
+    background:var(--card); border:1px solid var(--hairline); border-radius:14px; overflow:hidden;
+  }
+  .stat-half{flex:1; padding:22px 20px; display:flex; flex-direction:column; gap:6px;}
+  .stat-half.before{background:#F2EFE7;}
+  .stat-half.after{background:var(--navy-tint);}
+  .stat-tag{font-family:"IBM Plex Mono",monospace; font-size:10.5px; letter-spacing:.05em; text-transform:uppercase; color:var(--ink-soft);}
+  .stat-num{font-family:"Spectral",serif; font-weight:700; font-size:40px; color:var(--navy); line-height:1;}
+  .stat-num.bad{color:var(--brick);}
+  .stat-num.ok{color:var(--green);}
+  .stat-cap{font-size:13px; color:var(--ink-soft);}
+  .stat-arrow{
+    flex:none; width:48px; display:flex; align-items:center; justify-content:center;
+    background:var(--card); color:var(--blue1); font-size:20px;
+  }
+  @media (max-width:560px){.stat-compare{flex-direction:column;} .stat-arrow{width:100%; height:32px;}}
+
+  /* ---------- do / don't ---------- */
+  .dd-grid{display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-top:20px;}
+  @media (max-width:680px){.dd-grid{grid-template-columns:1fr;}}
+  .dd-col{border-radius:12px; padding:18px 20px;}
+  .dd-col.do{background:#E9F6EE; border:1px solid #BFE1CC;}
+  .dd-col.dont{background:#F7ECEA; border:1px solid #E3C4BE;}
+  .dd-col h3{font-size:14px; text-transform:uppercase; letter-spacing:.05em; margin-bottom:12px;}
+  .dd-col.do h3{color:#1E7E48;}
+  .dd-col.dont h3{color:var(--brick);}
+  .dd-item{display:flex; gap:9px; margin-bottom:11px; font-size:13.5px;}
+  .dd-item:last-child{margin-bottom:0;}
+  .dd-mark{flex:none; font-weight:700;}
+  .dd-col.do .dd-mark{color:var(--green);}
+  .dd-col.dont .dd-mark{color:var(--brick);}
+
+  /* ---------- recommendations ---------- */
+  .rec{
+    display:flex; gap:16px; background:var(--card); border:1px solid var(--hairline);
+    border-radius:12px; padding:16px 18px; margin-bottom:12px;
+  }
+  .rec:last-child{margin-bottom:0;}
+  .rec-num{
+    flex:none; width:30px; height:30px; border-radius:8px; background:var(--navy); color:#fff;
+    display:flex; align-items:center; justify-content:center; font-family:"IBM Plex Mono",monospace;
+    font-weight:700; font-size:13px;
+  }
+  .rec-body h4{font-family:"IBM Plex Sans",sans-serif; font-weight:700; font-size:14.5px; color:var(--navy); margin-bottom:4px;}
+  .rec-body p{font-size:13.5px; color:var(--ink-soft); margin:0;}
+  .rec-tags{display:flex; gap:6px; margin-top:8px; flex-wrap:wrap;}
+  .rec-tag{
+    font-family:"IBM Plex Mono",monospace; font-size:10px; padding:2px 7px; border-radius:5px;
+    background:var(--navy-tint); color:var(--blue1); letter-spacing:.02em;
+  }
+
+  /* ---------- decisions table ---------- */
+  .dec-table{width:100%; border-collapse:collapse; margin-top:18px; font-size:13.5px;}
+  .dec-table th{
+    text-align:left; font-family:"IBM Plex Mono",monospace; font-size:10.5px; letter-spacing:.04em;
+    text-transform:uppercase; color:var(--ink-soft); padding:0 12px 8px; font-weight:600;
+  }
+  .dec-table td{
+    background:var(--card); padding:12px; vertical-align:top; border-top:6px solid var(--paper);
+  }
+  .dec-table tr td:first-child{border-radius:8px 0 0 8px;}
+  .dec-table tr td:last-child{border-radius:0 8px 8px 0;}
+  .dec-table .who{font-family:"IBM Plex Mono",monospace; font-size:11.5px; color:var(--blue1); white-space:nowrap;}
+  .table-scroll{overflow-x:auto;}
+  @media (max-width:700px){.dec-table{min-width:640px;}}
+
+  /* ---------- footer ---------- */
+  footer{
+    padding-block:30px; text-align:center; color:var(--ink-soft); font-size:12px;
+    max-width:900px; margin-inline:auto; padding-inline:20px;
+  }
+
+  @media (prefers-reduced-motion: no-preference){
+    .reveal{animation:rise .5s ease both;}
+    @keyframes rise{from{opacity:0; transform:translateY(10px);} to{opacity:1; transform:translateY(0);}}
+  }
+</style>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Spectral:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+<div class="masthead">
+  <div class="masthead-inner">
+    <div class="brand">
+      <div class="brand-mark">🛰️</div>
+      <div class="brand-text">Legion <b>Retrospective</b></div>
+    </div>
+    <div class="masthead-meta">INTERNAL PROCESS REVIEW &middot; NOT A CLASSIFICATION MARKING<br>Prepared for Ash Higgins &middot; 15 September 2026</div>
+  </div>
+</div>
+
+<div class="toc-wrap">
+  <nav class="toc" id="toc">
+    <a href="#summary">Summary</a>
+    <a href="#headline">Headline finding</a>
+    <a href="#timeline">Timeline</a>
+    <a href="#pattern">The core pattern</a>
+    <a href="#taxonomy">Defect taxonomy</a>
+    <a href="#decisions">Decisions that held</a>
+    <a href="#working">What already works</a>
+    <a href="#dodont">Do &amp; don't</a>
+    <a href="#recommend">Recommendations</a>
+    <a href="#more">Where more helps</a>
+  </nav>
+</div>
+
+<main>
+
+<section id="summary">
+  <div class="bluf reveal">
+    <div>
+      <div class="eyebrow">Bottom line, up front</div>
+      <h1>The gates worked. The one thing they couldn't test was whether Legion could actually talk to UDL.</h1>
+      <p>Across this engagement, ten App Store stages went green, coverage sat near 96%, and 608 tests passed, while
+      <span class="mono" style="color:#fff;">/udl/elset</span> answered HTTP 400 to every single call the application had ever made to it, since the
+      first version. Nothing in the pipeline could catch that, because nothing in the pipeline calls the real
+      Unified Data Library (UDL). It surfaced only when Ash ran a real deployment and pasted back what UDL actually said.
+      That is the headline lesson below, and almost everything else in this document is a variation on the same
+      root cause: a check that reports confidently on something it never actually observed.</p>
+    </div>
+    <div class="bluf-stats">
+      <div class="bluf-stat"><div class="num">17</div><div class="lbl">documented incidents of this session where a passing check meant less than it looked</div></div>
+      <div class="bluf-stat"><div class="num">56%<span style="font-size:15px;color:#8FA0C4;"> &rarr; 94%</span></div><div class="lbl">test coverage on the one module reporting UDL's own honesty back to the reader</div></div>
+      <div class="bluf-stat"><div class="num">4</div><div class="lbl">upload cycles that found a Code Quality finding the local mirror had not yet learned</div></div>
+      <div class="bluf-stat"><div class="num">0</div><div class="lbl">tags currently pushable to the GitHub remote &mdash; a live, unresolved gap</div></div>
+    </div>
+  </div>
+</section>
+
+<section id="headline">
+  <div class="eyebrow">Headline finding</div>
+  <h2>A green pipeline said nothing about whether the feature worked</h2>
+  <p class="dek">This is worth sitting with before anything else in this document, because it is the one finding
+  that outweighs the rest combined.</p>
+
+  <div class="callout critical reveal">
+    <div class="glyph">&#9888;</div>
+    <div>
+      <h3>Every chart and the entire belt were non-functional from the first version</h3>
+      <p><span class="mono">src/udl_client.py</span> called <span class="mono">/udl/elset</span> with <span class="mono">satNo</span> alone.
+      Ash confirmed against live UDL on 14 September 2026 that the endpoint requires an <span class="mono">epoch</span> qualifier and answers
+      HTTP 400 without one. That means the single UDL call every family movement chart and the entire GEO belt
+      depend on had never once succeeded, for the whole life of the project, through every version that
+      shipped with &ldquo;96% coverage, live smoke-tested&rdquo; written beside it. It was not a credentials problem,
+      not an egress problem, and not the endpoint being wrong. It was a malformed query the test suite could
+      never catch, because the test suite talks to a fake UDL client that answers whatever it is told to answer.</p>
+    </div>
+  </div>
+
+  <p>Two things made this worse before Ash's live diagnostics broke it open. First, <span class="mono">get_elset</span> took
+  <span class="mono">payload[0]</span> on the unconfirmed assumption that UDL returns its newest record first, an assumption that
+  had never been tested against real UDL because real UDL had never answered. Second, the application's own
+  <span class="mono">udl_diagnostics.py</span> module, built specifically to tell a future reader what UDL actually said,
+  hard-coded <span class="mono">"http_status": 200</span> on its success path and let a swallowed 4xx read as
+  &ldquo;not available here, which is expected.&rdquo; A tool built to end guessing was itself guessing, silently, in the
+  one place a reader had no other way to check.</p>
+
+  <div class="callout good reveal">
+    <div class="glyph">&#10003;</div>
+    <div>
+      <h3>What good process discipline actually bought here</h3>
+      <p>The FACT / INFERENCE / SPECULATION discipline this codebase already holds itself to is exactly why this
+      was recoverable in one sitting rather than a mystery. Every UDL-derived value in the codebase was already
+      marked as fact or inference in its docstring before this happened. When the inference turned out to be
+      wrong, there was a named, searchable list of everywhere it was relied on. That discipline is worth
+      protecting more than any single fix in this document.</p>
+    </div>
+  </div>
+</section>
+
+<section id="timeline">
+  <div class="eyebrow">Timeline</div>
+  <h2>How the session actually moved</h2>
+  <p class="dek">Seven turns worth tracking, in order. The two marked in copper are where the direction of the
+  work changed because of something Ash said, not because of something a test found.</p>
+
+  <div class="timeline">
+    <div class="tl-item">
+      <div class="tl-rail"><div class="tl-dot">1</div><div class="tl-line"></div></div>
+      <div class="tl-body">
+        <span class="tl-tag">v0.15.0 &rarr; v0.15.4</span>
+        <h3>The Sonar register loop: 18 findings, then 14, then 1</h3>
+        <p>Three consecutive Code Quality failures, each one closed by adding the finding to
+        <span class="mono">docs/SONAR-RULE-REGISTER.md</span> and a local mirror in <span class="mono">tests/</span>, never by
+        guessing at a fix. Ended with all ten App Store stages green on 0.15.4, the first time Code Quality had
+        ever passed rather than failed or been skipped.</p>
+      </div>
+    </div>
+    <div class="tl-item turn">
+      <div class="tl-rail"><div class="tl-dot">2</div><div class="tl-line"></div></div>
+      <div class="tl-body">
+        <span class="tl-tag">direction change</span>
+        <h3>Three interface directions, then a 70/30 merge</h3>
+        <p>Asked to redesign the interface from scratch, three options were presented. Ash chose a blend,
+        Orbital Atlas weighted 70% over Watch Floor, and asked for the Bluestaq navy palette to be dropped in
+        favour of something built for this application's own analyst audience. The palette that replaced it was
+        re-validated with the dataviz skill's CVD checker rather than re-picked by eye.</p>
+      </div>
+    </div>
+    <div class="tl-item">
+      <div class="tl-rail"><div class="tl-dot">3</div><div class="tl-line"></div></div>
+      <div class="tl-body">
+        <span class="tl-tag">policy</span>
+        <h3>The ranking boundary: indicative only, and it goes nowhere else</h3>
+        <p>Ash's rule was one sentence. Enforcing it took four separate boundaries and five sabotage tests,
+        because the first three guards written against it were worthless: two read an API response with a
+        Pydantic <span class="mono">response_model</span> that had already stripped the field being checked for,
+        and one read a 400 error body that never contained the thing it was looking for.</p>
+      </div>
+    </div>
+    <div class="tl-item turn">
+      <div class="tl-rail"><div class="tl-dot">4</div><div class="tl-line"></div></div>
+      <div class="tl-body">
+        <span class="tl-tag">direction change</span>
+        <h3>&ldquo;Never assume anything, check it for real.&rdquo;</h3>
+        <p>A standing instruction, given directly, that reshaped how every subsequent module in this session was
+        built. <span class="mono">src/attention.py</span> and <span class="mono">src/belt.py</span> were both written by reading the
+        actual seeded store first rather than assuming its shape, which is the only reason three wrong shape
+        guesses were caught before shipping rather than after.</p>
+      </div>
+    </div>
+    <div class="tl-item">
+      <div class="tl-rail"><div class="tl-dot">5</div><div class="tl-line"></div></div>
+      <div class="tl-body">
+        <span class="tl-tag">v0.16.0 &rarr; v0.16.1</span>
+        <h3>The belt console, built and wired to real data</h3>
+        <p>Signal strip, attention queue, GEO belt and inspector, shipped together. Two Code Quality findings
+        followed within the same day, a duplicate CSS property graded a Bug and a dict comprehension better
+        written as <span class="mono">dict.fromkeys</span>. Both were mirrored and fixed same day.</p>
+      </div>
+    </div>
+    <div class="tl-item">
+      <div class="tl-rail"><div class="tl-dot">6</div><div class="tl-line"></div></div>
+      <div class="tl-body">
+        <span class="tl-tag">first live contact</span>
+        <h3>Real UDL diagnostics, pasted back for the first time</h3>
+        <p>Ash ran the deployed application against real UDL and pasted the diagnostics report back with an
+        explicit &ldquo;MAKE NO CHANGES YET.&rdquo; It showed <span class="mono">/udl/elset</span> refusing every call. This
+        single artefact is the most valuable input of the whole engagement.</p>
+      </div>
+    </div>
+    <div class="tl-item">
+      <div class="tl-rail"><div class="tl-dot">7</div></div>
+      <div class="tl-body">
+        <span class="tl-tag">v0.16.2</span>
+        <h3>The epoch confirmed, the block found, the diagnostics' own lie found and fixed</h3>
+        <p>Ash matched the failing call against UDL directly and reported back the exact working query. The fix
+        landed the same day: the epoch qualifier, an explicit newest-epoch selection, a raw diagnostic probe that
+        can no longer fabricate a status, and twelve new tests, calibrated by putting both defects back on
+        purpose and confirming each one is named by name.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="pattern">
+  <div class="eyebrow">The core pattern</div>
+  <h2>&ldquo;A test that passes because it never looked&rdquo;</h2>
+  <p class="dek">This phrase already appears in this codebase's own test comments more than once, independently,
+  because the same failure mode kept recurring. It is worth naming as the single pattern behind most of what
+  follows, rather than treating each instance as an unrelated one-off.</p>
+
+  <div class="grid-2">
+    <div class="instance reveal">
+      <div class="where audit">this session</div>
+      <h4>The diagnostics module fabricated its own evidence</h4>
+      <p><span class="mono">_probe</span> hard-coded <span class="mono">"http_status": 200</span> on every success path,
+      and <span class="mono">get_elset_history</span> swallowed a 4xx into a silent <span class="mono">None</span>. Together
+      they produced a report that read as settled fact when nothing had actually been observed. The module had
+      no test file at all, and 56% coverage, which is how it survived.</p>
+    </div>
+    <div class="instance reveal">
+      <div class="where">recorded in CLAUDE.md</div>
+      <h4>The audit trail was silent for the life of the project</h4>
+      <p>Every test that covered logging asserted through <span class="mono">caplog</span>, which installs its own root
+      handler. The trail appeared to work under test and only under test, because nothing had configured a real
+      handler in the running application.</p>
+    </div>
+    <div class="instance reveal">
+      <div class="where">recorded in CLAUDE.md</div>
+      <h4>Three ranking guards read the wrong layer entirely</h4>
+      <p>Two asserted against an API whose <span class="mono">response_model</span> had already stripped the field under
+      test. One read a 400 error body and found no ranking in it, correctly, for the wrong reason: the endpoint
+      had rejected the request before ranking logic ever ran.</p>
+    </div>
+    <div class="instance reveal">
+      <div class="where">recorded in CLAUDE.md</div>
+      <h4>A migration idempotency test compared a file with itself</h4>
+      <p>It compared the store file before and after a read, and a read migrates only in memory without writing.
+      Calling the public migration function twice also passed, because the schema-version guard made the second
+      call a no-op. Only calling the layer builder directly, twice, caught the sabotage.</p>
+    </div>
+    <div class="instance reveal">
+      <div class="where browser">found in browser</div>
+      <h4><span class="mono">svgEl</span> was declared twice</h4>
+      <p>A redeclaration throws at parse time and kills the whole module script. Every panel came up blank in a
+      real browser while all 66 contract tests passed, because every one of them read the markup rather than
+      running it.</p>
+    </div>
+    <div class="instance reveal">
+      <div class="where">recorded in CLAUDE.md</div>
+      <h4>Three data shapes were guessed wrong, all in one new module</h4>
+      <p>Object <span class="mono">claims</span> assumed non-empty when claims are analyst-created and start empty; the
+      segment collection assumed to be <span class="mono">segments</span> when it is <span class="mono">pol_segments</span>;
+      TBC assumed to be a marker when it is a <span class="mono">source_class</span>. Any one of the three would have
+      shipped a queue that was silently, permanently empty.</p>
+    </div>
+  </div>
+</section>
+
+<section id="taxonomy">
+  <div class="eyebrow">Defect taxonomy</div>
+  <h2>Where these incidents actually cluster</h2>
+  <p class="dek">Counting every documented incident across this engagement by mechanism, not by module. The
+  categories are not equally serious: the top two are the ones worth building a standing safeguard against.</p>
+
+  <div class="chart-card reveal">
+    <div class="chart-title">Documented incidents by mechanism</div>
+    <div class="chart-sub">Counted from this session's record and CLAUDE.md's own logged history. Not exhaustive of every finding ever made, only of what is written down.</div>
+    <div class="bar-row">
+      <div class="bar-label">Tests that pass without looking</div>
+      <div class="bar-track"><div class="bar-fill" style="width:88%; background:var(--cat-1);"><span class="count">5</span></div></div>
+    </div>
+    <div class="bar-row">
+      <div class="bar-label">Browser-only defects, invisible to contract tests</div>
+      <div class="bar-track"><div class="bar-fill" style="width:88%; background:var(--cat-2);"><span class="count">5</span></div></div>
+    </div>
+    <div class="bar-row">
+      <div class="bar-label">Gate / mirror lag, findings arriving before the mirror knew about them</div>
+      <div class="bar-track"><div class="bar-fill" style="width:71%; background:var(--cat-4);"><span class="count">4</span></div></div>
+    </div>
+    <div class="bar-row">
+      <div class="bar-label">Fabricated or unconfirmed values reported as settled fact</div>
+      <div class="bar-track"><div class="bar-fill" style="width:53%; background:var(--cat-3);"><span class="count">3</span></div></div>
+    </div>
+  </div>
+
+  <p style="margin-top:18px;">The bottom category is the smallest by count and the largest by consequence. Three
+  incidents, but one of them is the epoch defect above, live for the entire project. Frequency and severity are
+  different axes, and a taxonomy that only counted incidents would rank this category last. It should not be
+  read that way.</p>
+
+  <div class="stat-compare reveal">
+    <div class="stat-half before">
+      <div class="stat-tag">Before this session's audit</div>
+      <div class="stat-num bad">56%</div>
+      <div class="stat-cap"><span class="mono">src/udl_diagnostics.py</span> had no test file at all</div>
+    </div>
+    <div class="stat-arrow">&rarr;</div>
+    <div class="stat-half after">
+      <div class="stat-tag">After, calibrated against both defects put back on purpose</div>
+      <div class="stat-num ok">94%</div>
+      <div class="stat-cap">12 new tests, each one confirmed to fail by name when the defect it targets is restored</div>
+    </div>
+  </div>
+</section>
+
+<section id="decisions">
+  <div class="eyebrow">Decisions that held</div>
+  <h2>Where a clear owner and a firm answer prevented drift</h2>
+  <p class="dek">Not everything in this session was a defect. Several ambiguous points got a named decision from
+  Ash and stayed decided, which is worth crediting on its own terms.</p>
+
+  <div class="table-scroll">
+    <table class="dec-table">
+      <thead><tr><th>Question</th><th>Decision</th><th>Owner</th><th>What it prevented</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>Should the application rank what needs attention?</td>
+          <td>Yes, but indicative only, and the ranking goes nowhere else. Never stored, never in a briefing, never a claim.</td>
+          <td class="who">Ash, 14 Sep</td>
+          <td>An ordering quietly becoming a score, then a stored field, then a judgement in a briefing that nobody can source.</td>
+        </tr>
+        <tr>
+          <td>Which interface direction?</td>
+          <td>Orbital Atlas weighted 70% over Watch Floor, merged, with the palette re-picked and re-validated for this audience.</td>
+          <td class="who">Ash, direct</td>
+          <td>Three competing designs left unresolved, or a designer's aesthetic preference overriding an analyst's actual reading task.</td>
+        </tr>
+        <tr>
+          <td>Who may sign off a family assessment?</td>
+          <td>Any member of the DOK team. Recorded as an assertion, not authentication, since there is no application login.</td>
+          <td class="who">Ash, 14 Sep</td>
+          <td>A validation that looked authenticated when it was only ever a typed name, the same trap the removed team token fell into.</td>
+        </tr>
+        <tr>
+          <td>Should the compendium carry classified material?</td>
+          <td>No. Unclassified, publicly available information only, and every internal assessment must cite what it is derived from.</td>
+          <td class="who">Ash, 11 Sep</td>
+          <td>An analyst's own reasoning entering the record as if it were a published source, unnoticed.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section id="working">
+  <div class="eyebrow">What already works</div>
+  <h2>The safeguards already in place, and why they earned their keep</h2>
+  <ul class="blt">
+    <li><b>The rule register.</b> <span class="mono">docs/SONAR-RULE-REGISTER.md</span> turned three failed uploads into a
+    pass by writing down every Sonar rule the platform had actually fired, rather than guessing at what it might
+    fire next. This is the difference between a reactive fix and a standing defence.</li>
+    <li><b>The calibration discipline.</b> Every new guard in this session was proven by breaking the thing it
+    protects on purpose, first, and confirming the guard names the exact defect before it was ever trusted. This
+    is what caught the fabricated 200 and the wrapper-swallowed 4xx, both, the moment they were introduced as
+    tests rather than assumed safe.</li>
+    <li><b>The refusal scripts.</b> <span class="mono">bump_version.sh</span> and <span class="mono">package.sh</span> now refuse
+    to ship a release that would land in an unmeasurable-coverage state, rather than warning about it in text
+    that can be missed. A condition no retry can clear should not be possible to ship by accident.</li>
+    <li><b>FACT / INFERENCE / SPECULATION discipline.</b> The single reason the epoch defect was fixed in one
+    sitting rather than a multi-day hunt: every place the wrong assumption was relied on was already named in a
+    docstring as an inference, not stated as settled.</li>
+    <li><b>Archive, never delete.</b> Applied consistently to systems, claims, segments and assessments. A
+    withdrawn or corrected entry stays visible rather than leaving a silent gap nobody notices.</li>
+  </ul>
+</section>
+
+<section id="dodont">
+  <div class="eyebrow">Do &amp; don't</div>
+  <h2>What this session's record actually argues for</h2>
+  <div class="dd-grid">
+    <div class="dd-col do reveal">
+      <h3>Do</h3>
+      <div class="dd-item"><span class="dd-mark">&#10003;</span><span>Calibrate every new test or guard by deliberately breaking the thing it protects, before trusting it green.</span></div>
+      <div class="dd-item"><span class="dd-mark">&#10003;</span><span>Read the full, untailed output of a gate or test run before reporting it passed. Piping through <span class="mono">tail</span> hid the one warning that would have prevented a wasted upload cycle.</span></div>
+      <div class="dd-item"><span class="dd-mark">&#10003;</span><span>Verify a data shape against the real store or API before writing code against it, every time, not only when told to.</span></div>
+      <div class="dd-item"><span class="dd-mark">&#10003;</span><span>Treat a hard-coded status, count, or observation found in one module as a reason to search for the same shape everywhere else.</span></div>
+      <div class="dd-item"><span class="dd-mark">&#10003;</span><span>Ask what property an old shape was providing by accident before applying a mechanical fix across a codebase. The async-to-sync route handler change nearly removed the thing serialising the store's writes.</span></div>
+      <div class="dd-item"><span class="dd-mark">&#10003;</span><span>Ship a test file with any new module before it ships, not after. Zero test files is what let the fabricated status survive.</span></div>
+    </div>
+    <div class="dd-col dont reveal">
+      <h3>Don't</h3>
+      <div class="dd-item"><span class="dd-mark">&#10007;</span><span>Don't call a test result &ldquo;verified&rdquo; when it read a Pydantic <span class="mono">response_model</span>, an error body, or a <span class="mono">caplog</span> capture. All three have hidden something real here.</span></div>
+      <div class="dd-item"><span class="dd-mark">&#10007;</span><span>Don't let a green pipeline and a high coverage number stand in for the feature actually working against the live external system it depends on.</span></div>
+      <div class="dd-item"><span class="dd-mark">&#10007;</span><span>Don't rename or introduce a token, constant, or CSS custom property without checking for an existing use of that exact name. The spacing scale silently overwrote five validated series colours this way.</span></div>
+      <div class="dd-item"><span class="dd-mark">&#10007;</span><span>Don't read &ldquo;the gate passed&rdquo; and &ldquo;the feature works&rdquo; as the same claim. They answer different questions and this session's headline finding is the gap between them.</span></div>
+      <div class="dd-item"><span class="dd-mark">&#10007;</span><span>Don't fold a fallback path (a chart surviving a 4xx) and a diagnostic path (reporting what actually happened) into the same function. One needs to recover; the other needs to tell the truth.</span></div>
+    </div>
+  </div>
+</section>
+
+<section id="recommend">
+  <div class="eyebrow">Recommendations</div>
+  <h2>What to put in place, in priority order</h2>
+
+  <div class="rec reveal">
+    <div class="rec-num">1</div>
+    <div class="rec-body">
+      <h4>Resolve the tag-push failure on the GitHub remote</h4>
+      <p>Every version this session tagged locally, none of them pushed: <span class="mono">git push --tags</span> returns
+      HTTP 403 and the remote holds zero tags. <span class="mono">scripts/package.sh</span> builds a release from its tag,
+      so a fresh clone of this repository cannot currently reproduce a single shipped version. This is a live
+      gap, not a historical one, and it needs a repository administrator to check branch or tag protection
+      rules on the GitHub side.</p>
+      <div class="rec-tags"><span class="rec-tag">github</span><span class="rec-tag">blocking</span></div>
+    </div>
+  </div>
+
+  <div class="rec reveal">
+    <div class="rec-num">2</div>
+    <div class="rec-body">
+      <h4>Schedule a recurring live UDL check, now that a path to run one exists</h4>
+      <p><span class="mono">scripts/udl_live_check.py</span> can now settle real questions against real UDL, and the
+      notification <span class="mono">window_hours</span> semantics are still open. Left reactive, the next silent
+      break could sit undiscovered as long as the epoch defect did. A monthly run, even manual, converts this
+      from &ldquo;whenever someone happens to deploy and look&rdquo; into a standing check.</p>
+      <div class="rec-tags"><span class="rec-tag">process</span><span class="rec-tag">udl</span></div>
+    </div>
+  </div>
+
+  <div class="rec reveal">
+    <div class="rec-num">3</div>
+    <div class="rec-body">
+      <h4>Add a standing rule: no diagnostic or observability module ships without a test file</h4>
+      <p><span class="mono">src/udl_diagnostics.py</span> is the one module whose entire purpose is telling a reader
+      what actually happened, and it had 56% coverage and no test file. That is precisely backwards: a module
+      that reports on other failures should be held to a higher bar than the code it reports on, not a lower
+      one. Worth a line in <span class="mono">CLAUDE.md</span>'s standing instructions, and worth a coverage floor
+      specifically for any module matching <span class="mono">*diagnostic*</span> or <span class="mono">*probe*</span> in
+      <span class="mono">check-quality-gate.sh</span>.</p>
+      <div class="rec-tags"><span class="rec-tag">code</span><span class="rec-tag">gate</span></div>
+    </div>
+  </div>
+
+  <div class="rec reveal">
+    <div class="rec-num">4</div>
+    <div class="rec-body">
+      <h4>Write the calibration rule down as a named, general standing instruction</h4>
+      <p>It already appears correctly, repeatedly, as a lesson learned after each specific incident. It has
+      never appeared as a rule stated once, in general, ahead of the next incident. A single line in
+      <span class="mono">CLAUDE.md</span>'s standing instructions: <i>&ldquo;A new test or guard is not trusted until it has
+      been shown to fail, by name, against the defect it targets, restored on purpose.&rdquo;</i></p>
+      <div class="rec-tags"><span class="rec-tag">memory</span><span class="rec-tag">low-risk</span></div>
+    </div>
+  </div>
+
+  <div class="rec reveal">
+    <div class="rec-num">5</div>
+    <div class="rec-body">
+      <h4>Grep for the fabricated-value shape across the rest of the codebase</h4>
+      <p>The 200 status was found once, by chance, while chasing a different question. It is worth one deliberate
+      pass across <span class="mono">src/</span> for any other place a status, count, or timestamp is assigned a literal
+      value rather than read from an actual observation, particularly in <span class="mono">src/orbits.py</span> and
+      <span class="mono">src/family_elements.py</span>, which share the same UDL boundary.</p>
+      <div class="rec-tags"><span class="rec-tag">audit</span><span class="rec-tag">code</span></div>
+    </div>
+  </div>
+
+  <div class="rec reveal">
+    <div class="rec-num">6</div>
+    <div class="rec-body">
+      <h4>Keep asking for the untailed, full output before accepting &ldquo;done&rdquo;</h4>
+      <p>This is a safeguard against the assistant's own failure mode more than a process gap on your side. A
+      standing habit, stated once, of asking &ldquo;show me the whole gate output, not a summary&rdquo; before closing an
+      item costs nothing and would have caught the piped-through-<span class="mono">tail</span> mistake immediately
+      rather than after it had already cost a missed warning.</p>
+      <div class="rec-tags"><span class="rec-tag">people</span><span class="rec-tag">low-risk</span></div>
+    </div>
+  </div>
+</section>
+
+<section id="more">
+  <div class="eyebrow">Where more would have helped</div>
+  <h2>An honest look at the other side of this</h2>
+
+  <div class="callout info reveal">
+    <div class="glyph">&#9432;</div>
+    <div>
+      <h3>The single highest-value action in this whole engagement was Ash's, not the assistant's</h3>
+      <p>Pasting the real diagnostics output, unprompted, with an explicit &ldquo;make no changes yet,&rdquo; is exactly
+      the right move and is the reason the epoch defect is now closed rather than still latent. That is not a
+      gap to fill. It is worth naming as the pattern to repeat: real evidence from a real running system, handed
+      over before any fix is attempted, beats any amount of local testing against a fake client.</p>
+    </div>
+  </div>
+
+  <p>Two things are fair to name as places where more would genuinely have helped, stated plainly rather than as
+  criticism, since the record does not support anything stronger:</p>
+
+  <ul class="blt sq" style="margin-top:14px;">
+    <li><b>Live UDL access came late in the project's life, and that was a policy constraint, not a choice.</b>
+    The organisation's egress policy blocked <span class="mono">unifieddatalibrary.com</span> from this development
+    environment for most of the project. Nothing in this session's record suggests that could have been
+    resolved sooner by working differently here. Once access existed, it was used immediately and well. The
+    lesson is forward-looking rather than a fault to correct: now that the path exists, using it on a schedule
+    (recommendation 2) turns this from a one-off discovery into a standing check.</li>
+    <li><b>A second, independent read of the diagnostics report's own wording might have caught the fabricated 200 sooner.</b>
+    &ldquo;Not available at this path, which is expected&rdquo; reads as settled. It was written by the same tool that
+    turned out to be wrong. Asking &ldquo;what did the tool actually observe versus what did it conclude&rdquo; as a
+    standing question, whenever a report states something as expected or normal, is a cheap habit that would
+    have surfaced this a step earlier. This is offered as something to ask of any report the assistant produces
+    in future, not specific to this one.</li>
+  </ul>
+</section>
+
+</main>
+
+<footer>
+  Prepared from this session's own record and <span class="mono">CLAUDE.md</span>. Every count and figure above traces
+  to something read, run, or tested in this conversation rather than estimated.
+</footer>
+
+<script>
+(function(){
+  try{
+    var links = Array.prototype.slice.call(document.querySelectorAll('.toc a'));
+    var sections = links.map(function(a){ return document.querySelector(a.getAttribute('href')); });
+    function onScroll(){
+      var y = window.scrollY + 120;
+      var current = sections[0];
+      for(var i=0;i<sections.length;i++){
+        if(sections[i] && sections[i].offsetTop <= y) current = sections[i];
+      }
+      links.forEach(function(a){ a.classList.remove('active'); });
+      var idx = sections.indexOf(current);
+      if(idx >= 0) links[idx].classList.add('active');
+    }
+    document.addEventListener('scroll', onScroll, {passive:true});
+    onScroll();
+  }catch(e){}
+})();
+</script>
