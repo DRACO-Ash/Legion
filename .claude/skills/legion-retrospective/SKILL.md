@@ -1,6 +1,6 @@
 ---
 name: legion-retrospective
-description: Produce the weekly Legion process retrospective, an HTML report on what actually happened in the repository this week, honest about mistakes, decision changes, and their impact on the build. Use this skill when asked to "run the retrospective", "weekly retrospective", "Legion retrospective", or when a scheduled Friday trigger fires it. Also use when asked to review this project's own working process, learn from recent sessions, or safeguard future conversations against a recurring failure mode. Never fabricate a finding to fill a quiet week; a week with nothing to report says so.
+description: Produce the weekly Legion process retrospective, an HTML report on what actually happened in the repository this week, honest about mistakes, decision changes, and their impact on the build. Use this skill when asked to "run the retrospective", "weekly retrospective", "Legion retrospective", or when a scheduled Friday trigger fires it. Also use when asked to review this project's own working process, learn from recent sessions, or safeguard future conversations against a recurring failure mode. Never fabricate a finding to fill a quiet week; a week with nothing to report says so. Always verifies the checkout is real (CLAUDE.md and src/ present, on the right branch) before trusting anything in it, and repairs and reports a bad checkout rather than reporting on an empty repository.
 ---
 
 # Legion retrospective
@@ -25,6 +25,45 @@ exact failure mode the first retrospective exists to name.
   fresh session with no memory of prior weeks. Everything below has to work
   from the repository alone.
 ● On request, at any time, for the trailing seven days or a stated window.
+
+## Step 0: prove the checkout is real before trusting anything in it
+
+Found the hard way on 21 September 2026: a persistent session's working
+directory silently reverted to a bare, two-commit clone (the repository's
+`main`, `README.md` only, no `src/`, no `CLAUDE.md`) between one week's work
+and the next. Nothing announced this. The only signal was the project's own
+instruction file no longer being present at session start. A retrospective
+run against that checkout would have produced a fully-formatted, entirely
+hollow report and had no way of knowing it.
+
+Before Step 1, run:
+
+```bash
+cd /home/user/Legion
+git branch --show-current
+git log --oneline -3
+test -f CLAUDE.md && test -d src && echo "checkout looks real" || echo "checkout is NOT what it should be"
+```
+
+If `CLAUDE.md` or `src/` is missing, or the branch or log does not match what
+the previous week's edition reported, **do not proceed to Step 1.** Instead:
+
+```bash
+git fetch origin
+git checkout claude/fastapi-handoff-review-21n93l   # or whatever branch main development is on
+git reset --hard origin/claude/fastapi-handoff-review-21n93l
+```
+
+then re-run the check above to confirm it now passes. Record in the report,
+plainly, that this happened: what was found missing, and that the checkout
+was repaired before the rest of the evidence was gathered. This is itself a
+category 2 incident (a run-only defect, invisible until something actually
+tried to read the file) and belongs in that week's taxonomy count, not
+swept aside as tooling noise.
+
+If the repair itself fails (the branch is gone, the remote is unreachable),
+stop and report that plainly rather than publishing anything. A retrospective
+that cannot verify its own evidence is not a quiet week; it is no report.
 
 ## Step 1: fix the window
 
