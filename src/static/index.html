@@ -152,6 +152,15 @@ h1{ font-size:24px; margin:4px 0 0; letter-spacing:.01em; }
 .baseline{ padding:7px 10px; font-size:11.5px; line-height:1.55; border-radius:3px;
            background:var(--panel-2); border-left:3px solid var(--blue-2); }
 .assess-q{ font-size:11.5px; line-height:1.6; color:var(--text-dim); margin:0; padding-left:17px; }
+.verify-wrap{ margin:-4px 0 11px; }
+.verify-open{ font-size:11px; padding:3px 9px; }
+.verify-form{ margin-top:7px; padding:9px 10px; background:var(--panel-2);
+              border:1px solid var(--line); border-radius:3px; }
+.verify-form textarea{ min-height:52px; }
+.signoff-form{ margin-top:13px; padding:9px 10px; background:var(--panel-2);
+               border:1px dashed var(--marker-unverified); border-radius:3px; }
+.signoff-form label{ font-size:10.5px; letter-spacing:.06em; text-transform:uppercase;
+                      color:var(--text-dim); display:block; margin-bottom:5px; }
 /* Scoped to [open]. A bare `display:flex` here beats the user-agent rule that
    hides a closed <dialog>, so the palette stayed on screen after close() and
    every key then went to it. Caught in a browser, not by a test. */
@@ -1609,6 +1618,10 @@ const CHOOSE_A_ROW = "Choose a row in the catalogue to see what is claimed about
 
 const markerLabel = {};
 const sourceClassLabel = {};
+// The full legend body, kept for building the verify form's selects from the
+// same vocabulary the validators enforce, rather than a second hard-coded
+// list that could drift from it.
+let provenanceLegend = null;
 
 function markerStyle(marker){
   return MARKER_STYLE[marker] || UNVERIFIED_STYLE;
@@ -1783,7 +1796,29 @@ function segmentRow(segment){
       <div class="pol-label"><b>${esc(segment.mode_label)}</b>${counterpartLabel(segment)}</div>
       <div class="pol-track" title="${esc(segment.claim.statement)}">${shape}</div>
     </div>
-    <div class="pol-meta" style="margin:-4px 0 9px 180px">${meta}</div>`;
+    <div class="pol-meta" style="margin:-4px 0 9px 180px">${meta}</div>
+    ${endDateControl(segment)}`;
+}
+
+function endDateControl(segment){
+  // OPEN_ENDED in src/pol.py: an instantaneous mode has no end to be missing
+  // (end_precision would read "instant"), so only a genuinely open-ended
+  // band gets a control at all. Offering one on an instant would ask an
+  // analyst to invent an end nothing in the source supports.
+  if(segment.instantaneous || segment.end_epoch) return "";
+  return `<div class="verify-wrap" style="margin:-4px 0 9px 180px" data-object="${esc(segment.object_id)}" data-segment="${esc(segment.id)}">
+    <button type="button" class="btn btn-ghost verify-open">Add end date</button>
+    <form class="verify-form end-form field" hidden>
+      <label for="end_${esc(segment.id)}">End date</label>
+      <input type="text" id="end_${esc(segment.id)}" required
+        placeholder="Whatever precision the source gives: 2024, 2024-05 or 2024-05-14">
+      <div class="field-row">
+        <button type="submit" class="btn btn-primary">Save</button>
+        <button type="button" class="btn btn-ghost verify-cancel">Cancel</button>
+      </div>
+      <output class="msg"></output>
+    </form>
+  </div>`;
 }
 
 async function loadModeVocabulary(){
@@ -1955,9 +1990,85 @@ function assessProvenance(claim){
   return `<span class="assess-prov">${esc(face.label)}, ${esc(claim.confidence || "")} · ${esc(cite)}</span>`;
 }
 
-function statementMarkup(claim){
+function statementMarkup(claim, fieldName){
   if(!claim) return "";
-  return `<p class="assess-stmt ${assessTone(claim)}">${esc(claim.statement)}${assessProvenance(claim)}</p>`;
+  return `<p class="assess-stmt ${assessTone(claim)}">${esc(claim.statement)}${assessProvenance(claim)}</p>`
+    + verifyControl(fieldName, claim);
+}
+
+// The three assessment fields an edit can actually reach: AssessmentUpdate
+// (src/routes/families.py) takes only these as whole-claim replacements. An
+// item inside what_raises_concern or capabilities is not one of them, so
+// fieldName is left undefined at those call sites and no control renders:
+// building an editor the server cannot accept would look like a fix that
+// silently does nothing the moment anyone tried it.
+const VERIFIABLE_FIELDS = new Set(["one_line", "role_summary", "baseline_claim"]);
+
+function verifyControl(fieldName, claim){
+  if(!fieldName || !VERIFIABLE_FIELDS.has(fieldName)) return "";
+  if(!claim || claim.source_class !== SOURCE_CLASS_TBC) return "";
+  return `<div class="verify-wrap">
+    <button type="button" class="btn btn-ghost verify-open" data-field="${esc(fieldName)}">Verify this</button>
+    <form class="verify-form field" data-field="${esc(fieldName)}" hidden>
+      ${claimFieldsMarkup(fieldName, claim)}
+      <div class="field-row">
+        <button type="submit" class="btn btn-primary">Save</button>
+        <button type="button" class="btn btn-ghost verify-cancel">Cancel</button>
+      </div>
+      <output class="msg"></output>
+    </form>
+  </div>`;
+}
+
+function _options(entries, selected){
+  return (entries || []).map(e =>
+    `<option value="${esc(e.value)}"${e.value === selected ? " selected" : ""}>${esc(e.label)}</option>`
+  ).join("");
+}
+
+function claimFieldsMarkup(fieldName, claim){
+  // Built from the served legend (src/provenance.py), never a second copy of
+  // the vocabulary the validators enforce. If the legend failed to load,
+  // the selects are empty and the form says so rather than guessing values
+  // that might not be real markers or source classes.
+  const legend = provenanceLegend;
+  const p = (name) => `vf_${fieldName}_${name}`;
+  if(!legend){
+    return `<p class="msg error">The provenance vocabulary has not loaded, so this cannot be edited yet. Reload the page and try again.</p>`;
+  }
+  return `
+    <div class="field"><label for="${p("statement")}">Statement</label>
+      <textarea id="${p("statement")}" required>${esc(claim.statement || "")}</textarea></div>
+    <div class="field-row">
+      <div class="field"><label for="${p("marker")}">Marker</label>
+        <select id="${p("marker")}">${_options(legend.markers, claim.marker)}</select></div>
+      <div class="field"><label for="${p("confidence")}">Confidence</label>
+        <select id="${p("confidence")}">${_options(legend.confidence_levels, claim.confidence)}</select></div>
+    </div>
+    <div class="field"><label for="${p("source_class")}">Source class</label>
+      <select id="${p("source_class")}">${_options(legend.source_classes, claim.source_class)}</select></div>
+    <div class="field"><label for="${p("citation")}">Citation</label>
+      <input type="text" id="${p("citation")}" value="${esc(claim.source_citation || "")}"
+        placeholder="What the statement is drawn from"></div>
+    <div class="field"><label for="${p("url")}">Source URL (optional)</label>
+      <input type="text" id="${p("url")}" value="${esc(claim.source_url || "")}"></div>
+    <div class="field"><label for="${p("asserted_by")}">Asserted by</label>
+      <input type="text" id="${p("asserted_by")}" required value="${esc(claim.asserted_by || "")}"></div>
+    <div class="field"><label for="${p("owner")}">Owner (only if this stays TBC)</label>
+      <input type="text" id="${p("owner")}" value="${esc(claim.owner || "")}"></div>`;
+}
+
+function signOffMarkup(assessment, familyId){
+  if(!assessment.awaiting_validation) return "";
+  const id = "signoff_name";
+  return `<form class="signoff-form field" data-family="${esc(familyId)}">
+    <label for="${id}">Sign off this assessment</label>
+    <div class="field-row">
+      <input type="text" id="${id}" required placeholder="Name">
+      <button type="submit" class="btn btn-primary">Sign off</button>
+    </div>
+    <output class="msg"></output>
+  </form>`;
 }
 
 function validationBanner(assessment){
@@ -1987,7 +2098,7 @@ function baselineMarkup(assessment){
   // rather than just a number.
   return `<p class="assess-h">Class manoeuvre baseline</p>
     <p class="baseline">${esc(assessment.manoeuvre_baseline)}</p>
-    ${statementMarkup(assessment.baseline_claim)}`;
+    ${statementMarkup(assessment.baseline_claim, "baseline_claim")}`;
 }
 
 function listSection(heading, claims){
@@ -2010,10 +2121,19 @@ function openQuestionsMarkup(assessment){
     + rows.map(q => `<li>${esc(q)}</li>`).join("") + "</ul>";
 }
 
+// Which family the assess-panel is currently showing, so the sign-off and
+// verify handlers know what to PATCH without threading the id through every
+// delegated event. Set only here, read only by the handlers below.
+let currentFamilyId = null;
+let currentFamilyTitle = "";
+let currentAssessment = null;
+
 async function showFamilyAssessment(familyId, title){
   const msg = document.getElementById("assessMsg");
   const host = document.getElementById("assessBody");
-  document.getElementById("assessTitle").textContent = `Family assessment · ${title || familyId}`;
+  currentFamilyId = familyId;
+  currentFamilyTitle = title || familyId;
+  document.getElementById("assessTitle").textContent = `Family assessment · ${currentFamilyTitle}`;
   msg.className = "msg";
   msg.textContent = "Loading assessment…";
   let res;
@@ -2027,28 +2147,193 @@ async function showFamilyAssessment(familyId, title){
   }
   if(res.status === 404){
     host.innerHTML = "";
+    currentAssessment = null;
     msg.textContent = "No assessment has been written for this family yet.";
     return;
   }
   if(!res.ok){
     host.innerHTML = "";
+    currentAssessment = null;
     msg.textContent = `Could not load the assessment (${res.status}).`;
     msg.className = "msg error";
     return;
   }
   const a = await res.json();
+  currentAssessment = a;
   msg.textContent = "Capability, context and intent. Every statement carries its source.";
   // The headline carries its tone like every other statement. A TBC one-line
   // rendered as plain prose reads as established, which is the same mistake
   // the provenance chips made before a browser caught it.
   host.innerHTML = validationBanner(a)
     + `<p class="assess-line assess-stmt ${assessTone(a.one_line)}">${esc(a.one_line.statement)}${assessProvenance(a.one_line)}</p>`
-    + `<p class="assess-h">Role</p>` + statementMarkup(a.role_summary)
+    + verifyControl("one_line", a.one_line)
+    + `<p class="assess-h">Role</p>` + statementMarkup(a.role_summary, "role_summary")
     + baselineMarkup(a)
     + listSection("What should raise concern", a.what_raises_concern)
     + capabilitiesMarkup(a)
-    + openQuestionsMarkup(a);
+    + openQuestionsMarkup(a)
+    + signOffMarkup(a, familyId);
 }
+
+// Fixing a record, a claim or a segment should drop it from the queue and
+// the signal strip immediately, not on the next full page load. The systems
+// form already does this (src/static/index.html's systemForm handler); the
+// three new write paths below do the same rather than leaving a resolved
+// entry sitting in the queue looking unresolved.
+async function refreshAfterCompendiumWrite(){
+  await loadAttention();
+  await loadSignalStrip();
+  await loadFamilies();
+}
+
+function _errorDetail(body, status){
+  // Two shapes come back as a 422, from two different places: object_lists'
+  // and families' own readable() uses {field, message}; a plain FastAPI
+  // model validation failure (the sign-off route takes the body straight)
+  // uses the library's own {msg, loc, ...}. A bare string detail (a 404,
+  // a 500) is the third case. Handling only one shape would print
+  // "[object Object]" for the other two rather than the actual reason.
+  if(Array.isArray(body.detail)){
+    return body.detail.map(d => d.message || d.msg || JSON.stringify(d)).join("; ");
+  }
+  return body.detail || String(status);
+}
+
+function _claimPayload(fieldName, existing){
+  const p = (name) => document.getElementById(`vf_${fieldName}_${name}`).value;
+  // id and created_at are carried over when the loaded claim actually has
+  // them, so verifying one does not throw away when it was first asserted.
+  // Checked against the real seeded store rather than assumed: the content
+  // seed's claims were written as plain dicts and never passed through the
+  // Claim model, so they carry no id, created_at, archived or updated_at at
+  // all. existing.id is `undefined` there, and JSON.stringify drops an
+  // undefined-valued key rather than sending it as null, which is exactly
+  // "let the model mint one" and not an accident to tidy away.
+  return {
+    id: existing.id,
+    created_at: existing.created_at,
+    archived: existing.archived || false,
+    statement: p("statement").trim(),
+    marker: p("marker"),
+    confidence: p("confidence"),
+    source_class: p("source_class"),
+    source_citation: p("citation").trim() || null,
+    source_url: p("url").trim() || null,
+    asserted_by: p("asserted_by").trim(),
+    owner: p("owner").trim() || null,
+  };
+}
+
+// Shared by the assess-panel's verify forms and the pol-panel's end-date
+// form: one toggle button beside a hidden form, open and cancel both just
+// flip `hidden`. Installed on whichever container is given rather than
+// written twice, so the gate's duplicated-lines-on-new-code condition has
+// nothing to find here.
+function installVerifyToggle(containerId){
+  document.getElementById(containerId).addEventListener("click", (e) => {
+    const open = e.target.closest(".verify-open");
+    if(open){
+      open.nextElementSibling.hidden = false;
+      open.hidden = true;
+      return;
+    }
+    const cancel = e.target.closest(".verify-cancel");
+    if(cancel){
+      const form = cancel.closest(".verify-form");
+      form.hidden = true;
+      form.previousElementSibling.hidden = false;
+    }
+  });
+}
+installVerifyToggle("assessBody");
+installVerifyToggle("polTimeline");
+
+document.getElementById("assessBody").addEventListener("submit", async (e) => {
+  const form = e.target;
+  const out = form.querySelector("output");
+
+  if(form.classList.contains("verify-form")){
+    e.preventDefault();
+    const field = form.dataset.field;
+    const existing = currentAssessment && currentAssessment[field];
+    if(!existing){
+      out.textContent = "That claim is no longer on this assessment; reload and try again.";
+      out.className = "msg error";
+      return;
+    }
+    const payload = {[field]: _claimPayload(field, existing)};
+    out.textContent = "Saving…";
+    out.className = "msg";
+    const res = await fetch(`/api/families/${encodeURIComponent(currentFamilyId)}/assessment`, {
+      method: "PATCH",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify(payload),
+    });
+    if(res.ok){
+      await showFamilyAssessment(currentFamilyId, currentFamilyTitle);
+      await refreshAfterCompendiumWrite();
+    } else {
+      const body = await res.json().catch(() => ({}));
+      out.textContent = "Could not save: " + _errorDetail(body, res.status);
+      out.className = "msg error";
+    }
+    return;
+  }
+
+  if(form.classList.contains("signoff-form")){
+    e.preventDefault();
+    const name = document.getElementById("signoff_name").value;
+    out.textContent = "Signing off…";
+    out.className = "msg";
+    const res = await fetch(`/api/families/${encodeURIComponent(form.dataset.family)}/assessment/validation`, {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({validated_by: name}),
+    });
+    if(res.ok){
+      await showFamilyAssessment(currentFamilyId, currentFamilyTitle);
+      await refreshAfterCompendiumWrite();
+    } else {
+      const body = await res.json().catch(() => ({}));
+      out.textContent = "Could not sign off: " + _errorDetail(body, res.status);
+      out.className = "msg error";
+    }
+  }
+});
+
+function refreshSelectedTimeline(){
+  const record = currentList.find(s => s.id === selectedId);
+  if(record) void showObjectTimeline(record);
+}
+
+document.getElementById("polTimeline").addEventListener("submit", async (e) => {
+  const form = e.target;
+  if(!form.classList.contains("end-form")) return;
+  e.preventDefault();
+  const wrap = form.closest(".verify-wrap");
+  const objectId = wrap.dataset.object;
+  const segmentId = wrap.dataset.segment;
+  const out = form.querySelector("output");
+  const value = form.querySelector("input").value.trim();
+  out.textContent = "Saving…";
+  out.className = "msg";
+  const res = await fetch(
+    `/api/objects/${encodeURIComponent(objectId)}/segments/${encodeURIComponent(segmentId)}`,
+    {
+      method: "PATCH",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({end_epoch: value}),
+    }
+  );
+  if(res.ok){
+    refreshSelectedTimeline();
+    await refreshAfterCompendiumWrite();
+  } else {
+    const body = await res.json().catch(() => ({}));
+    out.textContent = "Could not save: " + _errorDetail(body, res.status);
+    out.className = "msg error";
+  }
+});
 
 const MAX_COMPARE = 4;
 const MIN_COMPARE = 2;
@@ -2404,6 +2689,7 @@ async function loadProvenanceLegend(){
   }
   body.markers.forEach(entry => { markerLabel[entry.value] = entry.label; });
   body.source_classes.forEach(entry => { sourceClassLabel[entry.value] = entry.label; });
+  provenanceLegend = body;
   document.getElementById("legendBody").innerHTML =
     legendSection("Markers", body.markers) + plainSection("Confidence", body.confidence_levels);
 }
@@ -2605,11 +2891,26 @@ async function loadAttention(limit){
       + '<span class="nm">' + esc(entry.subject) + '</span>'
       + '<span class="why">' + esc(entry.detail) + '</span>'
       + '<span class="cat">' + esc(entry.category) + '</span></span>';
-    button.addEventListener("click", () => {
+    button.addEventListener("click", async () => {
       if(String(entry.subject_id || "").startsWith("family:")){
-        showFamilyAssessment(entry.subject_id.replace("family:", ""), entry.subject);
+        await showFamilyAssessment(entry.subject_id.replace("family:", ""), entry.subject);
       } else if(entry.subject_id){
         selectSystem(entry.subject_id);
+      }
+      // A click is "take me to the thing", so land on the panel that holds
+      // it rather than leaving the analyst to scroll and find it. Which
+      // field is TBC, or which segment has no end, is not in the queue
+      // entry itself (only the family or system id is), so this gets the
+      // reader to the right panel; naming the exact field is a step further
+      // than the queue's own data supports today.
+      // Matched against the order this same response just served
+      // (CATEGORY_ORDER in src/attention.py is fixed: UNVERIFIED, UNSIGNED,
+      // OPEN_BEHAVIOUR, OFF_PLOT), never against a retyped copy of the
+      // label text, so a reworded category cannot silently stop matching.
+      const panelId = entry.category === order[2] ? "polTimeline" : "assessBody";
+      document.getElementById(panelId).scrollIntoView({block: "nearest"});
+      if(entry.category === order[1]){
+        document.getElementById("signoff_name")?.focus();
       }
     });
     list.appendChild(button);

@@ -36,6 +36,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from src.compendium_models import INSTANTANEOUS_MODES
 from src.ranking_policy import INDICATIVE_LABEL
 from src.ranking_policy import policy as ranking_policy
 
@@ -154,6 +155,15 @@ def _open_behaviour_entries(
     "No end recorded" is the fact and this module does not upgrade it to
     "ongoing". Where a source does say a behaviour continues, as for
     COSMOS-2558, the claim says so and the claim is what is shown.
+
+    An instantaneous mode (`separation_event`, `anomalous_high_dv`) is a
+    point in time, not a band, and has no end to be missing: `src/pol.py`
+    already encodes this when it draws the timeline. This function did not,
+    so a genuine instant queued beside a genuinely open-ended behaviour,
+    unfixable by definition, with nothing in the queue to say so. Found
+    while building the control that is meant to resolve this category:
+    TJS-2's anomalous_high_dv and a separation_event were both sitting in
+    it, and no end date could ever be the right answer for either.
     """
     return [
         _entry(
@@ -173,7 +183,9 @@ def _open_behaviour_entries(
             or None,
         )
         for segment in layer.get("pol_segments", [])
-        if not segment.get("archived") and not segment.get("end_epoch")
+        if not segment.get("archived")
+        and not segment.get("end_epoch")
+        and segment.get("mode") not in INSTANTANEOUS_MODES
     ]
 
 

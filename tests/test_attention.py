@@ -212,3 +212,27 @@ def test_the_limit_is_bounded_both_ways(client):
     """
     assert client.get("/api/attention", params={"limit": 0}).status_code == 422
     assert client.get("/api/attention", params={"limit": 501}).status_code == 422
+
+
+def test_an_instantaneous_mode_is_never_counted_as_open_behaviour(client):
+    """A separation or an anomalous burn has no end to be missing.
+
+    `src/pol.py` already draws these as a marker, not a band, from the
+    model's own INSTANTANEOUS_MODES. This category did not share that
+    knowledge, so a genuine instant queued as unfixable: no end date is
+    ever the right answer for one. Calibrated against the seeded store,
+    which carries TJS-2's anomalous_high_dv and a separation_event, both
+    with no end_epoch, so both are real instances rather than constructed.
+    """
+    queue = _queue(client)
+    open_rows = [e for e in queue["entries"] if e["category"] == OPEN_BEHAVIOUR]
+    flagged_subjects = {row["subject"] for row in open_rows}
+
+    for system in client.get("/api/systems").json()["systems"]:
+        segments = client.get(f"/api/objects/{system['id']}/segments").json()
+        for segment in segments.get("segments", []):
+            if segment.get("mode") in ("separation_event", "anomalous_high_dv"):
+                assert system["catalogue_name"] not in flagged_subjects, (
+                    f"{system['catalogue_name']}'s {segment['mode']} was "
+                    "queued as an open behaviour with no end to add"
+                )
