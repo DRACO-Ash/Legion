@@ -180,3 +180,35 @@ def test_every_populated_category_is_reachable(client):
     shown = {entry["category"] for entry in queue["entries"]}
 
     assert populated <= shown, f"unreachable from the queue: {populated - shown}"
+
+
+def test_a_caller_can_ask_for_more_than_the_default(client):
+    """ "Showing 9 of 52" used to have no path to the other 43.
+
+    The route had no `limit` parameter at all, so every caller got the same
+    fixed-at-14 queue regardless of what it asked for, which read as a
+    scrolling defect in the interface rather than what it was: a request
+    that never asked for more. Calibrated against the route with the
+    parameter removed: this fails, pinned at the same `shown` as the default.
+    """
+    default = client.get("/api/attention").json()
+    assert default["count"] > default["shown"], (
+        "the seeded store no longer exceeds the default cap; "
+        "this test needs a bigger store to prove anything"
+    )
+
+    wider = client.get("/api/attention", params={"limit": 500}).json()
+    assert wider["shown"] > default["shown"]
+    assert wider["shown"] == min(wider["count"], 500)
+    assert wider["count"] == default["count"], "the same store, just asked more fully"
+
+
+def test_the_limit_is_bounded_both_ways(client):
+    """Zero is not "give me nothing" and an enormous number is not free.
+
+    `AttentionLimit` (src/routes/operability.py) rejects both ends with a 422
+    rather than silently clamping, so a caller finds out its request was
+    refused rather than reading a quietly smaller queue as the whole truth.
+    """
+    assert client.get("/api/attention", params={"limit": 0}).status_code == 422
+    assert client.get("/api/attention", params={"limit": 501}).status_code == 422

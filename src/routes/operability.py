@@ -47,6 +47,10 @@ SEPARATOR = " · "
 # routes already have to handle.
 Ids = Annotated[list[str] | None, Query()]
 Search = Annotated[str, Query(max_length=120)]
+# Default unchanged at 14, so an existing caller sees the same shape. The
+# upper bound exists so "show everything" cannot be turned into "fetch the
+# whole store on every keystroke" by a stray query string.
+AttentionLimit = Annotated[int, Query(ge=1, le=500)]
 
 
 def _assessments(request: Request) -> dict[str, Any]:
@@ -137,19 +141,25 @@ def ranking_policy_endpoint():
 
 
 @router.get("/attention")
-def attention(request: Request):
+def attention(request: Request, limit: AttentionLimit = 14):
     """What needs looking at, in an indicative order.
 
     Rebuilt from the store on every request and written back nowhere, which is
     what makes the policy's first boundary true rather than merely intended.
     The response carries the policy with it, so a caller cannot show the order
     without also being handed the words that say what the order is worth.
+
+    `limit` was previously fixed at 14, with no way for a caller to ask for
+    more. Against the seeded store that capped the panel at 3 entries per
+    category, so a reader saw "showing 9 of 52" with no path to the other 43:
+    not a scrolling defect, a request that never asked for them.
     """
     store = request.app.state.systems_store
     return build_attention(
         records=store.list(),
         objects=store.compendium_objects(),
         assessments=_assessments(request),
+        limit=limit,
     )
 
 

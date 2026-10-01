@@ -22,7 +22,16 @@ from .conftest import FakeUDLClient, make_elset, make_seed_record, make_settings
 FAMILY_ID = "chn-tjs"
 PATH = "/api/udl/family-elements"
 FAMILY_TITLE = "TJS Signals Collection"
-NOW = dt.datetime(2026, 9, 1, tzinfo=dt.UTC)
+# The real wall clock, not a fixed date. This test goes through the actual
+# HTTP route, which has no seam to inject `now` the way build_family_charts's
+# own tests do (see test_family_elements.py), so the route always computes
+# `since` from `datetime.now(UTC)`. A fixed NOW here (2026-09-01) passed on
+# 14 September 2026 and failed on its own, with no code change, the moment
+# real time carried every fixture point past DEFAULT_WINDOW_DAYS: a test
+# that was only ever checking the gap between a hardcoded constant and
+# whatever day it happened to run. Tying it to the real clock is what the
+# route itself does, so the two can never drift apart again.
+NOW = dt.datetime.now(dt.UTC)
 
 FAMILY_MEMBERS = [
     make_seed_record(

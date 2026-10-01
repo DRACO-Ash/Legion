@@ -476,6 +476,7 @@ svg.chart{ width:100%; height:auto; display:block; overflow:visible; }
       <output class="msg" id="queueMsg">Loading.</output>
       <p class="caption" id="queueCaption"></p>
       <div id="queueList" class="queue"></div>
+      <button type="button" class="btn btn-ghost" id="queueMore" hidden>Show all</button>
     </section>
 
     <section class="pane stage-pane" aria-labelledby="beltHead">
@@ -987,6 +988,11 @@ document.getElementById("systemForm").addEventListener("submit", async (e) => {
     msg.className = "msg ok";
     await loadSystems();
     await loadFamilies();
+    // A record missing its NORAD id is an off-plot entry in the queue and a
+    // line in the signal strip; an edit that adds one must drop both,
+    // immediately, not on the next full page load.
+    await loadAttention();
+    await loadSignalStrip();
   } else {
     const body = await res.json().catch(() => ({}));
     msg.textContent = "Error: " + (body.detail || res.status);
@@ -1007,6 +1013,8 @@ document.getElementById("archiveBtn").addEventListener("click", async () => {
     msg.className = "msg ok";
     await loadSystems();
     await loadFamilies();
+    await loadAttention();
+    await loadSignalStrip();
   } else {
     msg.textContent = "Error archiving.";
     msg.className = "msg error";
@@ -2569,11 +2577,14 @@ async function loadSignalStrip(){
   )).join("");
 }
 
-async function loadAttention(){
+async function loadAttention(limit){
   const msg = document.getElementById("queueMsg");
   const caption = document.getElementById("queueCaption");
   const list = document.getElementById("queueList");
-  const body = await fetch("/api/attention").then(r => r.json());
+  const more = document.getElementById("queueMore");
+  let url = "/api/attention";
+  if(limit) url += "?limit=" + encodeURIComponent(limit);
+  const body = await fetch(url).then(r => r.json());
 
   // The label and the boundaries are served, never written into the markup,
   // so the words an analyst reads and the rule the tests enforce are one
@@ -2603,7 +2614,21 @@ async function loadAttention(){
     });
     list.appendChild(button);
   });
+
+  // "Showing 9 of 52" used to have no path to the other 43: the server had
+  // never been asked for them, which reads as a scrolling defect but is a
+  // request that stopped short. Shown strictly less than count is the only
+  // honest trigger; it holds on the first (capped) load and clears once this
+  // button has asked for everything.
+  more.hidden = body.shown >= body.count;
 }
+
+document.getElementById("queueMore").addEventListener("click", () => {
+  // 500 is the route's own upper bound (AttentionLimit, src/routes/operability.py),
+  // so this always asks for everything the API will ever return in one call
+  // rather than needing to know the exact count first.
+  void loadAttention(500);
+});
 
 function renderInspector(record){
   const msg = document.getElementById("inspMsg");
