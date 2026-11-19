@@ -5,6 +5,11 @@ All notable changes to this project are documented here. Format follows
 [Semantic Versioning](https://semver.org/). Pre-1.0: minor bumps may include
 breaking changes, since nothing has shipped to the App Store yet.
 
+## [0.19.0] - 2026-11-19
+
+Triage: walk the attention queue one item at a time to each item's own fix control
+
+
 ## [0.18.0] - 2026-11-19
 
 The theatre timeline: every assessed behaviour on one axis, with what else was recorded in the same period
