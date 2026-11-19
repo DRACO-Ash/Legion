@@ -1153,6 +1153,14 @@ One trap worth knowing: the page declares `const CSS` for reading colour
 tokens, which shadows the browser's `CSS.escape`. Match on `dataset` instead
 of building an escaped selector.
 
+**Known cosmetic fault, queued:** `.th-axis` is sticky with `margin-left:132px`,
+so its background does not cover the label column, and when the timeline
+scrolls the first family heading shows through beside the year labels. Fix by
+making the sticky element full width with its own background and moving the
+`margin-left` and `position:relative` onto an inner track that holds the
+ticks (their `left` percentages must stay relative to the track). It changes
+no Python, so it ships with the next source change, never as its own release.
+
 ## Triage: the queue, one item at a time, to its own control (0.19.0)
 
 "Triage the queue" walks the attention backlog in its served order. Each step
