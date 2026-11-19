@@ -265,6 +265,20 @@ def build_graph(
     }
 
 
+def graph_from_store(store: Any) -> dict[str, Any]:
+    """The whole graph, read from a store.
+
+    One function so the relationship panel and the dossier's connection count
+    are the same computation: two copies would let the tab say "3 links" over
+    a panel that draws four.
+    """
+    records = store.list(include_archived=True)
+    layers = {
+        record["id"]: store.compendium_object(record["id"]) or {} for record in records
+    }
+    return build_graph(records, layers, store.list_compendium("relationships"))
+
+
 def neighbourhood(graph: dict[str, Any], node_id: str) -> dict[str, Any]:
     """One node, its edges, and the nodes on the other end of them.
 

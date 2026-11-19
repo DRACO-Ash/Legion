@@ -852,8 +852,9 @@ five.
   (not a database — deliberate, per Bluestaq's data-layer standard for
   low-concurrency, non-relational state). Anti-shrink merges, archive not
   delete, backed up before every archive, schema-versioned.
-- `src/routes/systems.py` — CRUD API. Reads public, writes gated by a
-  shared bearer token (`TEAM_TOKEN`).
+- `src/routes/systems.py` — CRUD API. Reads and writes are open: the shared
+  bearer token was removed in 0.9.0 (see "There is no authentication").
+- `src/dossier.py` — per-object section counts behind the dossier tabs.
 - `src/orbits.py` — the orbital derivations behind the charts: epoch
   parsing, Julian date, GMST (IAU 1982), GEO mean longitude, drift rate,
   and the regime-to-metric rule. Pure functions, stdlib only.
@@ -1076,6 +1077,47 @@ contract tests:**
   fifteen unsigned meant the first fourteen entries were all assessments and
   the twenty open behaviours were unreachable, while the counts told the
   analyst they were there. The queue now takes the head of each category.
+
+## The dossier: one object, one place (0.17.0)
+
+Selecting an object used to fill six panels spread down the page, and an
+analyst had to scroll to each one to learn whether it held anything. The
+always-open New System form took the best position on the page for an action
+taken a few times a year. Both are gone: the catalogue sits beside a sticky,
+tabbed dossier (Record, Provenance, Behaviour, Assessment, Connections), and
+"New system" is a button.
+
+● **Every tab says what is behind it before it is opened.** `src/dossier.py`
+  counts what the store holds per section, and `GET /api/objects/{id}/dossier`
+  serves it. `tests/test_dossier.py` checks every count against the endpoint
+  that renders that pane, across all 56 objects, so a tab can never say
+  "3 links" over a pane that draws four. That sweep needs its own app with the
+  global limiter raised: four reads for 56 objects trips the 120 a minute.
+● **Emptiness is served, not inferred from a count.** The assessment's count
+  is statements still to verify, so zero means complete. The interface dimmed
+  a complete assessment as empty until the server said which it was.
+● **The panes are the old panels moved, not rewritten.** Every rule their
+  renderers carry is unchanged by the move. Element ids are untouched; each
+  pane title is now `<h3 id="xTitle-head">` around the old `<span id="xTitle">`,
+  so the renderers' `textContent` writes keep the icon.
+● **Which tab resolves a queue entry is decided on the server.**
+  `SECTION_FOR` in `src/attention.py` puts a `section` on every entry, and the
+  interface calls `showTab(entry.section)`. A test fails if any category label
+  appears in the markup, because a retyped copy would drift.
+● **"Still open here" is the queue narrowed to this object and its family**,
+  read from the same builder, so the dossier and the queue cannot disagree.
+● **The address bar carries the object and the tab** (`#object/<id>/<tab>`).
+  A new object pushes a history entry and a tab change replaces one, so Back
+  returns to the previous object rather than walking every tab. A link to a
+  filtered-out object clears the filters rather than silently not opening.
+● **A section that does not apply is disabled**, never left showing the last
+  object's content. A family opened from the queue enables only Assessment,
+  and clears the form first: left in edit mode with no selection, a save
+  would have posted the previous object's values as a new system.
+
+Two layout faults found by driving the page at phone width, both older than
+this change: the bare `1fr` track grew to the table's width, and the family
+selector was wider than the screen. The table now scrolls inside its panel.
 
 ## The rule register, and running the gate before packaging
 

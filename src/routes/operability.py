@@ -24,7 +24,8 @@ from src.comparison import (
 from src.comparison import (
     _object_subject as object_subject,
 )
-from src.graph import FAMILY_PREFIX
+from src.dossier import build_dossier
+from src.graph import FAMILY_PREFIX, graph_from_store, neighbourhood
 from src.ranking_policy import policy as ranking_policy
 from src.store import FAMILY_ASSESSMENTS
 
@@ -50,7 +51,8 @@ Search = Annotated[str, Query(max_length=120)]
 # Default unchanged at 14, so an existing caller sees the same shape. The
 # upper bound exists so "show everything" cannot be turned into "fetch the
 # whole store on every keystroke" by a stray query string.
-AttentionLimit = Annotated[int, Query(ge=1, le=500)]
+MAX_ATTENTION = 500
+AttentionLimit = Annotated[int, Query(ge=1, le=MAX_ATTENTION)]
 
 
 def _assessments(request: Request) -> dict[str, Any]:
@@ -160,6 +162,39 @@ def attention(request: Request, limit: AttentionLimit = 14):
         objects=store.compendium_objects(),
         assessments=_assessments(request),
         limit=limit,
+    )
+
+
+@router.get("/objects/{system_id}/dossier")
+def dossier(request: Request, system_id: str):
+    """One object, with every section labelled by what is behind it.
+
+    The outstanding list is the attention queue narrowed to this object and
+    its family, read from the same builder, so the dossier and the queue
+    cannot disagree about what is still open.
+    """
+    store = request.app.state.systems_store
+    record = store.get(system_id)
+    if record is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"{UNKNOWN_SUBJECT}: {system_id}",
+        )
+    assessments = _assessments(request)
+    queue = build_attention(
+        records=store.list(),
+        objects=store.compendium_objects(),
+        assessments=assessments,
+        limit=MAX_ATTENTION,
+    )
+    mine = {system_id, FAMILY_PREFIX + str(record.get("family_id"))}
+    focus = neighbourhood(graph_from_store(store), system_id)
+    return build_dossier(
+        record=record,
+        layer=store.compendium_object(system_id) or {},
+        assessment=assessments.get(str(record.get("family_id"))),
+        edge_count=len(focus["edges"]),
+        outstanding=[e for e in queue["entries"] if e["subject_id"] in mine],
     )
 
 

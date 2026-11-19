@@ -37,6 +37,7 @@ from __future__ import annotations
 from typing import Any
 
 from src.compendium_models import INSTANTANEOUS_MODES
+from src.dossier import ASSESSMENT, BEHAVIOUR, RECORD
 from src.ranking_policy import INDICATIVE_LABEL
 from src.ranking_policy import policy as ranking_policy
 
@@ -49,6 +50,16 @@ OPEN_BEHAVIOUR = "Behaviour with no recorded end"
 OFF_PLOT = "No catalogue number, so it cannot be plotted"
 
 CATEGORY_ORDER = (UNVERIFIED, UNSIGNED, OPEN_BEHAVIOUR, OFF_PLOT)
+
+# Where each category is resolved, as a dossier section. Served on every entry
+# so the interface opens the right place without keeping its own copy of this
+# mapping, which would drift the first time a category was reworded.
+SECTION_FOR = {
+    UNVERIFIED: ASSESSMENT,
+    UNSIGNED: ASSESSMENT,
+    OPEN_BEHAVIOUR: BEHAVIOUR,
+    OFF_PLOT: RECORD,
+}
 
 # Assessment fields that carry a Claim and can therefore be marked TBC.
 CLAIM_FIELDS = ("one_line", "role_summary", "baseline_claim")
@@ -69,6 +80,7 @@ def _entry(
         "subject": subject,
         "subject_id": subject_id,
         "category": category,
+        "section": SECTION_FOR[category],
         "detail": detail,
         "marker": marker,
         "citation": citation,

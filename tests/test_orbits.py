@@ -59,9 +59,7 @@ def test_julian_date_at_the_unix_epoch_is_the_published_constant() -> None:
 
 def test_a_naive_datetime_is_read_as_utc() -> None:
     """UDL epochs are UTC; one arriving without a marker is not a different time."""
-    assert julian_date(dt.datetime(2000, 1, 1, 12)) == pytest.approx(  # noqa: DTZ001
-        julian_date(J2000)
-    )
+    assert julian_date(dt.datetime(2000, 1, 1, 12)) == pytest.approx(julian_date(J2000))
 
 
 def test_gmst_at_j2000_is_the_published_constant() -> None:

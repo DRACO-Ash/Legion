@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Request, status
 
-from src.graph import build_graph, edge_vocabulary, neighbourhood
+from src.graph import edge_vocabulary, graph_from_store, neighbourhood
 
 router = APIRouter(prefix="/api/graph")
 
@@ -18,12 +18,7 @@ NODE_NOT_FOUND = "No node with that id in the graph"
 
 
 def _graph(request: Request) -> dict:
-    store = request.app.state.systems_store
-    records = store.list(include_archived=True)
-    layers = {
-        record["id"]: store.compendium_object(record["id"]) or {} for record in records
-    }
-    return build_graph(records, layers, store.list_compendium("relationships"))
+    return graph_from_store(request.app.state.systems_store)
 
 
 @router.get("/vocabulary")
