@@ -855,6 +855,7 @@ five.
 - `src/routes/systems.py` — CRUD API. Reads and writes are open: the shared
   bearer token was removed in 0.9.0 (see "There is no authentication").
 - `src/dossier.py` — per-object section counts behind the dossier tabs.
+- `src/theatre.py` — every behaviour on one axis, with the shared-period rule.
 - `src/orbits.py` — the orbital derivations behind the charts: epoch
   parsing, Julian date, GMST (IAU 1982), GEO mean longitude, drift rate,
   and the regime-to-metric rule. Pure functions, stdlib only.
@@ -1118,6 +1119,39 @@ tabbed dossier (Record, Provenance, Behaviour, Assessment, Connections), and
 Two layout faults found by driving the page at phone width, both older than
 this change: the bare `1fr` track grew to the table's width, and the family
 selector was wider than the screen. The table now scrolls inside its panel.
+
+## The theatre: when things happened, across the catalogue (0.18.0)
+
+The console's stage now switches between **Space** (the GEO belt) and
+**Time** (every assessed behaviour on one axis, a lane per family). The
+per-object timeline answers "what has this object done"; it cannot answer
+"what else was happening then", which is the question that turns three
+corkscrews and an inspection in March 2025 into one event. The time view
+needs no UDL connection, so the stage is useful when UDL is down.
+`src/theatre.py` builds it, `GET /api/theatre` serves it.
+
+● **Placement reuses `build_timeline`**, so the precision, instant and
+  counterpart rules are the object timeline's own code.
+● **A blank end never invents a co-occurrence.** A behaviour with no
+  recorded end is counted only across the period its start names. Counted to
+  the axis end, SJ-21's 2022 capture would "share a period" with everything
+  since. The rule is served as `overlap_rule` and the interface prints it.
+● **A date covers the period it was recorded at**: "2024" is the whole year,
+  "2024-05" the whole month. Leap years are handled by `calendar.monthrange`.
+● **What is drawn is what is counted.** Unlike the object timeline, a band
+  stops where its record stops, and the axis runs to the end of the latest
+  recorded period. The first version ended the axis at the latest *start*,
+  which drew every March 2025 behaviour at zero width.
+● **Sharing a period is co-occurrence, not a relationship.** It never creates
+  a graph edge and the interface says so.
+● **The rule reproduces the one co-occurrence the sources describe.** The
+  Shiyan-24C triad shares a period with SJ-6-05A from the dates alone, and
+  `tests/test_theatre.py` holds that. It was calibrated by six sabotages, all
+  caught.
+
+One trap worth knowing: the page declares `const CSS` for reading colour
+tokens, which shadows the browser's `CSS.escape`. Match on `dataset` instead
+of building an escaped selector.
 
 ## The rule register, and running the gate before packaging
 

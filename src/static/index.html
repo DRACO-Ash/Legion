@@ -292,6 +292,57 @@ tbody tr.row:focus-visible{ outline:2px solid var(--blue-2); outline-offset:-2px
 .panel-head h2{ margin:0; }
 .panel-head .btn{ padding:5px 10px; font-size:12px; }
 
+/* -------------------------------------------------------------- theatre
+   The stage's time view. Lanes are families, rows are objects, and a band is
+   one assessed behaviour drawn across exactly the period it was recorded
+   at. Colour carries provenance, as on the object timeline, never the mode.
+   Selection is carried by an outline as well as by dimming the rest, so it
+   never rests on colour or opacity alone. */
+.stage-head{ display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:10px; }
+.stage-head h2{ margin:0; }
+.view-switch{ display:flex; border:1px solid var(--line); border-radius:var(--radius); overflow:hidden; }
+.vs{ background:none; border:0; color:var(--text-dim); font:inherit; font-size:11.5px; padding:4px 12px; cursor:pointer; }
+.vs + .vs{ border-left:1px solid var(--line); }
+.vs[aria-pressed="true"]{ background:var(--surface-3); color:var(--text); }
+.vs:focus-visible{ outline:2px solid var(--blue-2); outline-offset:-2px; }
+.th-filters{ display:flex; gap:6px; margin:4px 0 8px; }
+.th-filters button{ background:none; border:1px solid var(--line); border-radius:11px; color:var(--text-dim);
+  font:inherit; font-size:11px; padding:2px 10px; cursor:pointer; }
+.th-filters button[aria-pressed="true"]{ color:var(--text); border-color:var(--blue-2); }
+.theatre{ max-height:420px; overflow-y:auto; font-size:11px; }
+.th-axis{ position:sticky; top:0; z-index:1; height:16px; margin-left:132px; border-bottom:1px solid var(--line);
+  background:var(--surface); }
+.th-tick{ position:absolute; top:0; font-size:9.5px; color:var(--text-faint); padding-left:3px;
+  border-left:1px solid var(--line); height:16px; }
+.th-lane{ margin-top:8px; }
+.th-lane-head{ font-size:9.5px; letter-spacing:.06em; text-transform:uppercase; color:var(--text-faint);
+  margin:0 0 2px; }
+.th-row{ display:grid; grid-template-columns:128px 1fr; gap:4px; align-items:center; min-height:18px; }
+.th-name{ background:none; border:0; padding:1px 0; text-align:right; color:var(--text-dim); font:inherit;
+  font-size:11px; cursor:pointer; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.th-name:hover, .th-name:focus-visible{ color:var(--text); outline:none; text-decoration:underline; }
+.th-track{ position:relative; height:16px; background:var(--surface-2); border-radius:2px; }
+.th-band{ position:absolute; top:3px; height:10px; min-width:7px; padding:0; border:1px solid; border-radius:2px;
+  cursor:pointer; opacity:.9; }
+.th-band.th-open{ border-right-style:dashed; border-right-width:2px; border-top-right-radius:0; border-bottom-right-radius:0; }
+.th-band.th-instant{ top:6px; height:4px; }
+.th-band:focus-visible{ outline:2px solid var(--text); outline-offset:1px; }
+.th-focus .th-band{ opacity:.18; }
+.th-focus .th-band.th-shared{ opacity:1; outline:1px solid var(--text-dim); outline-offset:1px; }
+.th-focus .th-band.th-sel{ opacity:1; outline:2px solid var(--text); outline-offset:1px; }
+.th-detail{ margin-top:10px; padding:10px 12px; background:var(--surface-2); border:1px solid var(--line);
+  border-radius:var(--radius); font-size:11.5px; line-height:1.5; }
+.th-detail h3{ font-size:13px; margin:0 0 2px; }
+.th-detail .th-when{ color:var(--text-dim); margin:0 0 8px; }
+.th-detail .th-shared-head{ font-size:10px; letter-spacing:.08em; text-transform:uppercase; color:var(--text-faint);
+  margin:10px 0 4px; }
+.th-detail ul{ list-style:none; margin:0; padding:0; display:grid; gap:2px; }
+.th-detail li button{ background:none; border:0; border-left:2px solid var(--line); padding:2px 8px; width:100%;
+  text-align:left; color:var(--text-dim); font:inherit; cursor:pointer; }
+.th-detail li button:hover, .th-detail li button:focus-visible{ color:var(--text); border-left-color:var(--blue-2); outline:none; }
+.th-actions{ display:flex; gap:8px; margin-top:10px; }
+.th-actions .btn{ padding:5px 10px; font-size:12px; }
+
 /* ---------------------------------------------------------------- dossier
    Sticky, so the object stays in view while the analyst works down the
    catalogue beside it. Every tab carries what is behind it before it is
@@ -534,15 +585,40 @@ svg.chart{ width:100%; height:auto; display:block; overflow:visible; }
     </section>
 
     <section class="pane stage-pane" aria-labelledby="beltHead">
-      <h2 id="beltHead"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-graph"/></svg><span id="beltTitle">GEO belt</span></h2>
-      <output class="msg" id="beltMsg">Loading.</output>
-      <svg id="beltCanvas" viewBox="0 0 700 468" role="img" aria-labelledby="beltAlt"></svg>
-      <p id="beltAlt" class="sr-only"></p>
-      <p class="caveat" id="beltCaveat" hidden></p>
-      <details class="prov-legend" id="beltOffPlot" hidden>
-        <summary>Not on the belt, and why</summary>
-        <ul id="beltOffPlotList" class="graph-list"></ul>
-      </details>
+      <div class="stage-head">
+        <h2 id="beltHead"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-graph"/></svg><span id="beltTitle">GEO belt</span></h2>
+        <!-- Two questions, one stage: where things are, and when things
+             happened. The time view needs no UDL connection at all. -->
+        <div class="view-switch" role="group" aria-label="Stage view">
+          <button type="button" class="vs" data-view="space" aria-pressed="true">Space</button>
+          <button type="button" class="vs" data-view="time" aria-pressed="false">Time</button>
+        </div>
+      </div>
+      <div id="stageSpace">
+        <output class="msg" id="beltMsg">Loading.</output>
+        <svg id="beltCanvas" viewBox="0 0 700 468" role="img" aria-labelledby="beltAlt"></svg>
+        <p id="beltAlt" class="sr-only"></p>
+        <p class="caveat" id="beltCaveat" hidden></p>
+        <details class="prov-legend" id="beltOffPlot" hidden>
+          <summary>Not on the belt, and why</summary>
+          <ul id="beltOffPlotList" class="graph-list"></ul>
+        </details>
+      </div>
+      <div id="stageTime" hidden>
+        <output class="msg" id="theatreMsg">Loading.</output>
+        <div class="th-filters" id="theatreFilters" role="group" aria-label="Filter by nation"></div>
+        <div class="theatre" id="theatre"></div>
+        <div class="th-detail" id="theatreDetail" hidden></div>
+        <details class="prov-legend">
+          <summary>How to read the timeline</summary>
+          <p class="caveat" id="theatreRule"></p>
+          <p class="caveat">Colour carries how well a behaviour is evidenced, never the
+            behaviour itself, which is written out in the detail. A band covers only the
+            period its dates were recorded at: a year-only date fills the year. A dashed
+            right edge means no end is recorded, and the band stops where the record stops.
+            A thin band is a single event.</p>
+        </details>
+      </div>
     </section>
 
     <section class="pane insp-pane" aria-labelledby="inspHead">
@@ -2257,6 +2333,7 @@ async function refreshAfterCompendiumWrite(){
   await loadAttention();
   await loadSignalStrip();
   await loadFamilies();
+  if(theatreBody) await loadTheatre();
 }
 
 function _errorDetail(body, status){
@@ -3007,6 +3084,219 @@ function renderInspector(record){
     + (record.notes ? '<p class="why">' + esc(record.notes) + '</p>' : "");
 }
 
+/* ------------------------------------------------------------------ theatre
+   The stage answers two questions: where things are (the belt) and when
+   things happened (this). Every assessed behaviour in the catalogue sits on
+   one axis, a lane per family, so co-occurrence across objects is visible
+   at a glance instead of being spread across twenty per-object timelines.
+
+   The server places every band and decides which share a period, under a
+   rule it serves with the result. This code only draws and navigates. */
+
+const STAGE_VIEWS = new Set(["space", "time"]);
+const STAGE_KEY = "stageView";
+const STAGE_TITLE = {space: "GEO belt", time: "Theatre timeline"};
+let theatreBody = null;
+let theatreNation = "";
+let theatreSelected = null;
+
+function storedStageView(){
+  try{
+    const raw = localStorage.getItem(STAGE_KEY);
+    if(STAGE_VIEWS.has(raw)) return raw;
+  } catch { /* storage unavailable: fall through to the default */ }
+  return "space";
+}
+
+function rememberStageView(view){
+  try{ localStorage.setItem(STAGE_KEY, view); }
+  catch { /* nothing to do: the choice simply will not persist */ }
+}
+
+async function showStageView(view){
+  const wanted = STAGE_VIEWS.has(view) ? view : "space";
+  document.querySelectorAll(".view-switch .vs").forEach(button => {
+    button.setAttribute("aria-pressed", String(button.dataset.view === wanted));
+  });
+  document.getElementById("stageSpace").hidden = wanted !== "space";
+  document.getElementById("stageTime").hidden = wanted !== "time";
+  document.getElementById("beltTitle").textContent = STAGE_TITLE[wanted];
+  rememberStageView(wanted);
+  if(wanted === "time" && !theatreBody) await loadTheatre();
+}
+
+function theatreSegments(){
+  return (theatreBody?.lanes || []).flatMap(lane => lane.rows.flatMap(row => row.segments));
+}
+
+function bandShape(segment){
+  if(segment.instantaneous) return "th-instant";
+  if(segment.end_precision === "open") return "th-open";
+  return "th-closed";
+}
+
+function bandLabel(segment){
+  return `${segment.subject}: ${segment.mode_label}, ${segment.start_epoch}`
+    + (segment.end_precision === "open" ? ", no end recorded" : "")
+    + `. ${segment.claim?.marker || ""}`;
+}
+
+function bandMarkup(segment){
+  const classes = ["th-band", provenanceClass(segment.claim), bandShape(segment)];
+  if(theatreSelected){
+    if(segment.id === theatreSelected.id) classes.push("th-sel");
+    else if(theatreSelected.shared_period.includes(segment.id)) classes.push("th-shared");
+  }
+  return `<button type="button" class="${classes.join(" ")}" data-seg="${esc(segment.id)}"`
+    + ` style="left:${segment.x_pct}%;width:${segment.w_pct}%"`
+    + ` aria-label="${esc(bandLabel(segment))}"></button>`;
+}
+
+function theatreRowMarkup(row){
+  return `<div class="th-row"><button type="button" class="th-name" data-subject="${esc(row.subject_id)}"`
+    + ` title="${esc(row.subject)}">${esc(row.subject)}</button>`
+    + `<div class="th-track">${row.segments.map(bandMarkup).join("")}</div></div>`;
+}
+
+function theatreLaneMarkup(lane){
+  return `<div class="th-lane"><p class="th-lane-head">${esc(lane.family_title)} · ${esc(lane.nation)}</p>`
+    + lane.rows.map(theatreRowMarkup).join("") + "</div>";
+}
+
+function theatreAxisMarkup(ticks){
+  return '<div class="th-axis" aria-hidden="true">' + ticks.map(tick => (
+    `<span class="th-tick" style="left:${tick.offset_pct}%">${esc(tick.label)}</span>`
+  )).join("") + "</div>";
+}
+
+function renderTheatre(){
+  const host = document.getElementById("theatre");
+  const lanes = theatreBody.lanes.filter(lane => !theatreNation || lane.nation === theatreNation);
+  host.classList.toggle("th-focus", Boolean(theatreSelected));
+  host.innerHTML = theatreAxisMarkup(theatreBody.ticks) + lanes.map(theatreLaneMarkup).join("");
+  const shown = lanes.reduce((total, lane) => total + lane.rows.reduce((n, row) => n + row.segments.length, 0), 0);
+  document.getElementById("theatreMsg").textContent =
+    `${shown} assessed behaviour${shown === 1 ? "" : "s"}, ${theatreBody.span.from.slice(0, 4)} to `
+    + `${theatreBody.span.to.slice(0, 4)}. Assessment, not telemetry.`;
+}
+
+function renderTheatreFilters(){
+  const host = document.getElementById("theatreFilters");
+  const options = [["", "All"], ...theatreBody.nations.map(nation => [nation, nation])];
+  host.innerHTML = options.map(([value, label]) => (
+    `<button type="button" data-nation="${esc(value)}" aria-pressed="${value === theatreNation}">${esc(label)}</button>`
+  )).join("");
+}
+
+function sharedItemMarkup(segment){
+  return `<li><button type="button" data-seg="${esc(segment.id)}">${esc(segment.subject)} · `
+    + `${esc(segment.mode_label)} · ${spanWords(segment)}</button></li>`;
+}
+
+function theatreDetailMarkup(segment){
+  const byId = new Map(theatreSegments().map(entry => [entry.id, entry]));
+  const shared = segment.shared_period.map(id => byId.get(id)).filter(Boolean);
+  const sharedList = shared.length
+    ? `<ul>${shared.map(sharedItemMarkup).join("")}</ul>`
+    : '<p class="th-when">Nothing else recorded in this period.</p>';
+  const counterpart = segment.counterpart ? " " + counterpartLabel(segment) : "";
+  return `<h3>${esc(segment.subject)} · ${esc(segment.mode_label)}${counterpart}</h3>`
+    + `<p class="th-when">${spanWords(segment)} · dates `
+    + `${esc(PRECISION_WORD[segment.start_precision] || segment.start_precision)}</p>`
+    + claimMarkup(segment.claim)
+    + `<p class="th-shared-head">Recorded in the same period · ${shared.length}</p>${sharedList}`
+    + '<div class="th-actions"><button type="button" class="btn btn-ghost" data-open="'
+    + `${esc(segment.subject_id)}">Open dossier</button>`
+    + '<button type="button" class="btn btn-ghost" data-clear="1">Clear selection</button></div>';
+}
+
+function selectBand(id){
+  theatreSelected = theatreSegments().find(segment => segment.id === id) || null;
+  const detail = document.getElementById("theatreDetail");
+  renderTheatre();
+  if(!theatreSelected){
+    detail.hidden = true;
+    return;
+  }
+  detail.innerHTML = theatreDetailMarkup(theatreSelected);
+  detail.hidden = false;
+  // Matched by dataset rather than a selector: the page's own `CSS` constant
+  // (the computed style used for colour tokens) shadows the browser's
+  // CSS.escape, so an escaped selector here would throw.
+  [...document.querySelectorAll("#theatre .th-band")]
+    .filter(band => band.dataset.seg === id)
+    .forEach(band => band.focus());
+}
+
+async function openDossierAt(id, tab){
+  await ensureListed(id);
+  dossierTab = tab;
+  selectSystem(id);
+  showTab(tab);
+  document.getElementById("dossier").scrollIntoView({block: "nearest"});
+}
+
+async function loadTheatre(){
+  const msg = document.getElementById("theatreMsg");
+  let res;
+  try{
+    res = await fetch("/api/theatre");
+  } catch {
+    msg.textContent = "Could not reach the server to load the timeline.";
+    msg.className = "msg error";
+    return;
+  }
+  if(!res.ok){
+    msg.textContent = `Could not load the timeline (${res.status}).`;
+    msg.className = "msg error";
+    return;
+  }
+  theatreBody = await res.json();
+  msg.className = "msg";
+  if(!theatreBody.count){
+    msg.textContent = "No assessed behaviour is recorded anywhere in the catalogue yet.";
+    return;
+  }
+  if(theatreSelected){
+    theatreSelected = theatreSegments().find(segment => segment.id === theatreSelected.id) || null;
+  }
+  document.getElementById("theatreRule").textContent = theatreBody.overlap_rule;
+  renderTheatreFilters();
+  renderTheatre();
+}
+
+function installTheatre(){
+  document.querySelectorAll(".view-switch .vs").forEach(button => {
+    button.addEventListener("click", () => void showStageView(button.dataset.view));
+  });
+  document.getElementById("theatre").addEventListener("click", event => {
+    const band = event.target.closest(".th-band");
+    if(band){
+      selectBand(band.dataset.seg);
+      return;
+    }
+    const name = event.target.closest(".th-name");
+    if(name) void openDossierAt(name.dataset.subject, "behaviour");
+  });
+  document.getElementById("theatreDetail").addEventListener("click", event => {
+    const target = event.target.closest("button");
+    if(!target) return;
+    if(target.dataset.seg) selectBand(target.dataset.seg);
+    else if(target.dataset.open) void openDossierAt(target.dataset.open, "behaviour");
+    else if(target.dataset.clear) selectBand(null);
+  });
+  document.getElementById("theatreFilters").addEventListener("click", event => {
+    const target = event.target.closest("button");
+    if(!target) return;
+    theatreNation = target.dataset.nation;
+    renderTheatreFilters();
+    renderTheatre();
+  });
+  document.getElementById("stageTime").addEventListener("keydown", event => {
+    if(event.key === "Escape" && theatreSelected) selectBand(null);
+  });
+}
+
 /* ------------------------------------------------------------------ dossier
    One object, everything held about it, in one place. The panes are the same
    panels the page always had, moved into tabs rather than rewritten, so every
@@ -3262,6 +3552,7 @@ await loadClassification();
 await loadProvenanceLegend();
 installKeyboard();
 installDossier();
+installTheatre();
 emptyDossier();
 await loadValidationPolicy();
 await loadSystems();
@@ -3270,6 +3561,7 @@ await loadSignalStrip();
 await loadAttention();
 await applyAddress();
 await loadBelt();
+await showStageView(storedStageView());
 
 const configurationGap = await missingConfiguration();
 if(configurationGap){

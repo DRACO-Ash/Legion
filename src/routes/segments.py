@@ -17,6 +17,7 @@ from fastapi import APIRouter, Request
 from src.compendium_models import PatternOfLifeSegment, PatternOfLifeSegmentUpdate
 from src.pol import build_timeline, modes
 from src.routes.object_lists import layer_or_404, register_object_list
+from src.theatre import build_theatre
 
 router = APIRouter(prefix="/api")
 
@@ -55,6 +56,19 @@ def object_timeline(request: Request, system_id: str):
         for record in store.list(include_archived=True)
     }
     return build_timeline(live, names)
+
+
+@router.get("/theatre")
+def theatre(request: Request):
+    """Every assessed behaviour in the catalogue on one shared time axis.
+
+    Placed by the same assembler as the object timeline, so the precision and
+    instant rules cannot differ between the two views. Each segment carries the
+    other objects' segments recorded in the same period, under a narrow rule
+    that is served with the result so the interface never restates it.
+    """
+    store = request.app.state.systems_store
+    return build_theatre(store.list(), store.compendium_objects())
 
 
 register_object_list(
