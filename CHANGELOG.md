@@ -5,6 +5,11 @@ All notable changes to this project are documented here. Format follows
 [Semantic Versioning](https://semver.org/). Pre-1.0: minor bumps may include
 breaking changes, since nothing has shipped to the App Store yet.
 
+## [0.17.0] - 2026-11-19
+
+The dossier: everything about one object in one tabbed, linkable place, each tab labelled with what is behind it
+
+
 ## [0.16.2] - 2026-09-14
 
 Send the epoch qualifier /udl/elset requires; stop the diagnostics fabricating a status
