@@ -292,6 +292,35 @@ tbody tr.row:focus-visible{ outline:2px solid var(--blue-2); outline-offset:-2px
 .panel-head h2{ margin:0; }
 .panel-head .btn{ padding:5px 10px; font-size:12px; }
 
+/* --------------------------------------------------------------- triage */
+.queue-actions{ display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; }
+.queue-actions .btn{ padding:6px 11px; font-size:12px; }
+.triage-on .wrap{ padding-bottom:150px; }
+/* The sticky dossier stops above the bar, or the control triage just opened
+   can sit behind it on a short screen. */
+.triage-on .dossier{ max-height:calc(100vh - 140px); }
+.triage-bar{ position:fixed; left:0; right:0; bottom:0; z-index:40; background:var(--surface);
+  border-top:1px solid var(--signal-dim); box-shadow:0 -12px 32px rgba(0,0,0,.45); }
+.triage-inner{ max-width:1320px; margin:0 auto; padding:12px 20px; display:flex; gap:16px;
+  align-items:center; justify-content:space-between; flex-wrap:wrap; }
+.triage-text{ display:grid; gap:2px; min-width:0; flex:1 1 420px; }
+.triage-kicker{ font-size:10px; letter-spacing:.1em; text-transform:uppercase; color:var(--signal); }
+.triage-subject{ font-size:13.5px; }
+.triage-detail{ font-size:11.5px; color:var(--text-dim); display:-webkit-box; -webkit-line-clamp:2;
+  -webkit-box-orient:vertical; overflow:hidden; }
+.triage-status{ font-size:11px; color:var(--green-bright); min-height:14px; }
+.triage-actions{ display:flex; gap:8px; flex-wrap:wrap; }
+.triage-actions .btn{ padding:6px 11px; font-size:12px; }
+.triage-meter{ height:3px; background:var(--line-soft); }
+.triage-meter span{ display:block; height:100%; width:0; background:var(--signal); transition:width var(--motion); }
+/* The item under triage is outlined, not only tinted, so it reads without colour. */
+.triage-target{ outline:2px dashed var(--signal); outline-offset:3px; border-radius:2px;
+  scroll-margin-top:96px; }
+/* Narrow screens: the bar keeps the item and the controls and drops the
+   detail, which the dossier above already shows in full. */
+@media (max-width:600px){ .triage-detail{ display:none; }
+  .triage-inner{ padding:8px 12px; gap:8px; } }
+
 /* -------------------------------------------------------------- theatre
    The stage's time view. Lanes are families, rows are objects, and a band is
    one assessed behaviour drawn across exactly the period it was recorded
@@ -581,7 +610,10 @@ svg.chart{ width:100%; height:auto; display:block; overflow:visible; }
       <output class="msg" id="queueMsg">Loading.</output>
       <p class="caption" id="queueCaption"></p>
       <div id="queueList" class="queue"></div>
-      <button type="button" class="btn btn-ghost" id="queueMore" hidden>Show all</button>
+      <div class="queue-actions">
+        <button type="button" class="btn btn-primary" id="triageStart">Triage the queue</button>
+        <button type="button" class="btn btn-ghost" id="queueMore" hidden>Show all</button>
+      </div>
     </section>
 
     <section class="pane stage-pane" aria-labelledby="beltHead">
@@ -802,6 +834,28 @@ svg.chart{ width:100%; height:auto; display:block; overflow:visible; }
     </section>
   </main>
 </div>
+
+<!-- Triage: the queue walked one item at a time. Fixed to the bottom of the
+     screen so it stays in reach while the dossier above opens each item's own
+     fix control. It stores nothing: an item is resolved when the rebuilt queue
+     no longer lists it, which is read from the store, not set by a click. -->
+<section class="triage-bar" id="triageBar" aria-label="Triage" hidden>
+  <div class="triage-inner">
+    <div class="triage-text">
+      <span class="triage-kicker" id="triageKicker">Triage</span>
+      <strong class="triage-subject" id="triageSubject"></strong>
+      <span class="triage-detail" id="triageDetail"></span>
+      <output class="triage-status" id="triageStatus"></output>
+    </div>
+    <div class="triage-actions">
+      <button type="button" class="btn btn-ghost" id="triagePrev">Previous</button>
+      <button type="button" class="btn btn-ghost" id="triageSkip">Skip</button>
+      <button type="button" class="btn btn-ghost" id="triageReview" hidden>Review skipped</button>
+      <button type="button" class="btn btn-ghost" id="triageEnd">End triage</button>
+    </div>
+  </div>
+  <div class="triage-meter" aria-hidden="true"><span id="triageMeter"></span></div>
+</section>
 
 <dialog id="palette" class="palette" aria-label="Command palette">
   <div class="palette-box">
@@ -1080,7 +1134,9 @@ function selectSystem(id){
   document.getElementById("formMsg").textContent = "";
   // Selecting a row is the analyst saying "this one", so plot it. Deliberately
   // not awaited: the form must not wait on a live UDL call to become editable.
-  void showObjectChart(record);
+  // Not during triage, which selects object after object: plotting each would
+  // spend the strictly limited UDL call budget on charts nobody asked for.
+  if(!triage) void showObjectChart(record);
   void showObjectProvenance(record);
   void showObjectTimeline(record);
   void focusGraphNode(record.id);
@@ -1102,7 +1158,7 @@ document.getElementById("clearBtn").addEventListener("click", () => {
   document.getElementById("archiveBtn").style.display = "none";
   document.getElementById("formMsg").textContent = "";
   renderTable(currentList);
-  void showFamilyChart();
+  if(!triage) void showFamilyChart();
   clearProvenance();
   emptyDossier();
   if(location.hash.startsWith(HASH_PREFIX)) history.pushState(null, "", location.pathname);
@@ -3051,6 +3107,7 @@ async function loadAttention(limit){
   // honest trigger; it holds on the first (capped) load and clears once this
   // button has asked for everything.
   more.hidden = body.shown >= body.count;
+  await triageCheck();
 }
 
 document.getElementById("queueMore").addEventListener("click", () => {
@@ -3082,6 +3139,239 @@ function renderInspector(record){
         '<div><span class="k">' + esc(k) + '</span><span class="v">' + esc(v) + '</span></div>'
       )).join("") + '</div>'
     + (record.notes ? '<p class="why">' + esc(record.notes) + '</p>' : "");
+}
+
+/* ------------------------------------------------------------------- triage
+   The queue, worked through one item at a time. Each step opens the dossier
+   at the right section and then the item's own fix control, using the exact
+   target the server names: which assessment field, which segment, which
+   record field. The forms are the ones the dossier already has, so triage
+   adds a route through them and no second copy of any write.
+
+   Nothing is stored. An item counts as resolved when the rebuilt queue no
+   longer carries its key, which is a fact read from the store. Skipping is a
+   per-session convenience and changes nothing anywhere. */
+
+const TRIAGE_WAIT_MS = 2500;
+let triage = null;
+
+function byData(selector, key, value){
+  return [...document.querySelectorAll(selector)].find(el => el.dataset[key] === value) || null;
+}
+
+const TRIAGE_FINDERS = {
+  claim: target => byData("#assessBody .verify-open", "field", target.field),
+  signoff: () => document.getElementById("signoff_name"),
+  segment: target => byData("#polTimeline .verify-wrap", "segment", target.segment_id),
+  record: () => document.getElementById("f_norad_id"),
+};
+
+function waitForElement(find){
+  return new Promise(resolve => {
+    const started = performance.now();
+    const look = () => {
+      const found = find();
+      if(found || performance.now() - started > TRIAGE_WAIT_MS) resolve(found);
+      else requestAnimationFrame(look);
+    };
+    look();
+  });
+}
+
+function clearTriageTargets(){
+  document.querySelectorAll(".triage-target").forEach(el => el.classList.remove("triage-target"));
+}
+
+function revealControl(wrap){
+  const open = wrap.querySelector(".verify-open");
+  if(open && !open.hidden) open.click();
+}
+
+function activateTarget(target, found){
+  const marked = {
+    claim: () => found.closest(".verify-wrap").previousElementSibling,
+    segment: () => found.previousElementSibling,
+    signoff: () => found.closest("form"),
+    record: () => found.closest(".field"),
+  }[target.kind]();
+  marked?.classList.add("triage-target");
+  let focus = found;
+  if(target.kind === "claim"){
+    revealControl(found.closest(".verify-wrap"));
+    focus = document.getElementById(`vf_${target.field}_citation`) || found;
+  } else if(target.kind === "segment"){
+    revealControl(found);
+    focus = found.querySelector("input") || found;
+  }
+  // The item's own words go to the top, under the sticky tabs, so the open
+  // form below them sits in view above the triage bar rather than behind it.
+  (marked || found).scrollIntoView({block: "start"});
+  focus.focus({preventScroll: true});
+}
+
+function triageIsOpen(index){
+  const key = triage.items[index].key;
+  return !triage.resolved.has(key) && !triage.skipped.has(key);
+}
+
+function nextOpenIndex(from){
+  for(let i = from; i < triage.items.length; i++) if(triageIsOpen(i)) return i;
+  for(let i = 0; i < Math.min(from, triage.items.length); i++) if(triageIsOpen(i)) return i;
+  return -1;
+}
+
+function triageCounts(){
+  const total = triage.items.length;
+  return {total, resolved: triage.resolved.size, skipped: triage.skipped.size,
+    left: total - triage.resolved.size - triage.skipped.size};
+}
+
+function renderTriageProgress(){
+  const counts = triageCounts();
+  document.getElementById("triageMeter").style.width = `${100 * counts.resolved / counts.total}%`;
+  document.getElementById("triageKicker").textContent =
+    `Triage · ${counts.resolved} resolved · ${counts.skipped} skipped · ${counts.left} to go`;
+  document.getElementById("triageReview").hidden = counts.skipped === 0;
+}
+
+function renderTriageItem(entry){
+  document.getElementById("triageSubject").textContent = `${entry.category}: ${entry.subject}`;
+  document.getElementById("triageDetail").textContent = entry.detail;
+  document.getElementById("triagePrev").disabled = false;
+  document.getElementById("triageSkip").disabled = false;
+  renderTriageProgress();
+}
+
+function renderTriageDone(){
+  const counts = triageCounts();
+  clearTriageTargets();
+  document.getElementById("triageSubject").textContent = counts.skipped
+    ? "Nothing left except what you skipped."
+    : "The queue is clear.";
+  document.getElementById("triageDetail").textContent = counts.skipped
+    ? "Skipped items are still in the queue. Review them now, or end triage."
+    : "Every item in this session has been resolved.";
+  document.getElementById("triagePrev").disabled = true;
+  document.getElementById("triageSkip").disabled = true;
+  renderTriageProgress();
+}
+
+function setTriageStatus(text){
+  document.getElementById("triageStatus").textContent = text;
+}
+
+async function triageGo(index){
+  if(index < 0){
+    renderTriageDone();
+    return;
+  }
+  triage.at = index;
+  const entry = triage.items[index];
+  renderTriageItem(entry);
+  clearTriageTargets();
+  await openFromQueue(entry, triage.order);
+  const finder = TRIAGE_FINDERS[entry.target.kind];
+  const found = await waitForElement(() => finder(entry.target));
+  if(found){
+    activateTarget(entry.target, found);
+  } else {
+    setTriageStatus(missingControlReason(entry.target));
+  }
+}
+
+// Name the real cause. The section's own message says whether its request
+// failed (a refused or rate-limited request reads exactly like a missing
+// item otherwise), and only when it did not is "already fixed" offered.
+const TRIAGE_PANE_MESSAGE = {claim: "assessMsg", signoff: "assessMsg", segment: "polMsg",
+  record: "formMsg"};
+
+function missingControlReason(target){
+  const paneMsg = document.getElementById(TRIAGE_PANE_MESSAGE[target.kind]);
+  if(paneMsg?.classList.contains("error")){
+    return `This item could not be opened: ${paneMsg.textContent}`;
+  }
+  return "The section is open, but this item's control did not appear. It may "
+    + "already have been fixed elsewhere: skip it and the queue will catch up.";
+}
+
+async function startTriage(){
+  const body = await fetch("/api/attention?limit=500").then(r => r.json());
+  if(!body.count){
+    document.getElementById("queueMsg").textContent = "Nothing is outstanding, so there is nothing to triage.";
+    return;
+  }
+  triage = {items: body.entries, order: body.categories.map(c => c.name), at: 0,
+    resolved: new Set(), skipped: new Set()};
+  document.body.classList.add("triage-on");
+  document.getElementById("triageBar").hidden = false;
+  setTriageStatus("");
+  pauseChartsForTriage();
+  await triageGo(0);
+}
+
+function pauseChartsForTriage(){
+  document.getElementById("charts").innerHTML = "";
+  const msg = document.getElementById("chartMsg");
+  msg.textContent = "Movement charts are paused during triage, so walking the queue "
+    + "spends nothing from the UDL call budget. They resume when triage ends.";
+  msg.className = "msg";
+}
+
+// Called after every write the page makes. The rebuilt queue is the only
+// judge of what is resolved, so a fix made anywhere, even outside triage,
+// counts, and a write that did not actually resolve anything moves nothing.
+async function triageCheck(){
+  if(!triage) return;
+  const body = await fetch("/api/attention?limit=500").then(r => r.json());
+  const live = new Set(body.entries.map(entry => entry.key));
+  triage.items.forEach(item => {
+    if(!live.has(item.key)) triage.resolved.add(item.key);
+  });
+  const current = triage.items[triage.at];
+  if(current && triage.resolved.has(current.key)){
+    setTriageStatus(`Resolved: ${current.subject}. The queue no longer lists it.`);
+    await triageGo(nextOpenIndex(triage.at + 1));
+  } else {
+    renderTriageProgress();
+  }
+}
+
+function endTriage(){
+  triage = null;
+  clearTriageTargets();
+  document.body.classList.remove("triage-on");
+  document.getElementById("triageBar").hidden = true;
+  void loadAttention();
+  void showFamilyChart();
+}
+
+function installTriage(){
+  document.getElementById("triageStart").addEventListener("click", () => void startTriage());
+  document.getElementById("triageEnd").addEventListener("click", endTriage);
+  document.getElementById("triageSkip").addEventListener("click", () => {
+    triage.skipped.add(triage.items[triage.at].key);
+    setTriageStatus("");
+    void triageGo(nextOpenIndex(triage.at + 1));
+  });
+  document.getElementById("triagePrev").addEventListener("click", () => {
+    // Back to the previous unresolved item, un-skipping it if it was skipped,
+    // because going back to something is a decision to look at it again.
+    for(let i = triage.at - 1; i >= 0; i--){
+      const key = triage.items[i].key;
+      if(!triage.resolved.has(key)){
+        triage.skipped.delete(key);
+        setTriageStatus("");
+        void triageGo(i);
+        return;
+      }
+    }
+    setTriageStatus("This is the first item still open.");
+  });
+  document.getElementById("triageReview").addEventListener("click", () => {
+    triage.skipped.clear();
+    setTriageStatus("");
+    void triageGo(nextOpenIndex(0));
+  });
 }
 
 /* ------------------------------------------------------------------ theatre
@@ -3553,6 +3843,7 @@ await loadProvenanceLegend();
 installKeyboard();
 installDossier();
 installTheatre();
+installTriage();
 emptyDossier();
 await loadValidationPolicy();
 await loadSystems();

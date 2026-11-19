@@ -1153,6 +1153,37 @@ One trap worth knowing: the page declares `const CSS` for reading colour
 tokens, which shadows the browser's `CSS.escape`. Match on `dataset` instead
 of building an escaped selector.
 
+## Triage: the queue, one item at a time, to its own control (0.19.0)
+
+"Triage the queue" walks the attention backlog in its served order. Each step
+opens the dossier at the right section, outlines the exact statement, segment
+or field at fault, opens its fix control and puts the cursor in it. A bar
+fixed to the bottom of the screen carries Previous, Skip, Review skipped and
+End, with a progress meter.
+
+● **Every queue entry now names exactly what resolves it.** `target` is the
+  assessment field, segment or record field, and `key` is a stable name for
+  it. This closes the limitation recorded at 0.16.2, where a click reached
+  the right panel and left the analyst to find which of three statements was
+  unverified. Keyed on the family rather than the field, triage would have
+  reported a family's second TBC done when only the first was.
+● **Resolved means the rebuilt queue no longer lists the key.** Triage stores
+  nothing and writes nothing; it routes through the dossier's existing forms,
+  and `loadAttention` calls `triageCheck` after every write. A fix made
+  outside triage counts, and a write that resolved nothing moves nothing.
+  `tests/test_triage.py` proves each kind of fix removes exactly its own key.
+● **Triage spends nothing from the UDL call budget.** Selecting an object
+  plots its movement, a live UDL call through the strict limiter. Triage
+  selects object after object, so charts are paused for its duration.
+  Found by driving triage quickly in a browser: the global limiter refused
+  the page inside a minute, and each step had also made a UDL call.
+● **A missing control names its real cause.** A rate-limited request and an
+  already-fixed item look identical unless the section's own error is read,
+  so the message quotes that error before it offers "already fixed".
+● **The opened control is kept above the bar.** The target scrolls to the
+  top under the sticky tabs, and the sticky dossier stops 140px short of the
+  viewport while triage runs. Measured at 390, 1280 and 1440 wide.
+
 ## The rule register, and running the gate before packaging
 
 The 0.15.0 upload failed Code Quality with **eighteen new issues across eight

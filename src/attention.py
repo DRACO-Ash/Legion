@@ -73,18 +73,35 @@ def _entry(
     subject_id: str | None,
     category: str,
     detail: str,
+    target: dict[str, Any],
     marker: str | None = None,
     citation: str | None = None,
 ) -> dict[str, Any]:
+    """One queue entry, naming exactly what resolves it.
+
+    `target` is the field, segment or record the entry is about, and `key` is
+    a stable name for it. Without them the interface could only open the
+    right panel and leave the analyst to find which of three statements was
+    the unverified one; with them, triage opens that statement's own control.
+    The key is what lets triage tell "resolved" from "moved": an entry is
+    resolved when the rebuilt queue no longer carries its key, which is a
+    fact read from the store rather than a flag anybody set.
+    """
     return {
+        "key": ":".join([target["kind"], *target["ids"]]),
         "subject": subject,
         "subject_id": subject_id,
         "category": category,
         "section": SECTION_FOR[category],
+        "target": {"kind": target["kind"], **target["where"]},
         "detail": detail,
         "marker": marker,
         "citation": citation,
     }
+
+
+def _target(kind: str, **where: str) -> dict[str, Any]:
+    return {"kind": kind, "ids": list(where.values()), "where": where}
 
 
 def _family_titles(records: list[dict[str, Any]]) -> dict[str, str]:
@@ -104,15 +121,15 @@ def _family_titles(records: list[dict[str, Any]]) -> dict[str, str]:
     return titles
 
 
-def _tbc_fields(entry: dict[str, Any]) -> list[dict[str, Any]]:
-    """The assessment claims still carrying the TBC source class."""
+def _tbc_fields(entry: dict[str, Any]) -> list[tuple[str, dict[str, Any]]]:
+    """The assessment claims still carrying the TBC source class, by field."""
     claims = []
     for field in CLAIM_FIELDS:
         claim = entry.get(field)
         if not isinstance(claim, dict):
             continue
         if str(claim.get("source_class", "")).lower() == TBC_SOURCE_CLASS:
-            claims.append(claim)
+            claims.append((field, claim))
     return claims
 
 
@@ -126,10 +143,11 @@ def _one_assessment(
             subject_id=f"family:{family_id}",
             category=UNVERIFIED,
             detail=str(claim.get("statement") or "").strip(),
+            target=_target("claim", family_id=family_id, field=field),
             marker=str(claim.get("marker") or "").strip() or None,
             citation=str(claim.get("asserted_by") or "").strip() or None,
         )
-        for claim in _tbc_fields(entry)
+        for field, claim in _tbc_fields(entry)
     ]
     if not str(entry.get("validated_by") or "").strip():
         found.append(
@@ -141,6 +159,7 @@ def _one_assessment(
                     "Written but not signed off. Any member of the DOK team "
                     "may sign it."
                 ),
+                target=_target("signoff", family_id=family_id),
             )
         )
     return found
@@ -187,6 +206,9 @@ def _open_behaviour_entries(
                 or segment.get("notes")
                 or ""
             ).strip(),
+            target=_target(
+                "segment", system_id=record_id, segment_id=str(segment.get("id"))
+            ),
             marker=str((segment.get("claim") or {}).get("marker") or "").strip()
             or None,
             citation=str(
@@ -216,6 +238,7 @@ def _one_record(record: dict[str, Any], layer: dict[str, Any]) -> list[dict[str,
                     "The source names a behaviour, not a catalogue entry, so "
                     "this is excluded from the belt and the charts."
                 ),
+                target=_target("record", system_id=record_id, field="norad_id"),
                 citation=str(record.get("verify_owner") or "").strip() or None,
             )
         )
