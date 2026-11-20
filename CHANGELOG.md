@@ -5,6 +5,11 @@ All notable changes to this project are documented here. Format follows
 [Semantic Versioning](https://semver.org/). Pre-1.0: minor bumps may include
 breaking changes, since nothing has shipped to the App Store yet.
 
+## [0.19.1] - 2026-11-20
+
+Fix the 0.19.0 upload: group role, platform logging standard, http-only opener, Python 3.13.18 base and certifi
+
+
 ## [0.19.0] - 2026-11-19
 
 Triage: walk the attention queue one item at a time to each item's own fix control
