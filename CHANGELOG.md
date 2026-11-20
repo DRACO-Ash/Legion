@@ -9,6 +9,8 @@ breaking changes, since nothing has shipped to the App Store yet.
 
 Purge unused OS packages from the image, make the patch status truthful and serve it from readyz
 
+Re-issued the same day: the first 0.19.2 upload failed Code Quality on three Dockerfile findings (container:S8431 on both FROM lines, container:S7020 on the import check). The FROM lines now pin by digest alone and the long line is split. Both rules are mirrored.
+
 
 ## [0.19.1] - 2026-11-20
 
