@@ -244,6 +244,26 @@ def test_no_non_interactive_element_wears_an_interactive_role() -> None:
     )
 
 
+def test_no_element_uses_the_group_role() -> None:
+    """SonarQube Web:S6819: "Use <address> or <details> or <fieldset> or
+    <optgroup> instead of the group role to ensure accessibility across all
+    devices."
+
+    Reported against 0.19.0 on the stage view switch and the theatre's nation
+    filter, both `<div role="group">` added in 0.18.0. A `<fieldset>` with a
+    `<legend>` gives the same grouping natively, so assistive technology that
+    ignores ARIA still announces it. Calibrated on the unfixed file: it fired
+    on exactly the two lines the platform named, 624 and 641, and nothing else.
+    Any element, not only the non-interactive set above: the rule is about the
+    role, whatever carries it.
+    """
+    lines = [
+        INDEX_HTML[: match.start()].count(chr(10)) + 1
+        for match in re.finditer(r'\brole="group"', INDEX_HTML)
+    ]
+    assert lines == [], f"Use <fieldset> and <legend> instead, at lines {lines}"
+
+
 def test_tabindex_only_on_interactive_elements() -> None:
     """SonarQube: "tabIndex should only be declared on interactive elements."
 

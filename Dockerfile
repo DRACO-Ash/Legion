@@ -5,7 +5,12 @@
 # different Container Scan results, with nothing in the repository recording
 # which one was scanned. The tag is kept alongside the digest for readability.
 #
-# python:3.13-slim, resolved 9 September 2026: Python 3.13.15 on Debian 13.6.
+# python:3.13-slim, resolved 20 November 2026: Python 3.13.18 on Debian 13.7.
+# Refreshed from the 9 September digest (3.13.15 on 13.6) because the 0.19.0
+# Container Scan named four critical or high interpreter advisories fixed in
+# 3.13.16 to 3.13.18. The Debian packages in this digest are the same versions
+# the scan flagged, so the refresh does not touch the operating system
+# findings; READINESS.md has that account.
 # 3.13 rather than 3.12 because the 3.12 line's current patch (3.12.14) carries
 # interpreter advisories whose only published fix is on 3.13 or later. The move
 # needed no dependency change: requirements-runtime.txt installs unaltered under
@@ -14,7 +19,7 @@
 #
 # To refresh: pull the tag, read the digest, change it in both FROM lines below,
 # rebuild and re-verify. Never change one of the two.
-FROM python:3.13-slim@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285 AS build
+FROM python:3.13-slim@sha256:e48f59cdba69a3cbd9ed2cf0f348d90d45a8d350d98134cf1070bc106ee9ed90 AS build
 ENV PYTHONDONTWRITEBYTECODE=1 PIP_NO_CACHE_DIR=1
 WORKDIR /app
 RUN python -m venv /opt/venv
@@ -22,7 +27,7 @@ ENV PATH="/opt/venv/bin:$PATH"
 COPY requirements-runtime.txt .
 RUN pip install -r requirements-runtime.txt
 
-FROM python:3.13-slim@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285 AS prep
+FROM python:3.13-slim@sha256:e48f59cdba69a3cbd9ed2cf0f348d90d45a8d350d98134cf1070bc106ee9ed90 AS prep
 # Fail-open OS patch in its own layer, separate from the fail-closed strip below.
 # Deliberately fail-open: a blocked or unreachable package mirror must not stop
 # the build. But a build where the upgrade silently did nothing used to look
@@ -98,4 +103,7 @@ WORKDIR /app
 USER 10001:10001
 EXPOSE 8080
 # PORT is never set here (platform injects it); default 8080 is honoured in code.
-CMD ["sh","-c","exec gunicorn src.app:app -k uvicorn.workers.UvicornWorker -b 0.0.0.0:${PORT:-8080}"]
+# -c src/gunicorn_conf.py routes gunicorn's and uvicorn's own lines through the
+# application's JSON formatter to stdout. Without it they go to stderr in
+# gunicorn's text format, which the platform's Logging check rejects.
+CMD ["sh","-c","exec gunicorn src.app:app -c src/gunicorn_conf.py -k uvicorn.workers.UvicornWorker -b 0.0.0.0:${PORT:-8080}"]

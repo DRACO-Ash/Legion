@@ -195,6 +195,32 @@ def checked_out_path(candidate: str) -> Path:
     return resolved
 
 
+def _http_only_opener() -> urllib.request.OpenerDirector:
+    """An opener that can open http and https and nothing else.
+
+    `urlopen`'s default opener also handles `file:`, `ftp:` and `data:`, so a
+    URL that reached it with another scheme would be opened. `checked_url`
+    guards the `--base-url` flag; this guards every request, whatever builds
+    its URL. Reported by the platform's SAST stage at 0.19.0 as CWE-939
+    against the `urlopen` call. The proxy handler is kept so the script
+    honours HTTPS_PROXY exactly as `urlopen` did.
+    """
+    opener = urllib.request.OpenerDirector()
+    for handler in (
+        urllib.request.ProxyHandler(),
+        urllib.request.HTTPHandler(),
+        urllib.request.HTTPSHandler(),
+        urllib.request.HTTPDefaultErrorHandler(),
+        urllib.request.HTTPRedirectHandler(),
+        urllib.request.HTTPErrorProcessor(),
+    ):
+        opener.add_handler(handler)
+    return opener
+
+
+HTTP_ONLY_OPENER = _http_only_opener()
+
+
 def _request(url: str, auth_header: str) -> tuple[int, Any, str]:
     """One GET. Returns (status, parsed body or None, note).
 
@@ -202,11 +228,14 @@ def _request(url: str, auth_header: str) -> tuple[int, Any, str]:
     the whole purpose of the script is to report what happened, including a
     refusal.
     """
+    scheme = urllib.parse.urlparse(url).scheme
+    if scheme not in ALLOWED_SCHEMES:
+        return 0, None, f"refused: {scheme or 'no'} scheme is not http or https"
     request = urllib.request.Request(
         url, headers={"Authorization": auth_header, "User-Agent": USER_AGENT}
     )
     try:
-        with urllib.request.urlopen(request, timeout=TIMEOUT_SECONDS) as response:
+        with HTTP_ONLY_OPENER.open(request, timeout=TIMEOUT_SECONDS) as response:
             raw = response.read().decode("utf-8", errors="replace")
             try:
                 return response.status, json.loads(raw), ""
@@ -574,6 +603,26 @@ def self_test() -> int:
         "an https base URL is accepted and its trailing slash trimmed",
         "https://unifieddatalibrary.com",
         checked_url("https://unifieddatalibrary.com/"),
+    )
+    check(
+        "T024",
+        "a file: URL is refused before anything is opened",
+        (0, None),
+        _request("file:///etc/passwd", "Basic x")[:2],
+    )
+    check(
+        "T025",
+        "the opener has no handler for file:, ftp: or data:",
+        False,
+        any(
+            isinstance(
+                handler,
+                urllib.request.FileHandler
+                | urllib.request.FTPHandler
+                | urllib.request.DataHandler,
+            )
+            for handler in HTTP_ONLY_OPENER.handlers
+        ),
     )
     check(
         "T010",

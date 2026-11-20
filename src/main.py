@@ -18,4 +18,7 @@ if __name__ == "__main__":
     # gunicorn CMD, which is the real container entrypoint. It does not run
     # this file.
     host = os.environ.get("HOST", "127.0.0.1")
-    uvicorn.run("src.app:app", host=host, port=port, reload=False)
+    # log_config=None: uvicorn installs none of its own handlers, so its lines
+    # reach the JSON handler `configure_logging` puts on the root logger,
+    # and requests are logged once, by RequestLogMiddleware, not twice.
+    uvicorn.run("src.app:app", host=host, port=port, reload=False, log_config=None)

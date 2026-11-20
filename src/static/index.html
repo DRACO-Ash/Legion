@@ -329,12 +329,14 @@ tbody tr.row:focus-visible{ outline:2px solid var(--blue-2); outline-offset:-2px
    never rests on colour or opacity alone. */
 .stage-head{ display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:10px; }
 .stage-head h2{ margin:0; }
-.view-switch{ display:flex; border:1px solid var(--line); border-radius:var(--radius); overflow:hidden; }
+.view-switch{ display:flex; border:1px solid var(--line); border-radius:var(--radius); overflow:hidden;
+  margin:0; padding:0; min-width:0; }
 .vs{ background:none; border:0; color:var(--text-dim); font:inherit; font-size:11.5px; padding:4px 12px; cursor:pointer; }
 .vs + .vs{ border-left:1px solid var(--line); }
 .vs[aria-pressed="true"]{ background:var(--surface-3); color:var(--text); }
 .vs:focus-visible{ outline:2px solid var(--blue-2); outline-offset:-2px; }
-.th-filters{ display:flex; gap:6px; margin:4px 0 8px; }
+.th-filters{ border:0; padding:0; min-width:0; margin:4px 0 8px; }
+.th-filter-options{ display:flex; gap:6px; }
 .th-filters button{ background:none; border:1px solid var(--line); border-radius:11px; color:var(--text-dim);
   font:inherit; font-size:11px; padding:2px 10px; cursor:pointer; }
 .th-filters button[aria-pressed="true"]{ color:var(--text); border-color:var(--blue-2); }
@@ -621,10 +623,11 @@ svg.chart{ width:100%; height:auto; display:block; overflow:visible; }
         <h2 id="beltHead"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-graph"/></svg><span id="beltTitle">GEO belt</span></h2>
         <!-- Two questions, one stage: where things are, and when things
              happened. The time view needs no UDL connection at all. -->
-        <div class="view-switch" role="group" aria-label="Stage view">
+        <fieldset class="view-switch">
+          <legend class="sr-only">Stage view</legend>
           <button type="button" class="vs" data-view="space" aria-pressed="true">Space</button>
           <button type="button" class="vs" data-view="time" aria-pressed="false">Time</button>
-        </div>
+        </fieldset>
       </div>
       <div id="stageSpace">
         <output class="msg" id="beltMsg">Loading.</output>
@@ -638,7 +641,10 @@ svg.chart{ width:100%; height:auto; display:block; overflow:visible; }
       </div>
       <div id="stageTime" hidden>
         <output class="msg" id="theatreMsg">Loading.</output>
-        <div class="th-filters" id="theatreFilters" role="group" aria-label="Filter by nation"></div>
+        <fieldset class="th-filters">
+          <legend class="sr-only">Filter by nation</legend>
+          <div class="th-filter-options" id="theatreFilters"></div>
+        </fieldset>
         <div class="theatre" id="theatre"></div>
         <div class="th-detail" id="theatreDetail" hidden></div>
         <details class="prov-legend">

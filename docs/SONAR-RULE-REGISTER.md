@@ -82,6 +82,7 @@ somewhere a person will look.
 | Merge this if statement with the enclosing one | 0.15.3 | `bump_version.sh`, the coverage warning | `test_sonar_platform_rules.py::test_no_shell_if_wraps_only_another_if` |
 | Duplicate property "display" (**Bug**, not a smell) | 0.16.0 | `index.html`, the queue entry's line clamp | `test_sonar_platform_rules.py::test_no_css_rule_sets_a_property_twice` |
 | Replace with dict fromkeys method call | 0.16.0 | `attention.py`, the category counters | `test_sonar_platform_rules.py::test_no_dict_comprehension_just_seeds_a_constant` |
+| Use `<address>` or `<details>` or `<fieldset>` or `<optgroup>` instead of the group role (Web:S6819) | 0.19.0 | `index.html`, the stage view switch and the theatre nation filter | `test_sonar_platform_rules.py::test_no_element_uses_the_group_role` |
 
 ## The two things a mirror cannot catch
 

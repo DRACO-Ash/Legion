@@ -88,14 +88,13 @@ That build turned up two runtime findings. Both are now closed:
 ● **The audit line never reached the log. Fixed in 0.4.2.** Nothing
   configured logging, so `udl_tactics_app.audit` had no handler and sat at
   WARNING, and every `audit_logger.info(...)` was discarded: the audit trail
-  had been absent for the life of the project. `configure_logging()` in
-  `src/app.py`, called from `build_app()`, attaches one stdout handler to the
-  parent logger, with an audit-aware formatter so audit records emit as the
-  bare JSON line they already are, and the audit logger pinned to INFO so
-  `LOG_LEVEL` cannot silence a compliance record. Verified in the running
-  container, not asserted. Do not add a second handler to the audit logger
-  itself, and do not turn propagation off: the first duplicates every line,
-  the second breaks `caplog`. Both are explained in the function's docstring.
+  had been absent for the life of the project. **Superseded in 0.19.1 by the
+  platform logging standard**: one JSON handler on the root logger, audit
+  fields under `audit.` in the attributes rather than a bare JSON line. See
+  "0.19.1: the platform's logging standard" below. Two rules survive
+  unchanged: the audit logger is pinned to INFO so `LOG_LEVEL` cannot silence
+  a compliance record, and no second handler goes on the audit logger and
+  propagation stays on, or lines double and `caplog` breaks.
 ● **`STORAGE_MOUNT_PATH` and the `/app/data` fallback: by design.** Ash
   confirmed on 20 August 2026 that the file-storage add-on will always be
   present, so the unwritable `/app/data` fallback is not reachable in
@@ -856,6 +855,8 @@ five.
   bearer token was removed in 0.9.0 (see "There is no authentication").
 - `src/dossier.py` — per-object section counts behind the dossier tabs.
 - `src/theatre.py` — every behaviour on one axis, with the shared-period rule.
+- `src/logging_standard.py` — the platform's JSON log line, the request
+  middleware, and the gunicorn logging config `src/gunicorn_conf.py` loads.
 - `src/orbits.py` — the orbital derivations behind the charts: epoch
   parsing, Julian date, GMST (IAU 1982), GEO mean longitude, drift rate,
   and the regime-to-metric rule. Pure functions, stdlib only.
@@ -1191,6 +1192,80 @@ End, with a progress meter.
 ● **The opened control is kept above the bar.** The target scrolls to the
   top under the sticky tabs, and the sticky dossier stops 140px short of the
   viewport while triage runs. Measured at 390, 1280 and 1440 wide.
+
+## 0.19.1: what the 0.19.0 upload found, and what it did not settle
+
+Four findings. Code Quality and Container Scan blocked; SAST and Logging were
+advisory, and **Logging blocks from 1 December 2026**.
+
+**Code Quality: two `role="group"` attributes (Web:S6819).** Both were mine,
+added in 0.18.0 on the stage view switch and the theatre's nation filter. They
+are `<fieldset>` and `<legend class="sr-only">` now, with the user-agent
+border, padding and margin reset so nothing moved on screen. The mirror,
+`test_no_element_uses_the_group_role`, was written first and confirmed to fire
+on exactly the two lines the platform named, 624 and 641.
+
+**Logging: the platform's standard, now owned end to end.** The check found
+nothing on stdout, seven lines on stderr and no request id anywhere. The
+seven were gunicorn's and uvicorn's start-up lines, which never passed through
+the application's logging, and an ordinary request logged nothing at all.
+`src/logging_standard.py` holds the format and `src/gunicorn_conf.py` routes
+the server's own loggers through it. Rules that must hold:
+
+● **One handler, on the root logger, named `udl-tactics-app-stdout`.** The
+  gunicorn config installs it before any worker starts, and
+  `configure_logging` recognises it by name rather than adding a second.
+● **gunicorn's error logger carries the handler itself, propagation off.**
+  The uvicorn worker copies that logger's handlers onto `uvicorn.error` and
+  turns its propagation off. Left with no handler, uvicorn's start-up and
+  error lines would vanish rather than move to stdout.
+● **Never name anything `logconfig` in `src/gunicorn_conf.py`.** Gunicorn
+  reads every top-level name that matches one of its settings, and that is
+  one. Importing the builder under that name stopped gunicorn starting. A test
+  pins the config file's public names to the two it means to set.
+● **Root stays at WARNING.** httpx logs each UDL request at INFO with the full
+  query string, and the standard forbids query strings. The request line logs
+  the path alone.
+● **`RequestLogMiddleware` is outermost and pure ASGI**, so a rate-limited
+  request is logged too and the request id reaches every line written while
+  a request is handled, including from the threadpool. An unhandled error is
+  logged there, with the id, and answered with a 500; re-raising would have
+  uvicorn log it again after the context was gone.
+● **The timestamp format is INFERENCE.** ISO 8601, milliseconds, `Z`. The
+  standard's full text was unreachable from the build environment. If the
+  platform wants epoch milliseconds, `_timestamp` is the one place to change.
+
+`tests/test_logging_config.py` ends by running real gunicorn the way the
+container does and reading both streams. Its first version blocked on stdout
+and hung, rather than failed, when a sabotage sent the lines to stderr; it now
+picks its own port and polls. Six sabotages, all caught. Verified in the
+refreshed base image as the unprivileged user: no line on stderr, every line
+on stdout in the standard's shape.
+
+**SAST: CWE-939 on `scripts/udl_live_check.py`.** `urlopen`'s default opener
+also opens `file:`, `ftp:` and `data:`. The script now uses an opener holding
+only the HTTP, HTTPS, proxy, redirect and error handlers, and checks the
+scheme again at the call. Two self-test assertions prove a `file:` URL is
+refused before anything opens.
+
+**Container Scan: partly fixed, and the rest is a decision, not a task.**
+The base digest is refreshed (Python 3.13.15 to 3.13.18, which the scan names
+as the fix for all four critical or high interpreter findings) and certifi is
+2026.10.23 (the advisory's fix is 2026.10.18). Only certifi moved in either
+lock file, and both install under `--require-hashes` into a fresh 3.13
+environment. **The 76 Debian rows are untouched**: every flagged package sits
+at exactly the flagged version in the newest digest, and the Debian archives
+and security tracker are refused at the organisation proxy, so whether fixes
+exist could not be checked from here. Measured inside the refreshed image by
+tracing what the interpreter and every compiled wheel load: 48 of those rows
+are in packages nothing loads (util-linux and its libraries, login,
+perl-base, the openssl command-line tool and legacy provider, ncurses-bin,
+libstdc++6), 15 are in libraries loaded only by unused standard-library
+modules or by tools the image build itself uses, and 13 are in libc6, libssl3t64 and libgcc-s1, which the application needs.
+Removing packages shrinks the problem, but does not clear a policy that
+requires every critical and high finding resolved. That takes a Debian fix,
+a different base image, or a risk acceptance from the security owner. It is
+Ash's call. `READINESS.md` has the table.
 
 ## The rule register, and running the gate before packaging
 

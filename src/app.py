@@ -24,6 +24,7 @@ from src.cache import TTLCache
 from src.candidate_systems import CANDIDATE_RECORDS
 from src.config import Settings, load_settings
 from src.family_elements import CACHE_TTL_SECONDS
+from src.logging_standard import HANDLER_NAME, JsonLineFormatter, RequestLogMiddleware
 from src.pol_seed import SEED_SEGMENTS
 from src.routes import (
     claims,
@@ -48,58 +49,53 @@ from src.udl_client import UDLClient
 
 logger = logging.getLogger(APP_LOGGER_NAME)
 
-_STDOUT_HANDLER_NAME = "udl-tactics-app-stdout"
-
-
-class _AuditAwareFormatter(logging.Formatter):
-    """Emits an audit record as the bare JSON line it already is, so a log
-    pipeline can parse it without stripping a prefix first. Everything else
-    gets the usual human-readable prefix."""
-
-    def format(self, record: logging.LogRecord) -> str:
-        if record.name == AUDIT_LOGGER_NAME:
-            return record.getMessage()
-        return super().format(record)
+_STDOUT_HANDLER_NAME = HANDLER_NAME
 
 
 def configure_logging(level: str | None = None) -> None:
-    """Attach one stdout handler to the application logger.
+    """One JSON-lines handler on stdout, for every logger in the process.
 
-    Without this, nothing in the process configures logging: the audit
-    logger has no handler and inherits the root logger's WARNING, so every
-    `audit_logger.info(...)` is discarded and the audit trail never reaches
-    the container log. Verified against a real running container, not
-    assumed (observability-and-audit: one structured line per privileged
-    action).
+    History worth keeping. Until 0.4.2 nothing configured logging, so the
+    audit logger had no handler and every audit line was discarded; the tests
+    that should have caught it asserted through `caplog`, which installs its
+    own handler. Until 0.19.1 the handler sat on the application logger and
+    wrote a human-readable prefix, so gunicorn's and uvicorn's lines went to
+    stderr untouched and an ordinary request wrote nothing at all. The
+    platform's Logging check found both. `src/logging_standard.py` has the
+    format and the reasons.
 
-    Three deliberate choices:
+    Four deliberate choices:
 
-    - The handler sits on the parent `udl_tactics_app` logger, not on the
-      audit logger, so an audit record is written exactly once. A handler on
-      both would emit it twice, once per format.
-    - Propagation is left on. Root has no handler under gunicorn or uvicorn,
-      so propagating costs nothing, and pytest's `caplog` needs it.
-    - The audit logger is pinned to INFO regardless of `LOG_LEVEL`. The
-      audit trail is a compliance record, not diagnostic noise, so raising
-      the level must never silence it.
+    - The handler sits on the root logger, so every logger in the process,
+      the application's, the server's and the standard library's warnings,
+      writes the same shape to the same stream.
+    - Root stays at WARNING. httpx logs each UDL request at INFO with its full
+      query string, and the standard forbids query strings.
+    - The application logger takes `LOG_LEVEL` and propagates to root, so a
+      record is written exactly once, and `caplog` still sees it.
+    - The audit logger is pinned to INFO regardless of `LOG_LEVEL`. The audit
+      trail is a compliance record, so raising the level must never silence
+      it.
 
-    Idempotent: safe to call per worker, per test, or twice in one process.
+    Under gunicorn, `src/gunicorn_conf.py` installs the same handler, by the
+    same name, before any worker starts, and this function recognises it
+    rather than adding a second. Idempotent: safe per worker, per test, or
+    twice in one process.
     """
-    app_logger = logging.getLogger(APP_LOGGER_NAME)
-    if not any(h.name == _STDOUT_HANDLER_NAME for h in app_logger.handlers):
+    root = logging.getLogger()
+    if not any(h.name == _STDOUT_HANDLER_NAME for h in root.handlers):
         handler = logging.StreamHandler(sys.stdout)
         handler.set_name(_STDOUT_HANDLER_NAME)
-        handler.setFormatter(
-            _AuditAwareFormatter(
-                fmt="%(asctime)s %(levelname)s %(name)s %(message)s",
-                datefmt="%Y-%m-%dT%H:%M:%S%z",
-            )
-        )
-        app_logger.addHandler(handler)
+        handler.setFormatter(JsonLineFormatter())
+        root.addHandler(handler)
+    root.setLevel(logging.WARNING)
+    logging.captureWarnings(True)
 
     requested = (level or os.environ.get("LOG_LEVEL") or "INFO").strip().upper()
     resolved = logging.getLevelNamesMapping().get(requested, logging.INFO)
+    app_logger = logging.getLogger(APP_LOGGER_NAME)
     app_logger.setLevel(resolved)
+    app_logger.propagate = True
     logging.getLogger(AUDIT_LOGGER_NAME).setLevel(logging.INFO)
 
 
@@ -187,6 +183,8 @@ def build_app(
         allow_headers=["Authorization", "Content-Type"],
     )
     app.add_middleware(GlobalRateLimitMiddleware, limiter=global_limiter)
+    # Outermost, so a request refused by the rate limiter is logged as well.
+    app.add_middleware(RequestLogMiddleware)
 
     app.include_router(health.router)
     app.include_router(udl.router)

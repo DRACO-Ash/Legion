@@ -231,6 +231,46 @@ beginning.
   is independent of the container base, and the suite is now known to pass on
   both.
 
+## Container Scan, 0.19.0 upload, worked 20 November 2026
+
+**Result: failed.** "3 critical and 79 high and 91 medium and 19 low", with the
+instruction that every critical and high finding must be resolved. The policy
+wording is stricter than in September, when a `STOP` row was the trigger.
+
+**What 0.19.1 fixes.** 5 of the 81 critical and high rows transcribed from the
+report: the four Python 3.13.15 advisories (the base digest now carries
+3.13.18, confirmed by pulling it), and certifi (2026.7.22 to 2026.10.23).
+
+**What it does not.** The other 76 rows are Debian packages. Pulled and
+inspected: every one sits at exactly the flagged version in the newest
+`python:3.13-slim` digest. `deb.debian.org`, `security.debian.org` and the
+Debian security tracker are refused at the organisation proxy, and a scanner
+could not be run here either: Grype's database host is refused, and running
+Trivy through the local Docker daemon was refused by the session's own
+permission policy. Whether Debian has published fixes is therefore
+**UNKNOWN**. The scanned 0.19.0 image held the base versions, which means
+either the prep stage's fail-open `apt-get upgrade` found nothing newer or it
+could not reach the mirror; `/etc/os-patch-status` in the built image would
+say which.
+
+**Measured, by tracing every library the interpreter and every compiled wheel
+loads inside the refreshed image:**
+
+| Group | Rows | Packages |
+|---|---|---|
+| Nothing in the runtime loads them | 48 | util-linux, mount, libmount1, libblkid1, libsmartcols1, liblastlog2-2, bsdutils, login, perl-base, openssl (command-line tool), openssl-provider-legacy, ncurses-bin, libstdc++6 |
+| Loaded only by standard-library modules the application never imports, or by tools the image build itself uses | 15 | libsqlite3-0, libuuid1, libncursesw6, libtinfo6, ncurses-base, libacl1, libc-bin |
+| Needed by the application | 13 | libc6, libssl3t64, libgcc-s1, gcc-14-base |
+| Fixed in 0.19.1 | 5 | python, certifi |
+
+**The decision this needs.** Purging the first group, as the image already
+purges pip, removes 48 rows honestly: the packages and their dpkg records go
+together. It cannot clear the gate alone, because the 13 rows in the
+libraries the application needs only leave with a Debian fix, a different
+base image family, or a recorded risk acceptance from the security owner.
+Which route is Ash's decision; nothing here has been changed in that
+direction yet.
+
 ## Code Quality, `code-quality-verify`, 9 September 2026
 
 **Container Scan passes on 0.8.2.** So do Secret Detection, Dependencies, SAST,
