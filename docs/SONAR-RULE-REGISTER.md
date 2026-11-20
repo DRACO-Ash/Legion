@@ -30,6 +30,17 @@ deliberate**, for the reason `CLAUDE.md` gives: the credentials loader is
 copied verbatim from the Script mode skill. Sonar analysing a tree and ruff
 linting it are separate questions, and the answers differ.
 
+## The analysis reaches the Dockerfile too
+
+Learned at 0.19.2, the same way `scripts/` was learned at 0.15.2: three
+findings in a file no mirror had ever read. Two were latent. The FROM lines
+had carried a tag and a digest together since 0.8.2 and passed Code Quality at
+0.15.4, because the gate judges new code and those lines had not changed;
+refreshing the digest in 0.19.1 made them new. The third was introduced
+outright, by lengthening a RUN line. **Assume every file in the archive is
+analysed**, and when a release touches a line, expect every rule that line
+breaks to count for the first time.
+
 ## The rule for this register
 
 ● **A rule goes in the moment the platform reports it**, never on a guess
@@ -83,6 +94,8 @@ somewhere a person will look.
 | Duplicate property "display" (**Bug**, not a smell) | 0.16.0 | `index.html`, the queue entry's line clamp | `test_sonar_platform_rules.py::test_no_css_rule_sets_a_property_twice` |
 | Replace with dict fromkeys method call | 0.16.0 | `attention.py`, the category counters | `test_sonar_platform_rules.py::test_no_dict_comprehension_just_seeds_a_constant` |
 | Use `<address>` or `<details>` or `<fieldset>` or `<optgroup>` instead of the group role (Web:S6819) | 0.19.0 | `index.html`, the stage view switch and the theatre nation filter | `test_sonar_platform_rules.py::test_no_element_uses_the_group_role` |
+| Use either the version tag or the digest for the image instead of both (container:S8431) | 0.19.2 | `Dockerfile`, both FROM lines | `test_sonar_platform_rules.py::test_a_base_image_is_pinned_by_tag_or_digest_never_both` |
+| Line is too long. Split it into multiple lines using backslash continuations (container:S7020) | 0.19.2 | `Dockerfile`, the image's import check | `test_sonar_platform_rules.py::test_no_run_line_is_too_long` |
 
 ## The two things a mirror cannot catch
 

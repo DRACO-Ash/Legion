@@ -45,7 +45,7 @@ def _purged() -> list[str]:
 
 def test_both_stages_use_the_same_pinned_digest():
     digests = re.findall(
-        r"^FROM python:[^@\s]+@(sha256:[0-9a-f]{64})", DOCKERFILE, re.MULTILINE
+        r"^FROM python@(sha256:[0-9a-f]{64})", DOCKERFILE, re.MULTILINE
     )
     assert len(digests) == 2, "both FROM lines must pin a digest"
     assert digests[0] == digests[1], "the two FROM lines must never differ"

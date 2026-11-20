@@ -19,7 +19,10 @@
 #
 # To refresh: pull the tag, read the digest, change it in both FROM lines below,
 # rebuild and re-verify. Never change one of the two.
-FROM python:3.13-slim@sha256:e48f59cdba69a3cbd9ed2cf0f348d90d45a8d350d98134cf1070bc106ee9ed90 AS build
+#
+# The FROM lines carry the digest alone. SonarQube (container:S8431) rejects a
+# tag and a digest together, so the tag lives in this comment: python:3.13-slim.
+FROM python@sha256:e48f59cdba69a3cbd9ed2cf0f348d90d45a8d350d98134cf1070bc106ee9ed90 AS build
 ENV PYTHONDONTWRITEBYTECODE=1 PIP_NO_CACHE_DIR=1
 WORKDIR /app
 RUN python -m venv /opt/venv
@@ -27,7 +30,7 @@ ENV PATH="/opt/venv/bin:$PATH"
 COPY requirements-runtime.txt .
 RUN pip install -r requirements-runtime.txt
 
-FROM python:3.13-slim@sha256:e48f59cdba69a3cbd9ed2cf0f348d90d45a8d350d98134cf1070bc106ee9ed90 AS prep
+FROM python@sha256:e48f59cdba69a3cbd9ed2cf0f348d90d45a8d350d98134cf1070bc106ee9ed90 AS prep
 # Fail-open OS patch in its own layer, separate from the fail-closed strip below.
 # Deliberately fail-open: a blocked or unreachable package mirror must not stop
 # the build. But a build where the upgrade silently did nothing used to look
@@ -116,7 +119,8 @@ RUN set -eu; \
       echo "$survivors" >&2; \
       exit 1; \
     fi; \
-    python -c "import ssl, fastapi, starlette, uvicorn, gunicorn, httpx, pydantic, pydantic_settings, src.logging_standard"
+    python -c "import ssl, fastapi, starlette, uvicorn, gunicorn, httpx, \
+               pydantic, pydantic_settings, src.logging_standard"
 
 # Sweep is the LAST filesystem mutation in this stage, after user creation
 # and every COPY, since a later instruction can re-introduce a setuid/setgid

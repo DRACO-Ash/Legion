@@ -227,8 +227,10 @@ SAST, Dependency Scanning, Test, Container Build and the Code Quality scan
 itself. Full account in `READINESS.md`, "Container Scan, worked 9 September
 2026".
 
-● **The base image is pinned by digest, in both `FROM` lines, and the two must
-  always match.** The tag drifted between the build that passed Container Scan
+● **The base image is pinned by digest alone, in both `FROM` lines, and the two
+  must always match.** `FROM python@sha256:…`, with the tag in the comment
+  above: SonarQube (container:S8431) rejects a tag and a digest together, and
+  reported it at 0.19.2 the first time those lines changed. The tag drifted between the build that passed Container Scan
   in August and the one that failed in September, so two builds of the identical
   archive scanned differently with nothing in the repository recording which was
   which. To refresh: pull the tag, read the digest, change both lines, rebuild,
@@ -1345,6 +1347,12 @@ Two things learned fixing them, both of which cost a browser run:
   `object_lists.py` gained 33 lines in 0.15.2, so those registrations were
   analysed as new code, and the rule did not fire in that upload's fourteen
   findings or in either upload since.
+
+**The analysis reaches the Dockerfile too.** The 0.19.2 upload reported three
+findings there, in a file no mirror read: two latent (a tag and a digest
+together on both `FROM` lines, there since 0.8.2 and new code only because
+0.19.1 refreshed the digest), one introduced (a RUN line lengthened past
+120). The mirrors now read it. Assume every file in the archive is analysed.
 
 **The analysis reaches `scripts/`, whatever `sonar-project.properties` says.**
 The 0.15.2 upload reported fourteen issues and nine were in `scripts/`:

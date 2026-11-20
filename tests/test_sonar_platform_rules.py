@@ -281,6 +281,74 @@ def test_tabindex_only_on_interactive_elements() -> None:
     )
 
 
+# --- Dockerfile, reported against 0.19.2 ------------------------------------
+#
+# The analysis reads the Dockerfile too, which no mirror here did until the
+# 0.19.2 upload reported three findings in it. The same lesson as `scripts/`:
+# whatever the properties file says, assume every file in the archive is read.
+
+DOCKERFILE_LINES = (ROOT / "Dockerfile").read_text(encoding="utf-8").splitlines()
+DOCKERFILE_LINE_LIMIT = 120
+
+
+def _run_instruction_lines(lines: list[str]) -> list[int]:
+    """1-based numbers of every line belonging to a RUN instruction,
+    continuation lines included."""
+    numbers, inside = [], False
+    for number, line in enumerate(lines, start=1):
+        starts = line.startswith("RUN ")
+        if starts or inside:
+            numbers.append(number)
+        inside = (starts or inside) and line.rstrip().endswith("\\")
+    return numbers
+
+
+def _long_run_lines(lines: list[str]) -> list[int]:
+    return [
+        number
+        for number in _run_instruction_lines(lines)
+        if len(lines[number - 1]) > DOCKERFILE_LINE_LIMIT
+    ]
+
+
+def _tag_and_digest_lines(lines: list[str]) -> list[int]:
+    return [
+        number
+        for number, line in enumerate(lines, start=1)
+        if re.match(r"FROM\s+[^\s@]+:[^\s@]+@sha256:", line)
+    ]
+
+
+def test_a_base_image_is_pinned_by_tag_or_digest_never_both() -> None:
+    """SonarQube container:S8431: "Use either the version tag or the digest
+    for the image instead of both."
+
+    Reported against 0.19.2 on both FROM lines. The tag-and-digest form had
+    been there since 0.8.2 and passed Code Quality at 0.15.4, because the gate
+    judges new code and those lines had not changed. Refreshing the digest in
+    0.19.1 made them new. Calibrated on the 0.19.2 Dockerfile: lines 22 and
+    30, the two the platform named, and no others. The digest is kept, because
+    pinning by digest is the rule this repository depends on.
+    """
+    lines = _tag_and_digest_lines(DOCKERFILE_LINES)
+    assert lines == [], f"Drop the tag and keep the digest, at lines {lines}"
+
+
+def test_no_run_line_is_too_long() -> None:
+    """SonarQube container:S7020: "Line is too long. Split it into multiple
+    lines using backslash continuations."
+
+    Reported against 0.19.2 on line 119, a 123-character import check inside
+    a RUN. Scoped to RUN instructions, longer than 120 characters, because
+    that matches what the platform did: the CMD line in the same file was 125
+    characters and was not reported. The 120 is INFERENCE, the smallest limit
+    consistent with that upload. Calibrated on the 0.19.2 Dockerfile: line
+    119 and nothing else.
+    """
+    lines = _long_run_lines(DOCKERFILE_LINES)
+    assert lines == [], f"Split with backslash continuations, at lines {lines}"
+
+
 # --- JavaScript, reported against 0.15.0 ------------------------------------
 
 
