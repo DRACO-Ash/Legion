@@ -116,3 +116,26 @@ def test_readyz_reports_when_this_worker_read_its_environment(client):
     assert started_at.tzinfo is not None
     assert (dt.datetime.now(dt.UTC) - started_at).total_seconds() < 300
     assert body["uptime_seconds"] >= 0
+
+
+def test_readyz_reports_the_build_recorded_patch_status(client, monkeypatch, tmp_path):
+    """The one place the platform build's patch outcome can be read from
+    outside. Until 0.19.2 the file existed only inside the image."""
+    from src.routes import health
+
+    recorded = tmp_path / "os-patch-status"
+    recorded.write_text("unpatched\n", encoding="utf-8")
+    monkeypatch.setattr(health, "OS_PATCH_STATUS_PATH", recorded)
+    assert client.get("/readyz").json()["os_patch_status"] == "unpatched"
+
+
+def test_patch_status_is_never_guessed(tmp_path):
+    from src.routes.health import NOT_RECORDED, os_patch_status
+
+    patched = tmp_path / "patched"
+    patched.write_text("patched", encoding="utf-8")
+    odd = tmp_path / "odd"
+    odd.write_text("probably fine", encoding="utf-8")
+    assert os_patch_status(patched) == "patched"
+    assert os_patch_status(odd) == "unrecognised"
+    assert os_patch_status(tmp_path / "absent") == NOT_RECORDED

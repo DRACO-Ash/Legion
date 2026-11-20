@@ -130,9 +130,11 @@ keeps its version in step with `src/VERSION`; do not edit that line by hand.
 
 **Still not verified:**
 ● The GitLab pipeline itself, per the blocker above.
-● The `prep` stage's OS patch layer. `apt-get update` was blocked by the
-  build environment's egress policy and the `|| true` swallowed it, so the
-  upgrade applied nothing in that build.
+● The `prep` stage's OS patch layer on the platform's builder. In this
+  sandbox the mirror is unreachable and, since 0.19.2, the image says so
+  ("unpatched"); before that, `apt-get update` exited 0 on total failure and
+  the image claimed "patched". Read `os_patch_status` from the deployed
+  `/readyz` to settle it.
 
 ## The Code Quality gate has five conditions, not one
 
@@ -243,6 +245,22 @@ itself. Full account in `READINESS.md`, "Container Scan, worked 9 September
   installing `requirements-runtime.txt` under 3.13 with `--require-hashes`
   before the change was made. Prove it again the same way next time; if the
   hashes do not cover the new interpreter, that is a much larger change.
+
+Two more, set in 0.19.2, held by `tests/test_dockerfile.py`:
+
+● **Operating-system packages nothing loads are purged, fail-closed.** Ash's
+  decision, 20 November 2026. util-linux and its libraries, login, perl-base,
+  the openssl command-line tool and legacy provider, ncurses-bin, libstdc++6,
+  apt and libapt-pkg7.0 go, files and dpkg records together. The list came
+  from tracing every library the interpreter and every wheel load inside the
+  exact base image. `NEEDED` in the test names what must never be purged; add
+  to the purge only after tracing again. `login` is *protected* as well as
+  essential, so it needs `--force-remove-protected`.
+● **The patch status must not lie.** Plain `apt-get update` exits 0 when every
+  fetch fails, so the prep stage wrote "patched" for a build that never
+  reached a mirror. `--error-on=any` makes it exit 100. `/readyz` now serves
+  the recorded status as `os_patch_status`, the only way to learn from
+  outside whether the platform's build actually patched.
 
 One standing caution: a Container Scan failure names vulnerable packages in its
 advice text whatever the real cause. An Anchore policy fails only on a `STOP`
@@ -1154,13 +1172,13 @@ One trap worth knowing: the page declares `const CSS` for reading colour
 tokens, which shadows the browser's `CSS.escape`. Match on `dataset` instead
 of building an escaped selector.
 
-**Known cosmetic fault, queued:** `.th-axis` is sticky with `margin-left:132px`,
-so its background does not cover the label column, and when the timeline
-scrolls the first family heading shows through beside the year labels. Fix by
-making the sticky element full width with its own background and moving the
-`margin-left` and `position:relative` onto an inner track that holds the
-ticks (their `left` percentages must stay relative to the track). It changes
-no Python, so it ships with the next source change, never as its own release.
+**A cosmetic fault, fixed in 0.19.2:** `.th-axis` was sticky with
+`margin-left:132px`, so its background did not cover the label column and a
+lane heading showed through beside the year labels when the timeline
+scrolled. The sticky element is now full width with its own background, and
+the ticks sit on an inner `.th-axis-track` carrying the offset, so their
+`left` percentages stay relative to the bands' track. It waited for a release
+with a real source change, as CSS-only releases must.
 
 ## Triage: the queue, one item at a time, to its own control (0.19.0)
 
@@ -1262,10 +1280,15 @@ are in packages nothing loads (util-linux and its libraries, login,
 perl-base, the openssl command-line tool and legacy provider, ncurses-bin,
 libstdc++6), 15 are in libraries loaded only by unused standard-library
 modules or by tools the image build itself uses, and 13 are in libc6, libssl3t64 and libgcc-s1, which the application needs.
-Removing packages shrinks the problem, but does not clear a policy that
-requires every critical and high finding resolved. That takes a Debian fix,
-a different base image, or a risk acceptance from the security owner. It is
-Ash's call. `READINESS.md` has the table.
+**Ash chose the purge, and 0.19.2 does it.** 48 of the 81 rows go with their
+packages, 5 are fixed by version, and 28 remain (21 distinct CVEs) in libc6,
+libc-bin, libssl3t64, libgcc-s1 and libraries only unused standard-library
+modules or the build's own tools load. **Container Scan will still fail on
+those 28** under a policy that requires every critical and high finding
+resolved. What clears them is a Debian fix reaching the image, which the
+honest patch status and `os_patch_status` in `/readyz` will now show, or a
+risk acceptance from the security owner. `READINESS.md` has the table and the
+build verification.
 
 ## The rule register, and running the gate before packaging
 

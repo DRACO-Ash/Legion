@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import datetime as dt
+from pathlib import Path
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
@@ -15,6 +16,29 @@ router = APIRouter()
 # is converted to a value (503 with the errno) rather than hanging the probe
 # and being killed silently with no diagnostic.
 STORAGE_PROBE_TIMEOUT_SECONDS = 3.0
+
+# Written by the Dockerfile's prep stage, which survives the flatten. Until it
+# was served here it could be read only out of the built artefact, which on
+# the platform nobody can do, and whether the platform's build reached a
+# Debian mirror is exactly what decides the remaining Container Scan findings.
+OS_PATCH_STATUS_PATH = Path("/etc/os-patch-status")
+OS_PATCH_STATES = frozenset({"patched", "unpatched"})
+NOT_RECORDED = "not recorded"
+
+
+def os_patch_status(path: Path | None = None) -> str:
+    """What the image build recorded about its operating-system patch step.
+
+    "not recorded" outside the container, where no build wrote the file.
+    Anything other than the two states the Dockerfile writes is reported as
+    "unrecognised" rather than passed through, so a corrupted or hand-edited
+    file cannot read as either answer.
+    """
+    try:
+        recorded = (path or OS_PATCH_STATUS_PATH).read_text(encoding="utf-8").strip()
+    except OSError:
+        return NOT_RECORDED
+    return recorded if recorded in OS_PATCH_STATES else "unrecognised"
 
 
 @router.get("/version")
@@ -76,6 +100,7 @@ async def readyz(request: Request):
         "udl_username_len": len(settings.udl_username) if settings.udl_username else 0,
         "udl_password_len": len(settings.udl_password) if settings.udl_password else 0,
         "storage_writable": storage_writable,
+        "os_patch_status": os_patch_status(),
     }
     if not storage_writable:
         # Operational detail, not a secret leak: the resolved dir and errno

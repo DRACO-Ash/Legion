@@ -34,7 +34,12 @@ FROM python:3.13-slim@sha256:e48f59cdba69a3cbd9ed2cf0f348d90d45a8d350d98134cf107
 # identical to one where it worked, so the outcome is now recorded two ways: a
 # warning on stderr for the build log, and /etc/os-patch-status inside the
 # image, which survives the flatten and can be read out of the built artefact.
-RUN if apt-get update && apt-get -y upgrade; then \
+#
+# --error-on=any is what makes that record true. Plain `apt-get update` exits 0
+# when every fetch fails, so until 0.19.2 a build that could not even resolve
+# the mirror wrote "patched". Measured, 20 November 2026: exit 0 without the
+# flag and 100 with it, against an unreachable mirror on apt 3.0.4.
+RUN if apt-get update --error-on=any && apt-get -y upgrade; then \
       echo "patched" > /etc/os-patch-status; \
     else \
       echo "unpatched" > /etc/os-patch-status; \
@@ -42,6 +47,37 @@ RUN if apt-get update && apt-get -y upgrade; then \
     fi; \
     rm -rf /var/lib/apt/lists/*
 RUN useradd -u 10001 -r -s /usr/sbin/nologin appuser
+
+# Purge operating-system packages nothing in the running container uses, the
+# same way the installer toolchain is removed below: the files and their dpkg
+# records go together, so the scanner's view and the filesystem agree. Ash's
+# decision, 20 November 2026, after the 0.19.0 Container Scan.
+#
+# Chosen by tracing every shared library the interpreter and every compiled
+# wheel load inside this exact base image, then keeping anything they reach.
+# None of these is reached: util-linux and its libraries, login, perl-base,
+# the openssl command-line tool and its legacy provider (Python's ssl module
+# uses libssl3t64, which stays), ncurses-bin and libstdc++6. apt and
+# libapt-pkg7.0 go too because they cannot run without libstdc++6, and nothing
+# needs them after the patch step above.
+#
+# The packages that carry the 0.19.0 report's critical and high findings and
+# ARE reached stay: libc6, libssl3t64 and libgcc-s1. Those need a Debian fix
+# or a risk decision, not a purge. READINESS.md has the account.
+#
+# Fail-closed: if any named package survives, the build stops here. That the
+# application still runs without them is proved by the import check below.
+RUN set -eu; \
+    set -- util-linux mount libmount1 libblkid1 libsmartcols1 liblastlog2-2 \
+           bsdutils login perl-base openssl openssl-provider-legacy \
+           ncurses-bin libstdc++6 apt libapt-pkg7.0; \
+    dpkg --purge --force-remove-essential --force-remove-protected --force-depends "$@"; \
+    for package in "$@"; do \
+      if dpkg -s "$package" >/dev/null 2>&1; then \
+        echo "ERROR: $package survived the purge" >&2; \
+        exit 1; \
+      fi; \
+    done
 COPY --from=build /opt/venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH" PYTHONUNBUFFERED=1
 WORKDIR /app
@@ -80,7 +116,7 @@ RUN set -eu; \
       echo "$survivors" >&2; \
       exit 1; \
     fi; \
-    python -c "import fastapi, starlette, uvicorn, gunicorn, httpx, pydantic, pydantic_settings"
+    python -c "import ssl, fastapi, starlette, uvicorn, gunicorn, httpx, pydantic, pydantic_settings, src.logging_standard"
 
 # Sweep is the LAST filesystem mutation in this stage, after user creation
 # and every COPY, since a later instruction can re-introduce a setuid/setgid

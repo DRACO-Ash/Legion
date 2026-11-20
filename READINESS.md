@@ -263,13 +263,44 @@ loads inside the refreshed image:**
 | Needed by the application | 13 | libc6, libssl3t64, libgcc-s1, gcc-14-base |
 | Fixed in 0.19.1 | 5 | python, certifi |
 
-**The decision this needs.** Purging the first group, as the image already
-purges pip, removes 48 rows honestly: the packages and their dpkg records go
-together. It cannot clear the gate alone, because the 13 rows in the
-libraries the application needs only leave with a Debian fix, a different
-base image family, or a recorded risk acceptance from the security owner.
-Which route is Ash's decision; nothing here has been changed in that
-direction yet.
+**Ash's decision, 20 November 2026: purge the first group. Done in 0.19.2.**
+The prep stage purges util-linux, mount, libmount1, libblkid1, libsmartcols1,
+liblastlog2-2, bsdutils, login, perl-base, openssl, openssl-provider-legacy,
+ncurses-bin and libstdc++6, plus apt and libapt-pkg7.0, which cannot run
+without libstdc++6. Files and dpkg records go together, and the build stops if
+any survives.
+
+**Built and run, 20 November 2026.** Docker 29.9.2, daemon started in the
+session. The one deviation from the committed Dockerfile: the build stage
+installed the 26 locked wheels from a local directory (`--no-index
+--find-links`), downloaded on the host from the same lock file, because the
+build container cannot reach PyPI here. The lock file's hashes are enforced
+either way, and nothing but `/opt/venv` leaves that stage. Everything else
+built exactly as committed. In the built image:
+
+● 72 packages installed. Of the 81 rows: 48 gone with their packages, 5 fixed
+  by version, 28 remaining (21 distinct CVEs) in libc6, libc-bin, libssl3t64,
+  libgcc-s1, gcc-14-base, libuuid1, libsqlite3-0, libacl1 and the ncurses
+  libraries.
+● Zero setuid or setgid files; history shows only the flattened stage; runs as
+  10001.
+● With `PORT=9090` and a writable mount: `/readyz` 200 with writable storage,
+  56 systems, the theatre, the dossier and the interface served; a PATCH wrote
+  one audit line carrying its request id and survived a container restart.
+● Nothing on stderr; every stdout line in the logging standard's shape.
+● hadolint 2.15.1 reports only DL3067 on the scratch flatten, identical on
+  0.19.1 and present on every release since 0.8.2 that passed Dockerfile Lint.
+
+**A finding the build turned up: the patch status lied.** The image said
+"patched" while the mirror was unreachable. Plain `apt-get update` exits 0
+when every fetch fails; measured on apt 3.0.4, it exits 100 with
+`--error-on=any`, which the prep stage now uses. The image built here now
+records "unpatched", and `/readyz` serves the value as `os_patch_status`.
+Whether the scanned 0.19.0 image was ever patched is therefore unknown, and
+the deployed 0.19.2's `/readyz` will answer it.
+
+**What still fails the gate.** The 28 remaining rows. They leave with a Debian
+fix reaching the image or a risk acceptance from the security owner.
 
 ## Code Quality, `code-quality-verify`, 9 September 2026
 

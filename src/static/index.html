@@ -341,8 +341,12 @@ tbody tr.row:focus-visible{ outline:2px solid var(--blue-2); outline-offset:-2px
   font:inherit; font-size:11px; padding:2px 10px; cursor:pointer; }
 .th-filters button[aria-pressed="true"]{ color:var(--text); border-color:var(--blue-2); }
 .theatre{ max-height:420px; overflow-y:auto; font-size:11px; }
-.th-axis{ position:sticky; top:0; z-index:1; height:16px; margin-left:132px; border-bottom:1px solid var(--line);
-  background:var(--surface); }
+/* Full width with its own background, so a lane heading scrolling underneath
+   is covered rather than showing through beside the years. The ticks sit on
+   an inner track offset by the label column, so their percentages stay
+   relative to the bands' track, not to the whole row. */
+.th-axis{ position:sticky; top:0; z-index:1; height:17px; background:var(--surface); }
+.th-axis-track{ position:relative; height:16px; margin-left:132px; border-bottom:1px solid var(--line); }
 .th-tick{ position:absolute; top:0; font-size:9.5px; color:var(--text-faint); padding-left:3px;
   border-left:1px solid var(--line); height:16px; }
 .th-lane{ margin-top:8px; }
@@ -3460,9 +3464,9 @@ function theatreLaneMarkup(lane){
 }
 
 function theatreAxisMarkup(ticks){
-  return '<div class="th-axis" aria-hidden="true">' + ticks.map(tick => (
+  return '<div class="th-axis" aria-hidden="true"><div class="th-axis-track">' + ticks.map(tick => (
     `<span class="th-tick" style="left:${tick.offset_pct}%">${esc(tick.label)}</span>`
-  )).join("") + "</div>";
+  )).join("") + "</div></div>";
 }
 
 function renderTheatre(){
