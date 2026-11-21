@@ -302,6 +302,14 @@ the deployed 0.19.2's `/readyz` will answer it.
 **What still fails the gate.** The 28 remaining rows. They leave with a Debian
 fix reaching the image or a risk acceptance from the security owner.
 
+**Platform result, reported 21 November 2026.** The re-issued 0.19.2 deployed.
+Every other gate passed, Logging and Code Quality included. Container Scan
+still failed, but the platform recorded it as an advisory check and
+deployed. Its finding counts for 0.19.2 have not been seen here, so the
+expected 28 remaining rows are unconfirmed. The deployed `/readyz` field
+`os_patch_status` will say whether the platform's build reached a Debian
+mirror.
+
 ## Code Quality, `code-quality-verify`, 9 September 2026
 
 **Container Scan passes on 0.8.2.** So do Secret Detection, Dependencies, SAST,

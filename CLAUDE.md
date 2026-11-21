@@ -40,6 +40,18 @@ there — and they will drift if only one happens.
 
 ## Status: shipped
 
+**0.19.2 deployed, reported by Ash on 21 November 2026.** Dependencies, SAST
+Scan, SAST Findings, Dependency Scanning, Test, Code Quality, Dockerfile Lint,
+Container Build, DAST Scan, Logging and Deploy all passed. **Container Scan
+failed but did not block**: the platform headed the result "Deployed, 1
+advisory check reported findings". This is the first upload with Logging
+green, a week before it starts blocking, and Code Quality passed on the
+re-issued 0.19.2 with all three Dockerfile findings fixed. What the Container
+Scan still reports, and whether the platform's build patched the operating
+system (`os_patch_status` in the deployed `/readyz`), are not yet known here.
+Why Container Scan was advisory on this upload is not known either: do not
+assume it will stay that way.
+
 **Legion 0.4.6 passed all ten App Store stages and deployed on 28 August 2026.**
 Secret Detection, Dependencies, SAST, Dependency Scanning, Test, Code Quality,
 Dockerfile Lint, Container Build, Container Scan and Deploy are all green. The
