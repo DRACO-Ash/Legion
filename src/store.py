@@ -92,7 +92,11 @@ def _emit_audit(event: str, actor: str, **fields: Any) -> None:
         "timestamp": _now_iso(),
         **fields,
     }
-    audit_logger.info(json.dumps(record, default=str))
+    # Emitted only after the write has reached disk, so the outcome is known.
+    audit_logger.info(
+        json.dumps(record, default=str),
+        extra={"attributes": {"event.outcome": "success"}},
+    )
 
 
 def _blank_compendium_object(system_id: str, stamp: str) -> dict[str, Any]:

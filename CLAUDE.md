@@ -52,6 +52,27 @@ system (`os_patch_status` in the deployed `/readyz`), are not yet known here.
 Why Container Scan was advisory on this upload is not known either: do not
 assume it will stay that way.
 
+**A later report of 0.19.2, 23 November 2026, reads differently.** Container
+Scan shows **Passed**, and Logging shows **Passed with warnings**, two of them,
+both Medium and both about request context. Whether this was a re-run, and
+what changed in the scan between the two readings, is not known here. Record
+the screen as reported and do not infer a cause. The two Logging warnings are
+fixed in 0.19.3, a week before Logging blocks:
+
+● **Every line written while a request is handled carries `url.path`,
+  `http.request.method` and `user_agent.original`**, beside the request id and
+  the user. They are request context now, stamped by the middleware like the
+  id. An absent user agent is written as an empty string, never dropped: the
+  check names the key as required. An absent request id or user is still
+  omitted, because inventing either would mislead.
+● **The request line carries `event.outcome`.** The check calls it the
+  request's audit line. A status of 400 or above is `failure`; that mapping is
+  INFERENCE, since the standard names the field and not the rule. A store
+  audit line carries `success`, which is FACT: it is only written after the
+  write reaches disk.
+
+Calibrated by six sabotages, all caught, including the real gunicorn run.
+
 **Legion 0.4.6 passed all ten App Store stages and deployed on 28 August 2026.**
 Secret Detection, Dependencies, SAST, Dependency Scanning, Test, Code Quality,
 Dockerfile Lint, Container Build, Container Scan and Deploy are all green. The

@@ -310,6 +310,11 @@ expected 28 remaining rows are unconfirmed. The deployed `/readyz` field
 `os_patch_status` will say whether the platform's build reached a Debian
 mirror.
 
+**A later reading, reported 23 November 2026.** A second screen for 0.19.2
+shows Container Scan **Passed**. Nothing in this repository changed between
+the two readings, so the difference is on the platform side, and its cause is
+not known here. The expected 28 rows remain unconfirmed either way.
+
 ## Code Quality, `code-quality-verify`, 9 September 2026
 
 **Container Scan passes on 0.8.2.** So do Secret Detection, Dependencies, SAST,

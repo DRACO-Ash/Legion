@@ -36,9 +36,14 @@ from src.logging_standard import (
     AUDIT_LOGGER_NAME as STANDARD_AUDIT_LOGGER,
 )
 from src.logging_standard import (
+    OUTCOME_ATTRIBUTE,
     REQUEST_ID_ATTRIBUTE,
+    REQUIRED_REQUEST_ATTRIBUTES,
+    STATUS_ATTRIBUTE,
+    USER_AGENT_ATTRIBUTE,
     USER_EMAIL_ATTRIBUTE,
     RequestLogMiddleware,
+    outcome,
     server_logconfig,
 )
 from src.store import APP_LOGGER_NAME, AUDIT_LOGGER_NAME, TrackedSystemsStore
@@ -46,6 +51,7 @@ from src.store import APP_LOGGER_NAME, AUDIT_LOGGER_NAME, TrackedSystemsStore
 from .conftest import FakeUDLClient, make_seed_record, make_settings
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+HEALTHZ_LINE = "GET /healthz 200"
 FIELDS = {"timestamp", "severity_text", "severity_number", "body", "attributes"}
 SEED = [
     make_seed_record(
@@ -257,13 +263,103 @@ def test_every_line_written_during_a_request_carries_its_id(
     assert audits[0]["attributes"][REQUEST_ID_ATTRIBUTE] == "req-write"
 
 
+def test_every_line_in_a_request_names_its_path_method_and_user_agent(
+    logging_state, monkeypatch, tmp_path
+):
+    """The 0.19.2 warning: lines written while handling a request lacked
+    `user_agent.original`, and the audit line lacked the path and method too."""
+    monkeypatch.setenv("STORAGE_MOUNT_PATH", str(tmp_path))
+    stream = _capture(monkeypatch)
+    app = build_app(settings=make_settings(), udl_client=FakeUDLClient())
+    with TestClient(app) as client:
+        record_id = client.get("/api/systems").json()["systems"][0]["id"]
+        client.patch(
+            f"/api/systems/{record_id}",
+            json={"notes": "agent check"},
+            headers={"X-Request-Id": "req-ua", "User-Agent": "probe/1.0"},
+        )
+    during = [
+        r
+        for r in _lines(stream)
+        if r["attributes"].get(REQUEST_ID_ATTRIBUTE) == "req-ua"
+    ]
+    assert {r["body"] for r in during} >= {
+        "audit system_updated",
+        f"PATCH /api/systems/{record_id} 200",
+    }
+    for line in during:
+        attributes = line["attributes"]
+        assert attributes[USER_AGENT_ATTRIBUTE] == "probe/1.0", line
+        assert attributes["url.path"] == f"/api/systems/{record_id}", line
+        assert attributes["http.request.method"] == "PATCH", line
+
+
+def test_the_request_line_carries_status_and_outcome(
+    logging_state, monkeypatch, tmp_path
+):
+    """The check calls this the request's audit line and wants the path,
+    method, status, user agent and outcome on it."""
+    monkeypatch.setenv("STORAGE_MOUNT_PATH", str(tmp_path))
+    stream = _capture(monkeypatch)
+    app = build_app(settings=make_settings(), udl_client=FakeUDLClient())
+    with TestClient(app) as client:
+        client.get("/healthz", headers={"User-Agent": "probe/1.0"})
+        client.get("/api/systems/does-not-exist")
+    by_body = {r["body"]: r["attributes"] for r in _lines(stream)}
+    ok = by_body[HEALTHZ_LINE]
+    missing = by_body["GET /api/systems/does-not-exist 404"]
+    assert ok[STATUS_ATTRIBUTE] == 200
+    assert ok[OUTCOME_ATTRIBUTE] == "success"
+    assert missing[OUTCOME_ATTRIBUTE] == "failure"
+    for attributes in (ok, missing):
+        assert set(REQUIRED_REQUEST_ATTRIBUTES) <= set(attributes)
+
+
+def test_an_absent_user_agent_is_stated_as_empty_never_dropped(
+    logging_state, monkeypatch
+):
+    """The check names the key as required on every request line."""
+    stream = _capture(monkeypatch)
+    app = Starlette(routes=[Route("/ok", _ok)])
+    app.add_middleware(RequestLogMiddleware)
+    with TestClient(app) as client:
+        client.get("/ok", headers={"User-Agent": ""})
+    request = next(r for r in _lines(stream) if r["body"] == "GET /ok 200")
+    assert request["attributes"][USER_AGENT_ATTRIBUTE] == ""
+
+
+def test_an_audit_line_states_its_outcome(logging_state, monkeypatch, tmp_path):
+    """Written only after the write reached disk, so the outcome is known."""
+    stream = _capture(monkeypatch)
+    monkeypatch.setenv("STORAGE_MOUNT_PATH", str(tmp_path))
+    store = TrackedSystemsStore(seed_records=SEED)
+    store.create({**SEED[0], "catalogue_name": "AUDITSAT-8"}, actor="tester")
+    audit = next(r for r in _lines(stream) if r["body"].startswith("audit "))
+    assert audit["attributes"][OUTCOME_ATTRIBUTE] == "success"
+
+
+@pytest.mark.parametrize(
+    ("status", "expected"),
+    [
+        (200, "success"),
+        (307, "success"),
+        (399, "success"),
+        (400, "failure"),
+        (429, "failure"),
+        (500, "failure"),
+    ],
+)
+def test_outcome_counts_a_refused_request_as_a_failure(status, expected):
+    assert outcome(status) == expected
+
+
 def test_a_request_without_an_id_invents_none(logging_state, monkeypatch, tmp_path):
     monkeypatch.setenv("STORAGE_MOUNT_PATH", str(tmp_path))
     stream = _capture(monkeypatch)
     app = build_app(settings=make_settings(), udl_client=FakeUDLClient())
     with TestClient(app) as client:
         client.get("/healthz")
-    request = next(r for r in _lines(stream) if r["body"] == "GET /healthz 200")
+    request = next(r for r in _lines(stream) if r["body"] == HEALTHZ_LINE)
     assert REQUEST_ID_ATTRIBUTE not in request["attributes"]
 
 
@@ -338,7 +434,9 @@ def _gunicorn(tmp_path, port: int) -> subprocess.Popen:
 
 
 def _ask_until_answered(url: str) -> bool:
-    request = urllib.request.Request(url, headers={"X-Request-Id": "gun-1"})
+    request = urllib.request.Request(
+        url, headers={"X-Request-Id": "gun-1", "User-Agent": "gun-probe/1.0"}
+    )
     deadline = time.monotonic() + 20
     while time.monotonic() < deadline:
         try:
@@ -373,6 +471,8 @@ def test_real_gunicorn_writes_only_standard_lines_to_stdout(tmp_path):
         line
         for line in lines
         if line["attributes"].get(REQUEST_ID_ATTRIBUTE) == "gun-1"
-        and line["body"] == "GET /healthz 200"
+        and line["body"] == HEALTHZ_LINE
     ]
     assert tagged, "no request line carried the X-Request-Id"
+    assert tagged[0]["attributes"][USER_AGENT_ATTRIBUTE] == "gun-probe/1.0"
+    assert tagged[0]["attributes"][OUTCOME_ATTRIBUTE] == "success"

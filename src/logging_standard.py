@@ -15,6 +15,16 @@ gunicorn's and uvicorn's, and `RequestLogMiddleware` writes one line per
 request carrying the caller's `X-Request-Id`, which is then stamped on every
 other line written while that request is handled.
 
+The 0.19.2 check passed with two warnings, both about what a request carries:
+
+● **Every line written while a request is handled needs `url.path`,
+  `http.request.method` and `user_agent.original`**, besides the request id
+  and the user. Only the request line had the first two, and no line had the
+  third. All three are now request context, stamped like the id.
+● **The request line needs `event.outcome`.** The check calls it the audit
+  line for the request, and wants the path, method, status, user agent and
+  outcome on it.
+
 What a line holds, as the standard states it: `timestamp` (UTC, millisecond
 precision), `severity_text`, `severity_number`, `body` and a flat
 `attributes` object, with an exception carried as `exception.type`,
@@ -50,8 +60,20 @@ REQUEST_LOGGER_NAME = "udl_tactics_app.request"
 
 REQUEST_ID_HEADER = b"x-request-id"
 USER_EMAIL_HEADER = b"x-auth-request-email"
+USER_AGENT_HEADER = b"user-agent"
 REQUEST_ID_ATTRIBUTE = "http.request.header.x-request-id"
 USER_EMAIL_ATTRIBUTE = "user.email"
+USER_AGENT_ATTRIBUTE = "user_agent.original"
+METHOD_ATTRIBUTE = "http.request.method"
+PATH_ATTRIBUTE = "url.path"
+STATUS_ATTRIBUTE = "http.response.status_code"
+OUTCOME_ATTRIBUTE = "event.outcome"
+
+# Every line written while a request is handled carries these, whether or not
+# the client sent the header: the check names the key as required, and an
+# empty user agent states truthfully that none was sent. The request id and
+# the user stay absent when absent, because inventing either would mislead.
+REQUIRED_REQUEST_ATTRIBUTES = (PATH_ATTRIBUTE, METHOD_ATTRIBUTE, USER_AGENT_ATTRIBUTE)
 
 # The standard's severity pairs. Python has no TRACE; anything below DEBUG
 # would be one, and nothing here logs at that level.
@@ -142,12 +164,39 @@ class JsonLineFormatter(logging.Formatter):
         )
 
 
-def _header(scope: dict[str, Any], name: bytes) -> str | None:
+def _header(scope: dict[str, Any], name: bytes, limit: int = 256) -> str | None:
     for key, value in scope.get("headers") or []:
         if key.lower() == name:
             text = value.decode("latin-1").strip()
-            return "".join(ch for ch in text if ch.isprintable())[:256] or None
+            return "".join(ch for ch in text if ch.isprintable())[:limit] or None
     return None
+
+
+def outcome(status: int) -> str:
+    """`event.outcome` for a response status: a 4xx or 5xx is a failure.
+
+    INFERENCE, not FACT: the standard names the field and not its mapping.
+    `success` and `failure` are the common schema's values, and counting a
+    refused request as a failure is the usual reading for an HTTP server.
+    """
+    return "success" if status < 400 else "failure"
+
+
+def request_context(scope: dict[str, Any]) -> dict[str, str]:
+    """The attributes every line written during this request carries."""
+    context = {
+        PATH_ATTRIBUTE: str(scope.get("path", "")),
+        METHOD_ATTRIBUTE: str(scope.get("method", "")),
+        USER_AGENT_ATTRIBUTE: _header(scope, USER_AGENT_HEADER, limit=512) or "",
+    }
+    for attribute, header in (
+        (REQUEST_ID_ATTRIBUTE, REQUEST_ID_HEADER),
+        (USER_EMAIL_ATTRIBUTE, USER_EMAIL_HEADER),
+    ):
+        value = _header(scope, header)
+        if value:
+            context[attribute] = value
+    return context
 
 
 class RequestLogMiddleware:
@@ -171,15 +220,7 @@ class RequestLogMiddleware:
         if scope.get("type") != "http":
             await self.app(scope, receive, send)
             return
-        context = {
-            key: value
-            for key, value in (
-                (REQUEST_ID_ATTRIBUTE, _header(scope, REQUEST_ID_HEADER)),
-                (USER_EMAIL_ATTRIBUTE, _header(scope, USER_EMAIL_HEADER)),
-            )
-            if value
-        }
-        token = _request_attributes.set(context)
+        token = _request_attributes.set(request_context(scope))
         started = time.perf_counter()
         sent: dict[str, Any] = {"status": 500, "started": False}
 
@@ -210,9 +251,10 @@ class RequestLogMiddleware:
             status,
             extra={
                 "attributes": {
-                    "http.request.method": method,
-                    "url.path": path,
-                    "http.response.status_code": status,
+                    METHOD_ATTRIBUTE: method,
+                    PATH_ATTRIBUTE: path,
+                    STATUS_ATTRIBUTE: status,
+                    OUTCOME_ATTRIBUTE: outcome(status),
                     "http.server.request.duration_ms": round(
                         (time.perf_counter() - started) * 1000, 1
                     ),
