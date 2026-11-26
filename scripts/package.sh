@@ -139,8 +139,22 @@ if ! (cd "$PKG" && "$PY" -m pytest -q --cov=src --cov-report=term:skip-covered);
   exit 1
 fi
 
+step "Checksum"
+# Written beside the zip so the upload can be matched to this exact build, and
+# read back at once: a checksum nobody verified proves nothing.
+if command -v sha256sum >/dev/null 2>&1; then HASH_CMD=(sha256sum); else HASH_CMD=(shasum -a 256); fi
+(cd "$OUT_DIR" && "${HASH_CMD[@]}" "$(basename "$ZIP")" > "$(basename "$ZIP").sha256")
+if ! (cd "$OUT_DIR" && "${HASH_CMD[@]}" -c "$(basename "$ZIP").sha256" >/dev/null); then
+  fail "the checksum written for $ZIP does not verify."
+  exit 1
+fi
+SIZE=$(wc -c < "$ZIP" | tr -d ' ')
+SHA=$(cut -d' ' -f1 "$ZIP.sha256")
+
 printf '\n\033[32m========================================================\033[0m\n'
 echo "Package ready: $ZIP"
+echo "Size: $SIZE bytes"
+echo "SHA-256: $SHA (also in $ZIP.sha256)"
 echo "Built from $TAG, extracted and tested from the archive itself."
 echo ""
 echo "Still not checked here, because nothing local can:"

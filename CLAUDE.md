@@ -1,1483 +1,301 @@
-# CLAUDE.md — UDL Tactics App (`legion`)
+# CLAUDE.md: UDL Tactics App (`legion`)
 
-Read this first, every session. It is the entry point; `HANDOFF.md` has the
-full history if you need it, `READINESS.md` has the current gap analysis,
-`CHANGELOG.md` has the version-by-version detail.
+Standing rules, read every session. Each rule is short here and its full
+account (what failed, how it was found, how the fix was proved) is in
+`docs/PROJECT-RECORD.md` under the heading given in brackets. Read that
+section before changing anything a rule protects. `READINESS.md` is the gap
+analysis, `CHANGELOG.md` the per-version detail, `HANDOFF.md` the early
+history, `docs/SONAR-RULE-REGISTER.md` every rule the Code Quality gate has
+fired.
 
 ## What this is
 
-A FastAPI service that lets Bluestaq analysts track, edit, and archive
-Russian and Chinese ASAT/RPO satellite systems over time, cross-checking
-entries against live UDL data. Server archetype, Python, deployed as a
-container to the Bluestaq App Store.
+A FastAPI service for Bluestaq analysts to track, edit and archive Russian
+and Chinese ASAT and RPO satellite systems, cross-checked against live UDL
+data. Python, deployed as a container to the Bluestaq App Store. The version
+lives in `src/VERSION` only; everything else reads it.
 
-Current version: see `src/VERSION` (single source of truth — everything
-else, the FastAPI app metadata, the `/version` endpoint, reads from it).
+## Status
 
-## The two-repository model — read this before touching git or CI
+0.19.3 is deployed and healthy (26 November 2026, read from the platform):
+every stage passed, Logging and Container Scan included, and the deployed
+`/readyz` reports `os_patch_status` "patched". Still open:
 
-This is the single most important thing to not lose in the move:
+● The GitLab pipeline file itself is not visible from here (two-repository
+  model, below).
+● The notification feed's `window_hours` semantics (full baseline or deltas)
+  is INFERENCE. `scripts/udl_live_check.py` settles it where UDL is reachable.
+● `/udl/elset/history` is INFERENCE; the diagnostics report its real status.
+● A bulk element-set pull is possible (`epoch` alone works) and not built,
+  because the response size has not been measured. Measure first.
+● [DECISION - Ash] item 5: the relative-motion view against a counterpart
+  outside the catalogue needs a confirmed UDL path for a target's element
+  sets. SJ-25/SJ-21 is buildable now; COSMOS-2576/USA-314 is not.
 
-- **This repo (GitHub)** is where development happens now: code, tests,
-  version bumps, `git log`.
-- **A separate GitLab repo**, `vanguard-engineering/app-store-apps/legion`
-  on Bluestaq's internal instance, is the actual App Store deployment
-  target. It is not reachable from a normal internet connection or a
-  public GitHub Actions runner — it lives on Bluestaq's own infrastructure.
-- **Critically: uploading a new version zip to the App Store does NOT
-  update `.gitlab-ci.yml` in that GitLab repo.** That file is only editable
-  by a direct commit to the GitLab repo itself. This cost three failed
-  pipeline uploads to discover — see `HANDOFF.md` for the full story. A
-  copy of the corrected `.gitlab-ci.yml` lives in this repo for reference
-  and version-control history, but **do not assume changing it here
-  propagates anywhere** — it doesn't, until someone with GitLab access
-  commits the same change there directly.
+## How to work here
 
-Practical implication: when the App Store submission process changes
-(paths, stages, scan config), that change has to land in two places by two
-different mechanisms — a code/zip change here, and a direct GitLab commit
-there — and they will drift if only one happens.
+● **UK English, no em dashes or double dashes, `●` bullets, lead with the
+  point.**
+● **FACT, INFERENCE, SPECULATION.** Never assert as fact what was not
+  verified against a live system, and mark inferences in code and docs.
+● **Done means proven.** Run the real command, the real fresh install, the
+  real browser. Quote the command beside any count. Every message this UI
+  shows about scope was wrong at least once and each was caught by driving
+  the page, never by reading code.
+● **Calibrate every guard by sabotage before believing it.** Put the defect
+  back, confirm a named test fails, restore. A guard that passes because it
+  never looked is the most repeated mistake in this project: tests reading a
+  `response_model` that strips the field, an error body, a guessed shape, a
+  file compared with itself, `caplog` instead of a real handler.
+● **State the exit criterion at the start of gate or release work**, and
+  check in with Ash after three gate rounds either way.
+● **Prove a cause before automating around it.** Two identical failures end
+  a retry loop. A two-week tag-push retry ran on an unproven cause.
+● **Tags cannot be pushed from a cloud session**: the Claude Code proxy
+  answers 403, and the repository has no tag rulesets. Create the tag, then
+  hand Ash the commit, tag name and push command.
+● **Report blockers in three lines**: what Claude can fix now, what Ash must
+  do (exact steps), what cannot be done here and the workaround.
+● **Before applying a mechanical fix across the codebase, ask what property
+  the old shape provided by accident** (`async def` was serialising the
+  store's writes).
 
-## Status: shipped
+## The two-repository model
 
-**0.19.2 deployed, reported by Ash on 21 November 2026.** Dependencies, SAST
-Scan, SAST Findings, Dependency Scanning, Test, Code Quality, Dockerfile Lint,
-Container Build, DAST Scan, Logging and Deploy all passed. **Container Scan
-failed but did not block**: the platform headed the result "Deployed, 1
-advisory check reported findings". This is the first upload with Logging
-green, a week before it starts blocking, and Code Quality passed on the
-re-issued 0.19.2 with all three Dockerfile findings fixed. What the Container
-Scan still reports, and whether the platform's build patched the operating
-system (`os_patch_status` in the deployed `/readyz`), are not yet known here.
-Why Container Scan was advisory on this upload is not known either: do not
-assume it will stay that way.
+Development happens in this GitHub repository. The App Store deploys from a
+separate GitLab repository, `vanguard-engineering/app-store-apps/legion`, on
+Bluestaq's internal instance. **A version upload does not update that
+repository's `.gitlab-ci.yml`**; only a direct commit there does. The copy
+here is reference only. A pipeline change lands in two places by two
+mechanisms or it drifts. [The two-repository model]
 
-**A later report of 0.19.2, 23 November 2026, reads differently.** Container
-Scan shows **Passed**, and Logging shows **Passed with warnings**, two of them,
-both Medium and both about request context. Whether this was a re-run, and
-what changed in the scan between the two readings, is not known here. Record
-the screen as reported and do not infer a cause. The two Logging warnings are
-fixed in 0.19.3, a week before Logging blocks:
+## Releasing
 
-● **Every line written while a request is handled carries `url.path`,
-  `http.request.method` and `user_agent.original`**, beside the request id and
-  the user. They are request context now, stamped by the middleware like the
-  id. An absent user agent is written as an empty string, never dropped: the
-  check names the key as required. An absent request id or user is still
-  omitted, because inventing either would mislead.
-● **The request line carries `event.outcome`.** The check calls it the
-  request's audit line. A status of 400 or above is `failure`; that mapping is
-  INFERENCE, since the standard names the field and not the rule. A store
-  audit line carries `success`, which is FACT: it is only written after the
-  write reaches disk.
+```bash
+./scripts/check-quality-gate.sh                 # every local check, about 30 s
+./scripts/bump_version.sh 0.x.y "one line"     # VERSION, CHANGELOG, commit, tag
+./scripts/package.sh                            # builds from the tag, tests the archive
+```
 
-Calibrated by six sabotages, all caught, including the real gunicorn run.
-
-**0.19.3 deployed, read from the platform itself on 26 November 2026**, through
-the App Store MCP server (see "Reading the platform directly" below), not from a
-screenshot. Pipeline 336953, 24 November: every stage event passed, Logging and
-Container Scan included, Semgrep 0 high, 0 medium, 0 low, and the platform lists
-no checks needing attention. The deployed `/readyz` answers `version` 0.19.3 and
-**`os_patch_status` "patched"**: the platform's builder reached a Debian mirror
-and the upgrade ran under `--error-on=any`, so the value cannot be a failed
-fetch reporting success. Container Scan passing on a patched image is
-consistent with Debian fixes clearing the 28 remaining rows; that is
-INFERENCE, since the scan's own findings were not read.
-
-## Reading the platform directly: the App Store MCP server
-
-`.claude/mcp/appstore-mcp.mjs` is the App Store's own MCP server (0.14.2,
-reviewed before it was first run), registered by `.mcp.json`, so pipeline
-status, job logs, pod logs and the deployed app's own endpoints are readable
-without a screenshot. Both paths are `export-ignore`d. Four things to know:
-
-● **Sign-in is the person's**, a Keycloak device code entered in their browser,
-  and a cloud container loses the token when it is reclaimed.
-● **`NODE_USE_ENV_PROXY=1` is load-bearing in a cloud session.** Node's built-in
-  `fetch` ignores `HTTPS_PROXY` and resolves DNS itself:
-  `appstore.bluestaq.com` resolved directly, `legion.appstore.bluestaq.com`
-  did not (ENOTFOUND), so every call to the deployed app failed while the
-  platform calls worked. With the flag both go through the proxy.
-● **Self-update is off** (`APPSTORE_MCP_NO_SELF_UPDATE=1`), because it would
-  rewrite a committed file. An update is a new commit of the bundle.
-● **The tools that change things are never called without Ash's instruction
-  each time**: upload, submit, resubmit, the three retries, the environment
-  variable and add-on writes. Submission stays with Ash.
-
-The environment allows three hosts for this: `appstore.bluestaq.com`,
-`keycloak.appstore.bluestaq.com` and `legion.appstore.bluestaq.com`.
-
-**Legion 0.4.6 passed all ten App Store stages and deployed on 28 August 2026.**
-Secret Detection, Dependencies, SAST, Dependency Scanning, Test, Code Quality,
-Dockerfile Lint, Container Build, Container Scan and Deploy are all green. The
-application is Active.
-
-The two-repository model above still governs everything, and the stale
-`udl-tactics-app/` paths in the GitLab `.gitlab-ci.yml` were fixed directly in
-that repository, not by any change here. That remains the standing lesson: a
-change to the pipeline lands in two places by two different mechanisms.
-
-**What actually cleared Dependency Scanning**, after six upload cycles: the
-lock files were regenerated with `uv pip compile --generate-hashes
---no-annotate`. The pip-compile `# via` annotations were the cause. No package
-version moved. A root `pyproject.toml` with a `[project]` table was necessary
-but not sufficient, proven by 0.4.5 failing with one present. Full account,
-including the two theories that died on contact, is in
-`docs/APP-STORE-DEPENDENCY-SCANNING.md`.
-
-Regenerate lock files only with `--no-annotate`. Note that the
-`appstore-python-gate` skill's own `scripts/lock.sh` omits that flag.
-
-## What's verified vs. not
-
-Genuinely verified (re-run and confirmed, not just written):
-- 79 tests passing, 1 correctly skipped (see below), coverage ~96%.
-- `pip-audit` clean, `ruff`/`mypy`/`bandit` clean.
-- Both `requirements.txt` (hash-locked, includes test tooling — this is
-  what the platform's TEST stage installs) and `requirements-runtime.txt`
-  (hash-locked, lean, no test tooling — this is what the Dockerfile
-  installs) verified by installing each into a genuinely fresh venv and
-  running the real test/app-build sequence against it.
-- Live smoke-tested as a real running process (not just TestClient): auth
-  gating, anti-shrink PATCH, archive-not-delete, persistence across a
-  restart.
-
-**Container build: now verified (20 August 2026).** It builds, it runs, it
-serves. Zero setuid/setgid entries in the final image, no base-image layer
-history survives the scratch stage, injected `PORT` honoured, 49 seeded
-records served, token-gated writes and persistence across a restart all
-confirmed live. One correction: the final stage produces two layers, not
-one, because the trailing `WORKDIR /app` adds a metadata layer after the
-flatten. The scan property still holds. Full method, the single sandbox-only
-deviation, and what remains untested are in `READINESS.md`.
-
-That build turned up two runtime findings. Both are now closed:
-● **The audit line never reached the log. Fixed in 0.4.2.** Nothing
-  configured logging, so `udl_tactics_app.audit` had no handler and sat at
-  WARNING, and every `audit_logger.info(...)` was discarded: the audit trail
-  had been absent for the life of the project. **Superseded in 0.19.1 by the
-  platform logging standard**: one JSON handler on the root logger, audit
-  fields under `audit.` in the attributes rather than a bare JSON line. See
-  "0.19.1: the platform's logging standard" below. Two rules survive
-  unchanged: the audit logger is pinned to INFO so `LOG_LEVEL` cannot silence
-  a compliance record, and no second handler goes on the audit logger and
-  propagation stays on, or lines double and `caplog` breaks.
-● **`STORAGE_MOUNT_PATH` and the `/app/data` fallback: by design.** Ash
-  confirmed on 20 August 2026 that the file-storage add-on will always be
-  present, so the unwritable `/app/data` fallback is not reachable in
-  deployment. No code change. Settled, do not relitigate.
-
-A note on why the audit gap survived so long, worth carrying into anything
-new: the tests that covered it asserted through `caplog`, which installs its
-own root handler. The trail appeared to work under test and only under test.
-If a test proves an observability behaviour, assert on what a real handler
-writes.
-
-**Pipeline status, 27 August 2026.** Container Build now **passes**: the
-stale `udl-tactics-app/` path that blocked every upload since the beginning
-is gone. Secret Detection, Dependencies, SAST, Test and Dockerfile Lint all
-pass. Code Quality was **skipped**, not passed, so the 31 SonarQube fixes in
-0.4.3 are still unconfirmed by the platform. **Dependency Scanning is the one
-red gate**, and it fails with no error text: the analyser exits 1 after about
-eight seconds having written no SBOM, and the platform relabels any non-zero
-exit as "Vulnerable dependencies found". No package is actually flagged. See
-`READINESS.md` for the full investigation, including a local run of the
-analyser against the real package that exits 0 with a valid 57-component
-SBOM, and for why that result is strong but not conclusive. Use
-`scripts/verify-dependency-scan.sh` only as a diagnostic: calibrated against
-three packages with known outcomes it was wrong on two, so it does not predict
-the gate and its header says so.
-
-**The `pyproject.toml` at the root is load-bearing, do not delete it.** It was
-added in 0.4.4 because it is the only root file present in both App Store
-applications known to clear Dependency Scanning (PSIRENS 1.5.3 and
-Enlightenment 0.23.3) and absent from Legion. It carries `[project]` metadata
-and deliberately no dependency list, matching their shape. `bump_version.sh`
-keeps its version in step with `src/VERSION`; do not edit that line by hand.
-
-**Still not verified:**
-● The GitLab pipeline itself, per the blocker above.
-● ~~The `prep` stage's OS patch layer on the platform's builder.~~ **Settled
-  26 November 2026: the deployed 0.19.3 reports `os_patch_status` "patched".**
+● Never pipe these through `tail`: a missed warning once cost a full upload.
+● `package.sh` builds from the tag, extracts the archive and runs the suite
+  inside it, and writes `<zip>.sha256`. Send Ash the zip, its size and its
+  SHA-256. Ash uploads and submits; Claude never does.
+● **A release must change a Python file under `src/`**, or
+  `code-quality-verify` fails with nothing to measure. Both scripts refuse;
+  `--allow-unmeasurable` makes shipping one a decision.
+● **Regenerate lock files only with `uv pip compile --generate-hashes
+  --no-annotate`.** The `# via` annotations broke Dependency Scanning for six
+  uploads. Never edit a lock file by hand. The root `pyproject.toml` is
+  load-bearing and carries no dependency list; `bump_version.sh` keeps its
+  version. [Status: shipped]
 
 ## The Code Quality gate has five conditions, not one
 
-**Every rule the gate has actually fired is listed in
-`docs/SONAR-RULE-REGISTER.md`, and `scripts/check-quality-gate.sh` runs every
-local check in one command. Read the first and run the second before
-packaging.**
-
-Learned the hard way across 0.4.7, 0.4.8 and 0.8.2. The SonarQube gate fails on
-any of these, and only the first produces anything resembling an error message:
-
-● New issues = 0. The local mirror in `tests/test_sonar_contracts.py` covers
-  the rules that have actually fired, including "Use logging.exception()
-  instead", which fires on `logger.error` inside an `except` block and cost
-  three upload cycles on its own because the gate's only visible message is
-  "Quality Gate FAILED". It must scan `tests/` as well as `src/`,
-  because `sonar-project.properties` sets `sonar.tests=tests`.
-  It also covers "Refactor this exception test to have only one invocation
-  possibly throwing an exception", which fires on a `pytest.raises` block
-  holding more than one call: the test then passes if either raises, so a
-  broken fixture builder satisfies a test written to prove a validator. Build
-  the fixture first, assert on the one call under test.
-● Coverage on new code. Measure the changed lines, not the project total: a
-  95% project can still ship a poorly covered diff.
-● **Duplicated lines on new code.** This one has no local check and is easy to
-  trip: a new test file that copies an 11-line fixture from an existing one is
-  duplicated enough to fail on its own. Shared fixtures live in
-  `tests/conftest.py` (`make_seed_record`) for exactly this reason.
-● Security hotspots reviewed. If this is the failing condition, no upload will
-  ever fix it: a human must review them in the SonarQube user interface.
-● **Coverage must be measurable at all, which means the release has to change
-  a Python file inside `sonar.sources` (`src`).** This is a separate job,
-  `code-quality-verify`, and it fails a build where SonarQube measured no
-  coverage: "Code coverage was not measured for this build, so the coverage
-  requirement was not applied." A docs-only or Dockerfile-only release trips it
-  every time, and retrying cannot help because there is nothing to measure. A
-  change under `tests/` does not count either: `sonar.tests=tests`, and
-  coverage on new code is measured on sources, not tests. `bump_version.sh`
-  **refuses** a release that would land in this state, as does
-  `scripts/package.sh`; `--allow-unmeasurable` overrides it. The route out is to
-  bundle the change with a real source change, or to have the platform treat
-  "nothing analysed" as a pass, which its own message already says it is.
-
-  The job log confirms the mechanism. `code-quality-verify` checks that
-  `.scannerwork/report-task.txt` exists, finds `sonar-quality-gate.json`,
-  strips its whitespace and then tests it for the coverage condition. On the
-  0.8.2 upload every one of those steps succeeded: the scan ran and the gate
-  file was there. Only the coverage value was absent.
-
-**Do not "fix" this one by reconfiguring coverage.** The theory that the report
-does not line up with the analysed sources was tested at 0.8.2 and is wrong: the
-pipeline's bare `pytest --cov` emits `<source>` at the repository root with
-`filename="src/app.py"`, which matches `sonar.sources=src` exactly. Adding
-`relative_files = True`, the usual internet advice, makes it strictly worse: the
-report becomes `<source>src</source>` with `filename="app.py"`, which resolves
-to a path that does not exist. Setting `source = src` alone drops the repository
-root from the paths for no gain. Leave the coverage configuration alone.
-
-The failed job uploads `sonar-quality-gate.json`, which names which condition
-failed, plus `sonar-issues.json` and `sonar-hotspots.json`. Read those first.
-The job log itself says only "Quality Gate FAILED".
-
-**The gate also reads `src/static/index.html` as CSS, JavaScript and HTML**,
-not just the Python. Rules that have fired there: nested ternaries, nested
-template literals, `getAttribute("data-...")` over `.dataset`, an unawaited
-async call at module top level, a duplicate CSS selector, and a constant array
-used for membership tests instead of a `Set`. Every one of those now has a
-local mirror, calibrated against the upload that reported it:
-`tests/test_sonar_contracts.py` for the CSS and JavaScript rules, and
-`tests/test_sonar_cognitive_complexity.py` for python:S3776, which reproduced
-the platform's 25 and 18 exactly. Run `pytest` before packaging and the gate
-has nothing left to find.
-
-**A mirror is only as good as its last miss.** The nested-ternary mirror went
-green through 0.9.0 while the platform reported two nested ternaries, because
-its two regexes exclude `{` and `}` so they cannot cross a template-literal
-boundary, and the nesting was inside a `${...}` slot:
-`a ? \`x ${b ? c : d}\` : \`y\``. Sonar reads the syntax tree, where a template
-slot nests like anything else. A third pattern now covers that shape, and it
-was calibrated the same way as the others: added first, confirmed to fire on
-the unfixed file at the exact statement the platform named and on nothing
-else, and only then was the code changed. Do that in that order every time,
-or you have a test that passes rather than a mirror that works.
-
-## The container image: three rules that are easy to undo
-
-Set in 0.8.2 after a Container Scan failure, and **confirmed by the platform:
-Container Scan passes on 0.8.2**, along with Secret Detection, Dependencies,
-SAST, Dependency Scanning, Test, Container Build and the Code Quality scan
-itself. Full account in `READINESS.md`, "Container Scan, worked 9 September
-2026".
-
-● **The base image is pinned by digest alone, in both `FROM` lines, and the two
-  must always match.** `FROM python@sha256:…`, with the tag in the comment
-  above: SonarQube (container:S8431) rejects a tag and a digest together, and
-  reported it at 0.19.2 the first time those lines changed. The tag drifted between the build that passed Container Scan
-  in August and the one that failed in September, so two builds of the identical
-  archive scanned differently with nothing in the repository recording which was
-  which. To refresh: pull the tag, read the digest, change both lines, rebuild,
-  re-verify. Never change one of the two.
-● **pip, setuptools and wheel are deleted from the runtime image, and the build
-  fails if any survive.** Three copies ship by default and a cataloguer reads
-  all three: the interpreter's site-packages, the wheel bundled in `ensurepip`,
-  and the copy `python -m venv` puts in `/opt/venv`. Do not "fix" an installer
-  advisory by upgrading pip; the image does not need pip at all.
-● **A base image move must not move a package version.** 3.12 to 3.13 was done
-  without regenerating a lock file, because the lock files are what Dependency
-  Scanning reads and that gate cost six upload cycles. It worked because the
-  existing hashes already covered the cp313 wheels, which was proven by
-  installing `requirements-runtime.txt` under 3.13 with `--require-hashes`
-  before the change was made. Prove it again the same way next time; if the
-  hashes do not cover the new interpreter, that is a much larger change.
-
-Two more, set in 0.19.2, held by `tests/test_dockerfile.py`:
-
-● **Operating-system packages nothing loads are purged, fail-closed.** Ash's
-  decision, 20 November 2026. util-linux and its libraries, login, perl-base,
-  the openssl command-line tool and legacy provider, ncurses-bin, libstdc++6,
-  apt and libapt-pkg7.0 go, files and dpkg records together. The list came
-  from tracing every library the interpreter and every wheel load inside the
-  exact base image. `NEEDED` in the test names what must never be purged; add
-  to the purge only after tracing again. `login` is *protected* as well as
-  essential, so it needs `--force-remove-protected`.
-● **The patch status must not lie.** Plain `apt-get update` exits 0 when every
-  fetch fails, so the prep stage wrote "patched" for a build that never
-  reached a mirror. `--error-on=any` makes it exit 100. `/readyz` now serves
-  the recorded status as `os_patch_status`, the only way to learn from
-  outside whether the platform's build actually patched.
-
-One standing caution: a Container Scan failure names vulnerable packages in its
-advice text whatever the real cause. An Anchore policy fails only on a `STOP`
-action, so read the policy evaluation and find the `STOP` row before changing a
-version. A breakdown that says "90 findings, all WARN" and "the scan failed" is
-describing two different things.
-
-## There is no authentication, and that was a decision
-
-Ash's instruction, 10 September 2026, after the shared team token cost three
-releases of diagnosis: **remove it completely.** `TEAM_TOKEN`,
-`require_team_token`, `/api/token-check`, the UI token box and every test for
-them are gone in 0.9.0. The only secrets are `UDL_USERNAME` and
-`UDL_PASSWORD`.
-
-What that means, stated plainly rather than buried: **reads, writes and UDL
-lookups are all open to anything that can reach the app.** The platform in
-front of it is the access control. This is recorded as a decision, not a gap.
-
-Three things follow, and undoing any of them quietly would be a regression:
-
-● **`ALLOWED_ORIGIN` refuses `*` unconditionally.** It used to be conditional
-  on a token being set, which was backwards: with writes ungated a wildcard
-  origin is strictly more dangerous, because it would let any page on the
-  internet issue writes from a reader's browser.
-● **The strict rate limiter is now the only control on the UDL call budget.**
-  It matters more than it did, not less.
-● **`tests/test_ui_contracts.py` fails if token machinery reappears** in the
-  interface, and `tests/test_security.py` asserts the open contract
-  explicitly, so a 401 coming back has to be somebody's decision rather than a
-  dependency creeping in.
-
-Why it went, in one line worth keeping: a token generated the usual way is
-always 43 characters, so two different values both read 43, and a single
-non-breaking space picked up from a copy is one character and two bytes. Three
-releases of diagnostics went into that before the answer turned out to be that
-a shared string pasted into a browser tab was the wrong control for the job.
-If authentication is ever needed here again, it needs identity from the
-platform.
-
-## Unclassified, publicly available information only
-
-Ash's decision, 11 September 2026, answering the first open item in the
-compendium specification. It is settled: **the compendium stays unclassified
-and derived from publicly available information only.**
-
-`src/classification.py` holds the marking and the handling statement in Ash's
-own words. Do not invent, infer or elaborate a marking or a caveat scheme
-here; a different one comes from the person who owns that decision.
-
-The decision is enforced rather than described, because a note saying "open
-sources only" constrains nobody:
-
-● **An `internal_assessment` claim must cite the publicly available material
-  it is derived from.** Every other source class already names something
-  published, so a reader can follow the citation to the material. An
-  analyst's own assessment is opaque about its inputs, which makes it the one
-  place non-public material could enter unnoticed. It therefore carries the
-  same citation burden a FACT does. `tests/test_compendium_models.py` proves
-  it, and one test asserts that every declared source class is accounted for
-  as public, derived-with-declared-basis, or the TBC placeholder, so adding a
-  new class without thinking about the posture fails.
-● **`GET /version` serves the marking.** The interface reads it rather than
-  hard-coding a banner, so the string an analyst sees and the rule the
-  validator enforces come from one module and cannot drift.
-
-## The SATCAT snapshot: a reference that checks the catalogue
-
-`celestrak.org` and `www.space-track.org` both return 403 at the organisation
-proxy, which is a policy denial, so nothing here can resolve a catalogue
-number live. Ash supplied a CelesTrak SATCAT snapshot on 11 September 2026 and
-it is the reference of record at `reference/satcat_26195.dat`, 69,870 rows.
-
-● **The 9 MB snapshot is `export-ignore`d from the upload package.**
-  `scripts/extract_satcat.py` distils it into `src/satcat_extract.json`, 16 KB,
-  holding only the rows the catalogue references, and that is what ships. A
-  static catalogue inside a deployed image goes stale with nobody watching.
-  Regenerate with one command when a newer snapshot arrives.
-● **The column layout in `src/satcat.py` was measured against the file, not
-  read from a specification.** It matches CelesTrak's documented `satcat.txt`
-  in the fields that matter and differs in the tail. `tests/test_satcat.py`
-  pins it against two real rows, because a layout that slips by one parses
-  every row into plausible-looking nonsense.
-● **The two-digit year pivots on the space age.** Nothing was launched before
-  1957, so under 57 is this century. Exact for every row the file can hold.
-
-**It is not a passive document. `src/satcat_reconcile.py` checks the catalogue
-against it**, and `GET /api/satcat/reconciliation` serves the result. A wrong
-catalogue number is the one failure nothing else here catches: it plots a real
-satellite's element sets under another satellite's name and every chart looks
-entirely normal.
-
-**The standing NORAD clash is corrected, and it is the one authorised
-deviation from the verbatim mirror.** The spreadsheet gave 68762 to
-COSMOS-2612, -2613 and -2614 alike, flagged "cross-check UDL" from the start,
-so two of the three plotted a satellite that was not theirs and looked
-entirely normal doing it. The snapshot resolves it: 68762, 68763 and 68764.
-**Ash authorised the correction on 11 September 2026.**
-
-Four things make it safe to have touched the mirror at all, and none of them
-should be undone:
-
-● **Only those two values changed.** Nothing else in `seed_data.py` has been
-  altered and nothing else should be without the same authorisation. The
-  module docstring records the deviation, and each corrected record's notes
-  name the snapshot and what the source said, so the next person reconciling
-  this file against the spreadsheet sees an authorised correction rather than
-  a transcription slip.
-● **`_apply_norad_corrections` reaches an existing deployment.** Seeding only
-  happens when the store is absent, so without a migration the fix would
-  reach a fresh install and nothing else while the running deployment kept
-  plotting the wrong satellite. The store is at `schema_version` 5.
-● **It is a named list of two, not a rule.** "Correct any number the snapshot
-  disagrees with" would rewrite analyst data on the strength of a static
-  file, and a snapshot is a reference, not an authority over a deliberate
-  edit. Matching on the name and the wrong value together makes it idempotent
-  by construction and unable to touch a record someone has already fixed.
-● **The detector is now tested on synthetic data, not on this defect.** Tying
-  it to a real disagreement meant that fixing the disagreement silently
-  disarmed the check, which is how a test ends up passing for the wrong
-  reason. `tests/test_satcat.py` asserts the catalogue is clean, pins each
-  corrected number against the snapshot, and proves the shared-number and
-  wrong-name detectors separately. Calibrated by putting the defect back on
-  purpose: three tests failed, and all three named it.
-
-**The seven candidates now carry real identities.** Catalogue numbers, launch
-years and launch sites came from the snapshot and nowhere else, and a test
-holds each against it. What is still unverified about them is the behaviour,
-not the identity, and `verify_owner` says so. They chart now, because they
-have numbers.
-
-A name comparison ignores house abbreviations: SJ for Shijian, SY for Shiyan,
-and a missing space in "Spacecraft2". A report full of non-discrepancies is a
-report nobody reads, and the real finding would be lost in it.
-
-## Candidate systems: the catalogue grew, and the join is visible
-
-`src/seed_data.py` still holds exactly the canonical 49, mirrored verbatim
-from the spreadsheet. Seven more systems named in the research but absent
-from it live in `src/candidate_systems.py`, and they are kept apart on
-purpose: mixing them into the mirror would make it unverifiable against the
-spreadsheet, because nobody could tell by looking which rows came from where.
-
-Three rules make the difference structural, and `tests/test_candidate_systems.py`
-enforces each:
-
-● **No candidate carries a NORAD id or a launch year.** The research names
-  behaviours, not catalogue entries. An invented satellite number is the one
-  error in this domain that looks exactly like data: a chart would plot the
-  wrong object and look entirely normal. The existing `SKIP_NO_NORAD_ID` path
-  therefore excludes every candidate from charts and says so.
-● **Every candidate cites its source and names who verifies it.** The
-  TBC-with-an-owner rule from the compendium, applied to the catalogue.
-● **A candidate is marked in the interface by text, not colour.** The badge
-  reads "Candidate" and the provenance panel carries the source and the owner,
-  read off the record rather than written into prose that could drift.
-
-The seven are Luch/Olymp-1 and -2, COSMOS-2553, TJS-2, TJS-4, and SJ-6-05A
-and -05B, all from the CSIS Space Threat Assessment 2025 by way of
-`deliverable/research/02_domain_counterspace.md`. The SJ-6 pair is carried
-because a proximity segment must name its counterpart, and the SY-24C
-"dogfighting" segments need one.
-
-**The store is at `schema_version` 3.** `_add_candidate_systems` is keyed on
-`candidate_key`, a stable natural key, so it is idempotent by construction
-rather than by a guard, and an existing deployment picks the seven up on its
-next read. An analyst's edit to a candidate outranks the shipped text: only
-the key is read, so a renamed, re-flagged or archived candidate is matched and
-left alone. Proved by three deliberate sabotages, all caught: a non-idempotent
-builder, a builder that clobbers an existing record, and a candidate that
-quietly gains a NORAD id.
-
-`launch_year` is now optional on the model because of this. Every one of the
-canonical 49 still declares one and a test holds that, so the widening cannot
-become a hole in the catalogue proper.
-
-## The compendium layer: provenance is a schema, not a convention
-
-Added in Phase 1 of the compendium upgrade (`deliverable/`, which carries the
-research and the full specification). The catalogue holds static attributes.
-This layer holds what behaviour data cannot supply, because the same manoeuvre
-signature serves inspection, servicing and attack, and what resolves the
-ambiguity is capability plus context plus pattern-of-life. That is the whole
-analytical reason the tool exists.
-
-`src/compendium_models.py` is the schema. Five things are load-bearing:
-
-● **The claim is the atom.** Almost no domain field is a bare value. Each one
-  is a `Claim`: statement, FACT / INFERENCE / SPECULATION, confidence, source
-  class, citation, date, and who asserted it. A bare string is only for
-  non-assertive data such as an id or a slug.
-● **Two rules are validators, not review comments.** A FACT with no citation
-  is rejected. A TBC with no named owner is rejected. Whitespace does not
-  satisfy either. These are the failed research pass turned into code: an
-  unverifiable claim has to name who must verify it.
-● **`asserted_by` is required on every claim.** There is no login auth, so
-  this field is the entire editorial layer. Do not make it optional.
-● **Observability is not confidence.** `PatternOfLifeSegment.observability`
-  says how well the behaviour could actually be seen (revisit rate, sensor
-  coverage); `claim.confidence` says how sure we are the assessment is right.
-  A segment from a sparse track and one from a dense track must never render
-  identically. Same principle as the JCO HRR rank gate.
-● **A proximity or pursuit mode must name its counterpart.** An RPO is always
-  with something, and that counterpart is what drives the relative-motion
-  view.
-
-`src/store.py` is at `schema_version` 2. The compendium hangs beside
-`systems`, never inside a record; `objects` is keyed by `system_id` so the
-migration is idempotent by construction. `_add_compendium_layer` reads system
-keys only, so it cannot alter a catalogue record even by accident. The
-compendium CRUD is one generic collection-keyed API rather than six
-near-identical sets, because six copies is six places for the anti-shrink
-merge and the archive-not-delete rule to drift.
-
-**How the migration was proved, and why two of the tests were wrong first.**
-`tests/test_store_migration.py` builds a store in the exact shape the shipped
-schema-1 code wrote, from the canonical 49 seed records, and compares every
-field. It was then calibrated by deliberately breaking the migration twice:
-once to drop a field, once to make the layer builder non-idempotent. The
-first sabotage was caught. **The second was not**, because the idempotency
-test compared the store file before and after a read, and a read migrates in
-memory without writing, so it was comparing the file with itself. A second
-attempt calling `_migrate` twice also failed to catch it, because the
-`schema_version` guard makes the second call a no-op. Only calling
-`_add_compendium_layer` directly catches it. Break the migration on purpose
-before believing a migration test, every time.
-
-## Provenance on screen: Phase 2 rules
-
-The claims API is `src/routes/claims.py`, the vocabulary is `src/provenance.py`
-and the interface renders it in the Provenance panel. Five things are
-load-bearing:
-
-● **An edit re-validates the whole claim.** `PATCH` merges anti-shrink and
-  then runs the merged result through `Claim` again, so a patch cannot strip
-  the citation off a FACT or the owner off a TBC. A rule enforced only at
-  creation is decorative, and decorative provenance is worse than none
-  because it looks like a guarantee.
-● **The legend words are served, not hard-coded.** `GET /api/provenance/legend`
-  carries the marker, confidence and source-class meanings. A copy in the
-  interface would drift from the validators using the same vocabulary and
-  nothing would fail. `tests/test_ui_contracts.py` asserts the legend text
-  does not appear in the markup.
-● **A chip states the strongest true thing, and a TBC is not its marker.** A
-  browser run found an unsourced claim wearing an INFERENCE chip, with only a
-  border colour marking it unverified: colour carrying the most important
-  distinction alone. The chip now reads "TBC, re-verify" and what it was
-  marked as moves to a meta row. `chipFace` owns this.
-● **Four redundant encodings, never colour alone.** Colour, icon, text label
-  and border style all carry the marker. The marker colours are existing house
-  tokens, deliberately not the eight-slot series palette: those identify a
-  satellite in a chart and an analyst must never read one as the other.
-● **Only an http or https source URL becomes a link.** A citation is
-  analyst-entered text, so `safeUrl` refuses anything else. Verified in a
-  browser with a `javascript:` URL: no link is rendered and no script runs.
-
-Claims are archived, never deleted, like everything else here: a withdrawn
-assessment stays visible under `include_archived` so an analyst sees that a
-claim was made and pulled rather than finding a silent gap.
-
-**Family-level claims are not here on purpose.** They are modelled by
-`FamilyAssessment`, a Phase 5 deliverable with its own required fields and its
-own validation gate. Inventing a parallel family-claim store now would mean
-migrating it away later.
-
-## Phase 3, the pattern-of-life timeline: what must not be inferred
-
-`src/pol.py` holds the mode vocabulary and the timeline assembler,
-`src/pol_seed.py` the seeded history, `src/routes/segments.py` the API. The
-timeline is the *assessed* behavioural history. The element-set charts are
-the *raw* observed data from UDL. They are never drawn as the same thing.
-
-Five rules, and three of them exist because a browser found them wrong:
-
-● **An epoch is never more precise on screen than in the source.** The
-  research says "May 2024", so the segment stores `2024-05` and
-  `parse_pol_epoch` reports month precision, which the row states. Writing
-  `2024-05-01` invents a day nobody observed.
-● **An instant has no end.** The TJS-2 node read "2024 to ongoing", which
-  asserts a behaviour still happening. `separation_event` and
-  `anomalous_high_dv` are markers, not bands, and the server says which from
-  the model's own frozenset.
-● **A missing end is "no end recorded", never "ongoing".** SJ-21's 2022
-  capture is finished, and read as ongoing purely because the field was
-  blank. A blank field is not evidence of continuation. Where a source does
-  say a behaviour continues, as for COSMOS-2558, that goes in the claim.
-● **The server resolves the counterpart's name.** A client-side lookup
-  rendered a raw uuid the moment a filter hid the other object. The browser
-  only ever holds the page of the catalogue it is showing.
-● **Colour on the timeline carries provenance, never the mode.** The
-  eight-slot series palette identifies a satellite in a chart, and an analyst
-  must never read one as the other. The marker tokens are reused, and the
-  mode is carried in text.
-
-A counterpart outside the catalogue keeps a `target:` slug and is labelled as
-outside it. USA 314 is not one of our systems, and resolving it to something
-shaped like a catalogue id would put a phantom object in front of an analyst.
-Phase 5's `Target` records are where those become first class.
-
-**The four CRUD endpoints are generated, not written twice.**
-`src/routes/object_lists.py` builds read, create, edit and archive for any
-per-object list, and claims and segments both use it. Two copies would put
-the anti-shrink merge and the archive rule in two places, and would trip the
-gate's duplicated-lines-on-new-code condition on its own. That module
-deliberately has no `from __future__ import annotations`: FastAPI reads the
-endpoint signatures at decoration time, and with postponed evaluation the
-parameterised annotation is the string "model". mypy cannot follow a type
-held in a closure, hence the four targeted ignores.
-
-**The store is at `schema_version` 4.** `_add_pol_segments` is keyed on
-`seed_key`, idempotent by construction, and skips a seed naming an object the
-store does not hold rather than guessing.
-
-**Still blocked, and not built:** the relative-motion view against a
-counterpart outside the catalogue, which is [DECISION - Ash] item 5. It needs
-a confirmed UDL path and query pattern for a target object's element sets,
-and the specification warns against the per-object query-loop. SJ-25/SJ-21 is
-buildable without it, because both are catalogued and the existing family
-machinery already fetches them. COSMOS-2576/USA-314 is not.
-
-## Phase 4, the relationship graph: derived, never a second copy
-
-`src/graph.py` assembles it, `src/routes/graph.py` serves it, and the
-interface draws a neighbourhood at a time. Every edge comes from something
-the store already holds:
-
-● **Family membership** from the record's `family_id`.
-● **Proximity and capture edges** from pattern-of-life segments, which
-  already name a counterpart and carry a claim. Storing the same fact twice
-  would let the timeline and the graph disagree about what happened.
-● **Coplanar edges** from the catalogue's own `coplanar` field.
-● **Hand-authored edges** from the compendium's `relationships` collection.
-
-Five rules:
-
-● **No edge is unsourced.** That is the phase's bar and it is a test: every
-  edge carries a marker, a confidence and a citation.
-● **A catalogue-derived edge names the field it came from.** One shared
-  claim meant a family membership edge cited the coplanar field. Caught in a
-  browser, reading the citations the panel prints. A citation naming the
-  wrong field is worse than none, because a reader who follows it finds
-  nothing that supports the edge.
-● **A solo behaviour is not a relationship.** A drift or a station-keep
-  produces no edge. `MODE_EDGE` lists the modes that are genuinely between
-  two things, and inventing the rest would fill the graph with lines that
-  mean nothing.
-● **An edge to a node that does not exist is dropped.** A line to nowhere is
-  worse than a missing line: it implies a relationship with something the
-  analyst cannot inspect.
-● **Node colour is by entity type, from its own three tokens.** Not the
-  eight-slot series palette: that identifies a satellite in a chart, and a
-  node painted from it would be read as an object identity. Edge style
-  follows the marker, and the list beneath prints the marker as text, so the
-  dash pattern is never the whole signal.
-
-**The layout is deterministic and radial, and the graph is navigated a step
-at a time.** At 80 nodes the whole thing is a hairball, and the analyst's
-question is always "what is this connected to". A force layout would place
-the same neighbourhood differently on every visit. Every edge is a real
-button in a list, so tab and Enter traverse it without a pointer, and the SVG
-carries a text equivalent.
-
-Node ids are namespaced so they cannot collide: an object is its store id, a
-family is `family:<family_id>`, and a counterpart outside the catalogue keeps
-its `target:` slug.
-
-## Phase 5, the assessment layer: the reason the tool exists
-
-`src/assessment_seed.py` holds the content, `src/routes/families.py` serves
-it, and the interface renders it in the Family assessment panel. The
-catalogue holds attributes and the timeline holds behaviour; neither can tell
-an analyst whether a manoeuvre signature means inspection, servicing or
-attack. This holds what the class is, what it does, what its baseline is and
-what should raise concern.
-
-The content seed's own provenance self-check is now five tests rather than
-five checkboxes in a markdown file:
-
-● **Nothing loads as a bare fact.** Every statement is a `Claim`.
-● **A single-source claim loads at `moderate`, never `high`.** One stated
-  exception: CSIS calls SJ-21's capture the only confirmed instance in GEO,
-  so it is corroborated in the source itself. A test asserts every `high`
-  claim is that one.
-● **An unknown is a TBC claim with a named owner.** Six of the fifteen
-  families have no sourced assessment. They say so and name who writes one.
-  An absent family would read as nothing to say, which is a different claim.
-● **Nothing arrives validated.** Every seeded record loads with
-  `validated_by` unset. A seed that arrived validated would answer Ash's open
-  decision by default.
-● **A speculation is not quietly promoted.** The Olymp-2 jamming correlation
-  is carried as co-occurrence, with causation marked SPECULATION, because
-  CSIS says explicitly that the link is not clear.
-
-**Every catalogue family has an assessment and no assessment names a family
-the catalogue lacks.** The research writes at line level and the catalogue
-splits some lines across families: Nivelir is four, SY is two. An assessment
-keyed to a line that is not a family would never reach an analyst, and both
-directions are tested.
-
-**Signing off is a separate route from editing.** `POST
-/api/families/{id}/assessment/validation` takes a name, not a boolean,
-because with no application authentication the name is the whole record, and
-whitespace is refused: a validation by nobody is worse than none because it
-looks like one. Folding validation into the PATCH would let a routine
-correction carry a sign-off nobody intended. **Who is entitled to sign one
-off is still [DECISION - Ash] item 3** and is deliberately not encoded.
-
-**Two bugs worth keeping.** The headline statement rendered as plain prose
-while carrying a TBC claim, so a family with no sourced assessment read as
-established: the same mistake the provenance chips made in Phase 2, and
-caught the same way, in a browser. And the validation write was keyed by the
-record's uuid while the collection is keyed by `family_id`, so the store
-changed nothing and the route answered 200: **a silent no-op on a write is
-worse than an error**, and `_write` now refuses to report success when the
-store reports no change. Calibrated by restoring the wrong key: caught.
-
-**The store is at `schema_version` 6.** `_add_family_assessments` is keyed on
-`family_id`, idempotent by construction, skips a family the store does not
-hold, and never overwrites an edited assessment.
-
-## Phase 6, the operability layer: palette, keyboard, comparison, briefing
-
-`src/routes/operability.py` serves search, comparison and briefing;
-`src/comparison.py` assembles the side-by-side; `src/briefing.py` writes the
-house-style export. The interface adds a command palette and makes the
-catalogue keyboard-operable.
-
-● **The palette is summoned by Ctrl+K or Cmd+K anywhere, and by `/` only
-  outside a text field.** Stealing a bare slash from the search box makes the
-  search box unusable, so `inATextField` guards it.
-● **Search is a substring match, not a fuzzy score.** A palette that reorders
-  on its own is one an analyst cannot learn, and at this catalogue size there
-  is nothing to gain from cleverness. Families sort first: jumping to a class
-  is the coarser and commoner move.
-● **An empty comparison cell says why it is empty.** A comparison is a search
-  for differences, so a blank reads as a finding. "No robotic arm" and
-  "nobody has written down whether it has one" are different claims, and
-  `_cell` never returns a bare blank. Zero is a value, not an absence.
-● **The rows are the union of every subject's attributes.** Objects and
-  families do not share an attribute set, so taking the first subject's rows
-  would silently drop whatever the others carry.
-● **Two to four subjects.** One is not a comparison; past four the columns
-  are too narrow to read. A briefing accepts one, because briefing a single
-  object is the commoner task and refusing it would send an analyst to copy
-  the panel by hand, which is how provenance gets lost.
-
-**House style in the briefing is enforced, not described.** No em-dash, no
-double dash, no horizontal rules, `●` bullets, no `+` as a conjunction, and
-the classification banner then the point. `tests/test_briefing.py` checks
-those against text built from fixture content rather than from the store: the
-rules bind what this application writes, and failing a test because an
-analyst pasted an American spelling into a note would be the wrong scope.
-
-**Every statement in a briefing carries its marker, its confidence and its
-source.** A briefing that drops them turns an inference into a fact on its
-way to somebody else's desk, which is the worst thing this application could
-do. An unvalidated assessment says so twice: in the header count and beside
-the subject.
-
-**An object inherits its family's validation state.** Its baseline and its
-capabilities come from the family assessment, so an object briefing carried
-capabilities from an unvalidated assessment and said nothing about it until
-`_awaiting` was applied to both.
-
-**Two ordering traps, both found by driving the page.** The palette markup
-sat after the closing `</script>`, so every element it binds to was null at
-boot. And `Query(default=[])` in a signature is a mutable default in all but
-name (ruff B008), so the `ids` query parameter is a module-level singleton.
-
-**A mirror correction, with its evidence.** `test_no_duplicated_string_literals`
-began flagging a bare `" "` repeated inside f-strings. SonarQube has never
-reported a short separator against this repository, including on the upload
-that produced 26 findings in `seed_data.py` from a codebase already full of
-them, so the mirror was over-firing. `MIN_LENGTH = 5` is SonarQube's own
-documented default and sits comfortably below the shortest literal the
-platform has actually named here, "4 years" at seven characters. Two tests
-hold both ends of that floor.
-
-## Who may sign off, and the UDL call that still cannot be made
-
-**Ash's decision, 14 September 2026, answering [DECISION - Ash] item 3: any
-member of the DOK team may sign off a family assessment.**
-`src/validation_policy.py` holds the rule, `GET /api/families/validation-policy`
-serves it, and the interface reads it rather than keeping a copy.
-
-Three things follow and should not be undone:
-
-● **A sign-off records an assertion; it does not authenticate one.** There is
-  no application-level authentication and that was a decision, so the name a
-  signer types is the whole of the record, exactly as `asserted_by` is on
-  every claim. Both banner states say "recorded, not authenticated". If a
-  sign-off ever needs to be provably restricted to the DOK team, that needs
-  identity from the platform, which is where the team token ended up in 0.9.0.
-● **The entitlement is stored beside the name.** `signature()` writes
-  `validated_by`, `validated_team` and `validated_entitlement` together, so a
-  sign-off made today still states the rule it was made under if the policy
-  later changes. The panel reads the entitlement off the record, not off the
-  live policy, for the same reason.
-● **Whitespace is still refused.** A validation by nobody is worse than none,
-  because it looks like one.
-
-**The real UDL call still cannot be made from this environment, and it is not
-a credentials problem.** `unifieddatalibrary.com:443` is refused at the
-organisation proxy: `connect_rejected`, "gateway answered 403 to CONNECT".
-The same policy denial that blocks `celestrak.org` and `www.space-track.org`.
-No `UDL_USERNAME` or `UDL_PASSWORD` is visible to this container either, and
-no `.env` or `credentials.ini` is present, but the egress denial is the
-binding constraint: credentials would not change it.
-
-So `scripts/udl_live_check.py` exists to settle both INFERENCE items the
-moment it is run somewhere that can reach UDL. Built to the Script mode
-standard: stdlib only, single file, credentials from the environment first
-and the shared file second, matching the application, results to stdout and
-progress to stderr, and `--self-test` with a twelve-assertion manifest.
-
-What it reports, and why the wording is careful:
-
-● **A 4xx on `satNo=` is a FACT that the filter is unsupported. A 200 with
-  records is not a FACT that it works**, because a parameter that is accepted
-  and ignored returns a perfectly normal-looking payload for the wrong
-  satellites. The script says to check every `satNo` in the response.
-● **Equal counts across two `window_hours` values settle nothing.** They are
-  consistent with a delta feed and with a quiet period alike, and counts alone
-  cannot separate them, so it reports INFERENCE and says to compare record ids
-  across two runs an hour apart.
-● **An unreachable endpoint is reported as unreachable.** The first version
-  said the response "was not a JSON array", which was true and useless: the
-  connection never happened, and a message naming the wrong cause sends the
-  reader after the wrong fault. Found by running it, not by reading it.
-
-`--base-url` is caller input, so `checked_url` refuses anything but http and
-https: `urlopen` would otherwise open `file:` and a mistyped flag would report
-a local file as a UDL response.
-
-**`scripts/` is outside the `ruff check src tests` set on purpose.** The
-credentials loader is copied verbatim from the Script mode skill, which says
-not to restyle it, and linting it would force exactly that.
-
-## The elset call needs an epoch, and the app had never sent one
-
-**Ash settled it against live UDL on 14 September 2026**, and it is the first
-genuinely verified thing this file can say about `/udl/elset`. Both of these
-answer:
-
-```
-/udl/elset?epoch=>now-10 hours&satNo=40258
-/udl/elset?epoch=>now-1 hours
-```
-
-Without an `epoch` the endpoint returns **HTTP 400**. The application had been
-sending `satNo` alone since the first version, so **every chart and the whole
-belt were blocked on a malformed query**, not on credentials, not on egress,
-and not on the endpoint being wrong. `ELSET_EPOCH_WINDOW_HOURS = 168` is the
-production default: seven days catches any actively tracked object, where the
-ten hours that proved the syntax would report "no element set came back" for
-an object that has one.
-
-Three things follow:
-
-● **The `satNo` INFERENCE is closed.** It was never the problem. It is
-  accepted, and only alongside an epoch bound.
-● **`get_elset` now selects the newest epoch explicitly.** It used to take
-  `payload[0]` on an unconfirmed assumption that UDL returns newest first.
-  That was survivable when the call returned one record and is not now that an
-  epoch window returns a range. An unparsable epoch sorts oldest, so it can
-  never win.
-● **`epoch` alone works, so `satNo` is optional and a bulk pull exists.** The
-  belt makes one element-set call per object, around twenty, where one call
-  could serve them all. **It is not built, because the response size of a
-  catalogue-wide window has not been measured**, and the two constraints pull
-  opposite ways: the window must be short enough to bound the payload and long
-  enough that every object has a record in it. Measure before building.
-
-**A diagnostic that invents a value is worse than no diagnostic**, and this
-codebase shipped one. The deployment's report read "history not available at
-this path, which is expected" with an HTTP 200 beside it. UDL sent neither:
-`get_elset_history` swallows a 4xx and answers None so a chart can still draw,
-and `_probe` hard-coded `200` on its success path. That fallback is right for
-a chart and exactly wrong for the one module whose readers have nothing else
-to go on. Now:
-
-● **A successful probe reports no status at all**, because none was observed.
-● **The history probe calls the path raw** through `UDLClient.probe`, which
-  lets the `UDLError` through with its status. `elset_history_params` builds
-  the query in one place so the probe cannot report on a different request
-  from the one the application makes.
-● **The verdict names the status and says the cause is unsettled**, rather
-  than calling a refusal expected.
-
-`src/udl_diagnostics.py` had **no test file and 56% coverage**, which is how
-the fabricated 200 survived. It is at 94% now, calibrated by putting both
-defects back: the 200 fails one named test, routing through the wrapper fails
-five.
-
-## Architecture, briefly
-
-- `src/app.py` — app factory (`build_app`), CORS, two-tier rate limiting.
-- `src/udl_client.py` — talks to UDL's `/udl/notification` (JCO HRR feed)
-  and `/udl/elset` endpoints. These paths and field names are copied from
-  CONTEXT-001's verified LEARNED register (a separate Claude.ai project's
-  context file Ash maintains) — treat them as fact, not guesses. Of the two
-  items this bullet used to flag INFERENCE, the first is now settled (see
-  "The elset call needs an epoch" below) and the second, the notification
-  `window_hours` semantics, full baseline against deltas only, is still open.
-- `src/store.py` — atomic JSON store for the tracked-systems catalogue
-  (not a database — deliberate, per Bluestaq's data-layer standard for
-  low-concurrency, non-relational state). Anti-shrink merges, archive not
-  delete, backed up before every archive, schema-versioned.
-- `src/routes/systems.py` — CRUD API. Reads and writes are open: the shared
-  bearer token was removed in 0.9.0 (see "There is no authentication").
-- `src/dossier.py` — per-object section counts behind the dossier tabs.
-- `src/theatre.py` — every behaviour on one axis, with the shared-period rule.
-- `src/logging_standard.py` — the platform's JSON log line, the request
-  middleware, and the gunicorn logging config `src/gunicorn_conf.py` loads.
-- `src/orbits.py` — the orbital derivations behind the charts: epoch
-  parsing, Julian date, GMST (IAU 1982), GEO mean longitude, drift rate,
-  and the regime-to-metric rule. Pure functions, stdlib only.
-- `src/family_elements.py` — assembles one family's element sets into
-  chart-ready series. Owns the fan-out to UDL, the per-satellite failure
-  handling and the colour assignment.
-- `src/cache.py` — a small in-process TTL cache so a family chart does not
-  re-ask UDL for element sets it fetched seconds ago.
-- `src/static/index.html` — the admin UI served at `GET /`. Single file,
-  vanilla JS, fetches the API directly.
-- `src/seed_data.py` — the 49 systems from `Red_ASAT_Systems.xlsx`,
-  mirrored verbatim from `tactics_wiki.html`'s data — do not re-derive
-  these values from anywhere else; this is the canonical source.
-- Credentials: env vars first (`UDL_USERNAME`/`UDL_PASSWORD`), falling back
-  to `~/.config/phase_offset/credentials.ini` `[udl]` for local dev only —
-  never present inside the built container.
-
-## The family movement charts: rules that must hold
-
-Added in 0.5.0, tightened in 0.6.0. Five things are load-bearing and easy to
-undo by accident:
-
-● **Only JCO HRR rank 0 to 3 is ever pulled.** Ash's rule, 6 September 2026:
-  rank 4 and 5 entries are not trustworthy enough to plot, and a wrong line is
-  worse than a missing one. An object absent from the feed carries no rank and
-  is not pulled either. One feed call ranks a whole family, and the exclusions
-  are named under the chart. If the feed call fails, the whole request fails:
-  a gate that cannot be applied must stop the pull, never quietly open. Do not
-  "improve" this by falling back to pulling everything when the feed is down.
-● **Mean longitude is an approximation, and the UI says so.** UDL has no
-  longitude field; it is derived as `RAAN + argOfPerigee + meanAnomaly -
-  GMST(epoch)`, which holds for a near-circular, near-equatorial orbit. It is
-  good for drift and station-keeping, not for conjunction assessment. Do not
-  quietly promote it to fact anywhere.
-● **`/udl/elset/history` is INFERENCE, not FACT, and the one report that
-  looked like evidence was our own artefact.** CONTEXT-001's LEARNED register
-  documents neither the path nor a `satNo`/`epoch` filter on it; it is a
-  pattern-match against UDL's general `/history` convention. The client
-  treats a 4xx as "not available here" and falls back to the latest element
-  set, while a 5xx or a timeout still raises. The deployment's diagnostics
-  reported "not available at this path, which is expected" beside an HTTP
-  200, and **both halves were invented here**: the 4xx had been swallowed by
-  that very fallback and the 200 was hard-coded on the probe's success path.
-  Since the identical reading on `/udl/elset` turned out to be a missing
-  mandatory `epoch` rather than an absent endpoint, this one is open. The
-  diagnostics now calls the path raw through `UDLClient.probe` and reports
-  the real status, so the next run settles it.
-● **Relative mode anchors on each object's latest element set, never its
-  first.** Ash's rule, 10 September 2026. The question is "where has this come
-  from to get where it is now", so now is the fixed point and history reads
-  backwards from zero. It also keeps the baseline still: anchoring on the
-  first point in the window made the same object at the same moment read
-  differently at 30 days and at 90, because the baseline moved with the
-  window. For longitude the wrapped step deltas are still summed first and
-  the series is shifted afterwards, so a full-history drift right round the
-  belt still reads +200 rather than -160. Verified in a browser against the
-  table view: the last row is zero in every window, and the latest absolute
-  value is identical across windows.
-● **One metric, one axis, always.** GEO objects are charted on mean
-  longitude, everything else on mean motion, and the two never share a plot.
-  A dual-axis chart invents a correlation that is not in the data. A family
-  holding both gets two charts.
-● **Colour follows the satellite, never its position in the result.** The
-  server sends a `colour_index` fixed by the family's launch-order member
-  list, so filtering never repaints a surviving line. The palette is the
-  validated eight-slot dark set, held once in CSS custom properties and read
-  from there by the chart code; the order is the colour-vision-deficiency
-  safety mechanism. Never reorder it, and never add a ninth: a family past
-  eight lists the remainder as "not charted". If the palette ever changes,
-  re-run the dataviz skill's `validate_palette.js` against the panel surface
-  (`#152238`) first.
-
-● **The panel plots one scope at a time, and says which.** Choosing a family
-  plots the class; choosing a row in the catalogue plots that object's own
-  history. Both go through one client-side loader and one server-side
-  assembler, so the rank gate, the metric rule and the colour rule cannot
-  drift between them. `/api/udl/object-elements` deliberately passes the whole
-  family to `build_family_charts` and narrows with `focus_norad_id`, because
-  colour is assigned from launch-order position in the family: a satellite
-  charted alone keeps the colour it has beside its siblings. Only the focused
-  object is fetched, so it costs one element-set lookup, not the family's.
-● **Every message follows the scope on screen.** A single-object view that
-  says "nothing in this family cleared the checks" describes the wrong thing.
-  This is the fourth time a message in this UI has named something it could
-  not see, and each one was caught in a browser rather than by reading the
-  code. Drive the real page before believing any of them.
-
-`tests/test_ui_contracts.py` pins the parts of this that are checkable from
-Python, including that every path the UI fetches exists in the app's OpenAPI
-schema, and that catalogue values are escaped before reaching the markup.
-
-## All ten stages passed on 0.15.4
-
-**Confirmed by the platform, 14 September 2026.** Secret Detection,
-Dependencies, SAST, Dependency Scanning, Test, Code Quality, Dockerfile Lint,
-Container Build, Container Scan and Deploy are all green, and the application
-is Active. **Code Quality passed, which is the first time it has**: it was
-skipped at 0.4.3, failed at 0.15.0 with eighteen issues, at 0.15.2 with
-fourteen and at 0.15.3 with one.
-
-What got it there, in the order the effort actually went:
-
-● **The register, not the fixes.** Findings are cheap to fix and expensive to
-  discover. Writing down every rule the platform has fired, and running one
-  command before packaging, is what turned three failed uploads into a pass.
-● **Widening the mirrors to `scripts/`.** Nine of the fourteen findings at
-  0.15.2 were in a tree every local check had been ignoring.
-● **Bundling a real source change.** 0.15.4 would have failed
-  `code-quality-verify` on the coverage condition with no rule broken at all.
-
-The one thing that would have saved the most time is the least technical:
-`bump_version.sh` warned about the coverage condition and the warning was
-missed because its output was piped through `tail`. The script's own text
-warns against that.
-
-**So it is no longer a warning.** A condition no retry can clear should not be
-possible to ship by accident, so `bump_version.sh` now refuses the bump and
-`scripts/package.sh` refuses the build. `--allow-unmeasurable` overrides it,
-which makes shipping one a decision somebody made rather than something nobody
-saw.
-
-## The application may rank, and only indicatively
-
-**Ash's decision, 14 September 2026**, answering the open question from the
-interface concept: **the application may rank what needs attention as an
-indicative element only, and that ranking goes nowhere else.**
-
-The second half is the load-bearing one. "May rank" alone would let an
-ordering become a score, a score become a field, and a field become something
-a briefing carries to somebody else's desk. At that point the application
-would be asserting a judgement it cannot source, which is the one thing this
-codebase is built not to do.
-
-`src/ranking_policy.py` holds the rule, `GET /api/ranking-policy` serves it,
-and the interface reads the label rather than keeping a copy, exactly as it
-does for the classification marking and the validation policy. Four
-boundaries, each a test in `tests/test_ranking_policy.py`:
-
-● **A rank is computed for display and never stored.** Not a field on a
-  record, claim, segment or assessment, and no migration adds one.
-● **A rank never leaves the screen.** Absent from the briefing and the
-  comparison. A briefing carries every statement's marker, confidence and
-  source so a reader can weigh it; a bare ordinal carries none of those.
-● **A rank is not a claim and never wears a marker.** FACT, INFERENCE and
-  SPECULATION describe how well something is evidenced. An ordering is not
-  evidenced, and dressing it in that vocabulary would debase the vocabulary.
-● **The ordering inputs must themselves be sourced.** Ranking may arrange
-  facts the store already cites. It may not introduce a judgement of its own.
-
-**Three of those guards were worthless when first written, and each failed
-differently.** Worth carrying, because all three are the same trap in
-different clothes: a test that passes because it never looked.
-
-● **Two read the API and the API has a `response_model`.** A rank written
-  into every seeded record was stripped by Pydantic on the way out and the
-  test went green. "Never stored" is a claim about the file, so the guards
-  now read the store file on disk.
-● **One inspected an error body.** `/api/systems` ignores `limit`, so the
-  comparison guard sent all 56 ids, the endpoint answered 400 "compare
-  between 2 and 4 subjects", and the test cheerfully found no ranking in the
-  error message. Every export guard now asserts a 200 and a non-empty body
-  before inspecting it.
-● **One assumed a shape.** Comparison rows are plain label strings, not
-  objects with a `label` key. The guard read `.get("label")` off a string.
-
-All five sabotages are now caught: a rank in a record, a score on a claim, an
-ordering in a briefing, a Priority row in a comparison, and the label
-hard-coded in the markup. **Introduce the violation before believing the
-guard**, every time, and make the guard prove it examined the real thing.
-
-## The belt console: the interface Ash chose
-
-Ash picked Orbital Atlas over Watch Floor 70/30 and asked for a merge, so the
-interface is now a console: a signal strip, then the attention queue, the GEO
-belt and an inspector side by side, with the existing panels beneath as the
-detail surfaces. The Bluestaq navy ground is gone on his instruction.
-
-● **The palette was re-validated, not re-picked.** The eight series slots went
-  through the dataviz skill's `validate_palette.js` against the new panel
-  surface (`#0C121B`): worst adjacent CVD pair ΔE 9.2, above the target of 8.
-  Interface and status colours sit **above** the series lightness band
-  (L 0.73 to 0.90 against 0.48 to 0.67) so a chrome colour cannot be misread as
-  an object identity. `tests/test_ui_contracts.py` pins the set and carries the
-  evidence. **Never change it without running the validator again.**
-● **`src/belt.py` reuses the charts' rank gate rather than reimplementing it.**
-  `hrr_ranks` and `_skip_reason` are imported, so Ash's JCO HRR 0 to 3 rule
-  cannot drift between the charts and the belt. A feed failure stops the pull.
-● **An object that cannot be placed is listed, never dropped.** Not GEO, no
-  element set, or an element set missing a field the derivation needs: each has
-  its own reason. A satellite drawn at the wrong slot looks entirely normal.
-● **An unreachable UDL and an empty belt look identical on a circle**, so the
-  endpoint answers 503 and the interface says which it is. That is the whole of
-  what an analyst needs to know.
-● **`src/attention.py` is the queue, and every input is a stored field.** A
-  `tbc` source class, an unset `validated_by`, a `pol_segment` with no
-  `end_epoch`, a record with no `norad_id`. No severity, no weight, no score.
-
-**Three shapes were guessed wrong and all three would have shipped a queue that
-was silently always empty.** Object `claims` are empty because claims are
-analyst-created; the collection is `pol_segments`, not `segments`; and TBC is a
-`source_class`, not a marker. The first test in `tests/test_attention.py`
-therefore asserts the queue found something at all, from more than one
-category, because an empty queue satisfies every boundary test ever written.
-
-**0.16.0 drew two Code Quality findings, both in the new code and both now
-mirrored:** a duplicate `display` property in the queue's line-clamp rule,
-which the platform grades a **Bug** because the first declaration is dead, and
-a `{key: 0 for key in KEYS}` that is `dict.fromkeys` written long. Removing a
-`display` from a clamping rule looks safe and is not, so the clamp was
-re-confirmed in a browser before the release was cut.
-
-**Two defects that only a browser found, and neither was visible to 66 passing
-contract tests:**
-
-● **`svgEl` was declared twice.** A redeclaration throws at parse time and
-  kills the whole module script, so every panel came up blank while every test
-  passed, because each one reads the markup rather than running it.
-  `test_no_top_level_name_is_declared_twice` now catches it.
-● **A strict prefix hid two whole categories.** Seventeen unverified plus
-  fifteen unsigned meant the first fourteen entries were all assessments and
-  the twenty open behaviours were unreachable, while the counts told the
-  analyst they were there. The queue now takes the head of each category.
-
-## The dossier: one object, one place (0.17.0)
-
-Selecting an object used to fill six panels spread down the page, and an
-analyst had to scroll to each one to learn whether it held anything. The
-always-open New System form took the best position on the page for an action
-taken a few times a year. Both are gone: the catalogue sits beside a sticky,
-tabbed dossier (Record, Provenance, Behaviour, Assessment, Connections), and
-"New system" is a button.
-
-● **Every tab says what is behind it before it is opened.** `src/dossier.py`
-  counts what the store holds per section, and `GET /api/objects/{id}/dossier`
-  serves it. `tests/test_dossier.py` checks every count against the endpoint
-  that renders that pane, across all 56 objects, so a tab can never say
-  "3 links" over a pane that draws four. That sweep needs its own app with the
-  global limiter raised: four reads for 56 objects trips the 120 a minute.
-● **Emptiness is served, not inferred from a count.** The assessment's count
-  is statements still to verify, so zero means complete. The interface dimmed
-  a complete assessment as empty until the server said which it was.
-● **The panes are the old panels moved, not rewritten.** Every rule their
-  renderers carry is unchanged by the move. Element ids are untouched; each
-  pane title is now `<h3 id="xTitle-head">` around the old `<span id="xTitle">`,
-  so the renderers' `textContent` writes keep the icon.
-● **Which tab resolves a queue entry is decided on the server.**
-  `SECTION_FOR` in `src/attention.py` puts a `section` on every entry, and the
-  interface calls `showTab(entry.section)`. A test fails if any category label
-  appears in the markup, because a retyped copy would drift.
-● **"Still open here" is the queue narrowed to this object and its family**,
-  read from the same builder, so the dossier and the queue cannot disagree.
-● **The address bar carries the object and the tab** (`#object/<id>/<tab>`).
-  A new object pushes a history entry and a tab change replaces one, so Back
-  returns to the previous object rather than walking every tab. A link to a
-  filtered-out object clears the filters rather than silently not opening.
-● **A section that does not apply is disabled**, never left showing the last
-  object's content. A family opened from the queue enables only Assessment,
-  and clears the form first: left in edit mode with no selection, a save
-  would have posted the previous object's values as a new system.
-
-Two layout faults found by driving the page at phone width, both older than
-this change: the bare `1fr` track grew to the table's width, and the family
-selector was wider than the screen. The table now scrolls inside its panel.
-
-## The theatre: when things happened, across the catalogue (0.18.0)
-
-The console's stage now switches between **Space** (the GEO belt) and
-**Time** (every assessed behaviour on one axis, a lane per family). The
-per-object timeline answers "what has this object done"; it cannot answer
-"what else was happening then", which is the question that turns three
-corkscrews and an inspection in March 2025 into one event. The time view
-needs no UDL connection, so the stage is useful when UDL is down.
-`src/theatre.py` builds it, `GET /api/theatre` serves it.
-
-● **Placement reuses `build_timeline`**, so the precision, instant and
-  counterpart rules are the object timeline's own code.
-● **A blank end never invents a co-occurrence.** A behaviour with no
-  recorded end is counted only across the period its start names. Counted to
-  the axis end, SJ-21's 2022 capture would "share a period" with everything
-  since. The rule is served as `overlap_rule` and the interface prints it.
-● **A date covers the period it was recorded at**: "2024" is the whole year,
-  "2024-05" the whole month. Leap years are handled by `calendar.monthrange`.
-● **What is drawn is what is counted.** Unlike the object timeline, a band
-  stops where its record stops, and the axis runs to the end of the latest
-  recorded period. The first version ended the axis at the latest *start*,
-  which drew every March 2025 behaviour at zero width.
-● **Sharing a period is co-occurrence, not a relationship.** It never creates
-  a graph edge and the interface says so.
-● **The rule reproduces the one co-occurrence the sources describe.** The
-  Shiyan-24C triad shares a period with SJ-6-05A from the dates alone, and
-  `tests/test_theatre.py` holds that. It was calibrated by six sabotages, all
-  caught.
-
-One trap worth knowing: the page declares `const CSS` for reading colour
-tokens, which shadows the browser's `CSS.escape`. Match on `dataset` instead
-of building an escaped selector.
-
-**A cosmetic fault, fixed in 0.19.2:** `.th-axis` was sticky with
-`margin-left:132px`, so its background did not cover the label column and a
-lane heading showed through beside the year labels when the timeline
-scrolled. The sticky element is now full width with its own background, and
-the ticks sit on an inner `.th-axis-track` carrying the offset, so their
-`left` percentages stay relative to the bands' track. It waited for a release
-with a real source change, as CSS-only releases must.
-
-## Triage: the queue, one item at a time, to its own control (0.19.0)
-
-"Triage the queue" walks the attention backlog in its served order. Each step
-opens the dossier at the right section, outlines the exact statement, segment
-or field at fault, opens its fix control and puts the cursor in it. A bar
-fixed to the bottom of the screen carries Previous, Skip, Review skipped and
-End, with a progress meter.
-
-● **Every queue entry now names exactly what resolves it.** `target` is the
-  assessment field, segment or record field, and `key` is a stable name for
-  it. This closes the limitation recorded at 0.16.2, where a click reached
-  the right panel and left the analyst to find which of three statements was
-  unverified. Keyed on the family rather than the field, triage would have
-  reported a family's second TBC done when only the first was.
-● **Resolved means the rebuilt queue no longer lists the key.** Triage stores
-  nothing and writes nothing; it routes through the dossier's existing forms,
-  and `loadAttention` calls `triageCheck` after every write. A fix made
-  outside triage counts, and a write that resolved nothing moves nothing.
-  `tests/test_triage.py` proves each kind of fix removes exactly its own key.
-● **Triage spends nothing from the UDL call budget.** Selecting an object
-  plots its movement, a live UDL call through the strict limiter. Triage
-  selects object after object, so charts are paused for its duration.
-  Found by driving triage quickly in a browser: the global limiter refused
-  the page inside a minute, and each step had also made a UDL call.
-● **A missing control names its real cause.** A rate-limited request and an
-  already-fixed item look identical unless the section's own error is read,
-  so the message quotes that error before it offers "already fixed".
-● **The opened control is kept above the bar.** The target scrolls to the
-  top under the sticky tabs, and the sticky dossier stops 140px short of the
-  viewport while triage runs. Measured at 390, 1280 and 1440 wide.
-
-## 0.19.1: what the 0.19.0 upload found, and what it did not settle
-
-Four findings. Code Quality and Container Scan blocked; SAST and Logging were
-advisory, and **Logging blocks from 1 December 2026**.
-
-**Code Quality: two `role="group"` attributes (Web:S6819).** Both were mine,
-added in 0.18.0 on the stage view switch and the theatre's nation filter. They
-are `<fieldset>` and `<legend class="sr-only">` now, with the user-agent
-border, padding and margin reset so nothing moved on screen. The mirror,
-`test_no_element_uses_the_group_role`, was written first and confirmed to fire
-on exactly the two lines the platform named, 624 and 641.
-
-**Logging: the platform's standard, now owned end to end.** The check found
-nothing on stdout, seven lines on stderr and no request id anywhere. The
-seven were gunicorn's and uvicorn's start-up lines, which never passed through
-the application's logging, and an ordinary request logged nothing at all.
-`src/logging_standard.py` holds the format and `src/gunicorn_conf.py` routes
-the server's own loggers through it. Rules that must hold:
-
-● **One handler, on the root logger, named `udl-tactics-app-stdout`.** The
-  gunicorn config installs it before any worker starts, and
-  `configure_logging` recognises it by name rather than adding a second.
-● **gunicorn's error logger carries the handler itself, propagation off.**
-  The uvicorn worker copies that logger's handlers onto `uvicorn.error` and
-  turns its propagation off. Left with no handler, uvicorn's start-up and
-  error lines would vanish rather than move to stdout.
-● **Never name anything `logconfig` in `src/gunicorn_conf.py`.** Gunicorn
-  reads every top-level name that matches one of its settings, and that is
-  one. Importing the builder under that name stopped gunicorn starting. A test
-  pins the config file's public names to the two it means to set.
-● **Root stays at WARNING.** httpx logs each UDL request at INFO with the full
-  query string, and the standard forbids query strings. The request line logs
-  the path alone.
-● **`RequestLogMiddleware` is outermost and pure ASGI**, so a rate-limited
-  request is logged too and the request id reaches every line written while
-  a request is handled, including from the threadpool. An unhandled error is
-  logged there, with the id, and answered with a 500; re-raising would have
-  uvicorn log it again after the context was gone.
-● **The timestamp format is INFERENCE.** ISO 8601, milliseconds, `Z`. The
-  standard's full text was unreachable from the build environment. If the
-  platform wants epoch milliseconds, `_timestamp` is the one place to change.
-
-`tests/test_logging_config.py` ends by running real gunicorn the way the
-container does and reading both streams. Its first version blocked on stdout
-and hung, rather than failed, when a sabotage sent the lines to stderr; it now
-picks its own port and polls. Six sabotages, all caught. Verified in the
-refreshed base image as the unprivileged user: no line on stderr, every line
-on stdout in the standard's shape.
-
-**SAST: CWE-939 on `scripts/udl_live_check.py`.** `urlopen`'s default opener
-also opens `file:`, `ftp:` and `data:`. The script now uses an opener holding
-only the HTTP, HTTPS, proxy, redirect and error handlers, and checks the
-scheme again at the call. Two self-test assertions prove a `file:` URL is
-refused before anything opens.
-
-**Container Scan: partly fixed, and the rest is a decision, not a task.**
-The base digest is refreshed (Python 3.13.15 to 3.13.18, which the scan names
-as the fix for all four critical or high interpreter findings) and certifi is
-2026.10.23 (the advisory's fix is 2026.10.18). Only certifi moved in either
-lock file, and both install under `--require-hashes` into a fresh 3.13
-environment. **The 76 Debian rows are untouched**: every flagged package sits
-at exactly the flagged version in the newest digest, and the Debian archives
-and security tracker are refused at the organisation proxy, so whether fixes
-exist could not be checked from here. Measured inside the refreshed image by
-tracing what the interpreter and every compiled wheel load: 48 of those rows
-are in packages nothing loads (util-linux and its libraries, login,
-perl-base, the openssl command-line tool and legacy provider, ncurses-bin,
-libstdc++6), 15 are in libraries loaded only by unused standard-library
-modules or by tools the image build itself uses, and 13 are in libc6, libssl3t64 and libgcc-s1, which the application needs.
-**Ash chose the purge, and 0.19.2 does it.** 48 of the 81 rows go with their
-packages, 5 are fixed by version, and 28 remain (21 distinct CVEs) in libc6,
-libc-bin, libssl3t64, libgcc-s1 and libraries only unused standard-library
-modules or the build's own tools load. **Container Scan will still fail on
-those 28** under a policy that requires every critical and high finding
-resolved. What clears them is a Debian fix reaching the image, which the
-honest patch status and `os_patch_status` in `/readyz` will now show, or a
-risk acceptance from the security owner. `READINESS.md` has the table and the
-build verification.
-
-## The rule register, and running the gate before packaging
-
-The 0.15.0 upload failed Code Quality with **eighteen new issues across eight
-rules**, and every local check passed first. The mirrors were not wrong; they
-only ever covered rules something had already been caught by, which means the
-set is always one upload behind unless it is deliberately grown. Two things
-now close that:
-
-● **`docs/SONAR-RULE-REGISTER.md` is the record.** Every rule the platform has
-  ever fired here, the upload that reported it, where it fired, and the local
-  check that catches it. **Read it before writing code**, not after a failure.
-  Its own rules: a rule goes in the moment the platform reports it and never on
-  a guess; it is calibrated against the upload that reported it; a mirror that
-  over-fires is a defect, not a nuisance; and it never comes out. The two
-  conditions no mirror can catch (duplicated lines on new code, hotspots
-  reviewed) are named there so nobody hunts for a check that cannot exist.
-● **`scripts/package.sh` is the one command that builds an upload.** It runs
-  every local check, refuses a release that changes no Python under
-  `sonar.sources`, builds the zip from the tag rather than the working tree,
-  checks the package contract the Dependency Scanning analyser needs, and then
-  **extracts the archive and runs the suite from inside it**. That last step is
-  the one that catches a dependency on an `export-ignore`d file, which passes
-  every test in the working tree and fails in the container.
-● **`scripts/check-quality-gate.sh` is the one command before packaging.**
-  Sonar mirrors, UI contracts, the full suite with coverage, `ruff check`,
-  `ruff format --check`, `mypy`, `bandit`. It ends by naming what it cannot
-  check, so a PASS is not read as a promise the gate will pass.
-
-**A line-based check is a blind spot by construction.** The nested-template
-mirror scanned one line at a time and went green through 0.15.0 while the
-platform reported a nesting spread across three. It now walks the whole
-script tracking backtick and `${` depth. The same mistake was then made again
-within the hour, in a new CSS test written line by line against a rule whose
-`display:flex` sat on a continuation line. Parse the structure, never the
-line.
-
-**The eight rules that were new at 0.15.0** are worth knowing by shape rather
-than by lookup, because they are the ones this codebase keeps generating:
-a route path built by string concatenation instead of written out literally;
-a FastAPI parameter defaulted to `Query(...)` instead of `Annotated`; an input
-with no label; `role="dialog"` where `<dialog>` belongs; `role="listbox"` and
-`role="option"` on non-interactive elements; `tabindex` on a non-interactive
-element; and `.find(...)` used as a boolean test where `.some(...)` says it.
-
-Two things learned fixing them, both of which cost a browser run:
-
-● **A native `<dialog>` is hidden by a UA rule the stylesheet can override.**
-  `.palette{display:flex}` beat `dialog:not([open]){display:none}`, so the
-  palette never hid and the slash guard, Escape and the whole catalogue
-  keyboard read as broken. Overlay styling belongs on `.palette[open]`.
-● **The route-factory change was INFERENCE and is now FACT.** `add_api_route`
-  with literal paths sits outside the route-path rule. Settled by the platform:
-  `object_lists.py` gained 33 lines in 0.15.2, so those registrations were
-  analysed as new code, and the rule did not fire in that upload's fourteen
-  findings or in either upload since.
-
-**The analysis reaches the Dockerfile too.** The 0.19.2 upload reported three
-findings there, in a file no mirror read: two latent (a tag and a digest
-together on both `FROM` lines, there since 0.8.2 and new code only because
-0.19.1 refreshed the digest), one introduced (a RUN line lengthened past
-120). The mirrors now read it. Assume every file in the archive is analysed.
-
-**The analysis reaches `scripts/`, whatever `sonar-project.properties` says.**
-The 0.15.2 upload reported fourteen issues and nine were in `scripts/`:
-`check-quality-gate.sh` produced six on its own, the day after it was written.
-`sonar.sources=src` had been taken at face value by every mirror here. Whatever
-that property configures, the analysis covers `scripts/` as well, so every
-mirror walks it now. That is separate from linting: `scripts/` stays outside
-`ruff check src tests` for the Script mode reason given above.
-
-**Route handlers are plain `def`, not `async def`, and the store holds a lock
-because of it.** Sonar's "remove the `async` keyword" is correct on its own
-terms, and it is also the more correct shape: an `async def` handler doing
-blocking file I/O holds the event loop for every other request. But a plain
-`def` handler runs in a threadpool, and until 0.15.3 the only thing serialising
-the store's read-modify-write cycles was that no handler ever yielded. With
-that gone, two concurrent edits both answer 200 and one disappears. `_serialised`
-in `src/store.py` wraps every writer, and it was calibrated by removing it:
-twelve concurrent updates lost ten. Do not take the decorator off, and do not
-put `async` back on a handler that awaits nothing.
-
-**The general lesson, which is bigger than either:** before applying a
-mechanical fix across a codebase, ask what property the old shape was providing
-by accident. And when a mirror fires far beyond what the platform reported,
-that is usually the mirror being right: the gate counts new issues, so it names
-only the instances in the file that changed.
-
-## Working in this repo
+New issues zero; coverage on new code; **duplicated lines on new code** (no
+local check: shared fixtures live in `tests/conftest.py`); security hotspots
+reviewed (a person does that in SonarQube); and coverage measurable at all.
+[The Code Quality gate has five conditions, not one]
+
+● **The analysis reads every file in the archive**: `src/`, `tests/`,
+  `scripts/`, `src/static/index.html` as HTML, CSS and JavaScript, and the
+  Dockerfile, whatever `sonar-project.properties` says.
+● **Read `docs/SONAR-RULE-REGISTER.md` before writing code.** A rule goes in
+  when the platform reports it, is calibrated against that upload, and never
+  comes out. The mirrors are `tests/test_sonar_*.py`.
+● **Parse the structure, never the line.** Line-based mirrors missed a
+  three-line nesting and a CSS property on a continuation line.
+● **Leave the coverage configuration alone.** `relative_files = True` makes
+  the report's paths point at files that do not exist.
+● **Shapes this codebase keeps generating**: literal route paths, never
+  concatenated; `Annotated` parameters, not `Query(...)` defaults; a label
+  on every input; native `<dialog>` and `<fieldset>`, never `role="dialog"`
+  or `role="group"`; no `tabindex` or list roles on non-interactive
+  elements; `.some()` not `.find()` as a test; `logging.exception` in an
+  `except`; one call per `pytest.raises`; `dict.fromkeys`.
+● **Route handlers are plain `def`**, and `_serialised` in `src/store.py`
+  wraps every writer. Without it twelve concurrent edits lost ten.
+
+## The container image
+
+[The container image: three rules that are easy to undo]
+
+● **Both `FROM` lines pin the same digest, digest alone**, tag in a comment.
+  Refresh both together, rebuild, re-verify.
+● **pip, setuptools and wheel are deleted from the runtime image** and the
+  build fails if any survive. Never fix an installer advisory by upgrading
+  pip.
+● **A base image move must not move a package version.** Prove the existing
+  hashes cover the new interpreter under `--require-hashes` first.
+● **Packages nothing loads are purged, fail-closed** (Ash, 20 November
+  2026). `NEEDED` in `tests/test_dockerfile.py` lists what must never go;
+  trace loaded libraries again before adding to the purge.
+● **The patch status must not lie**: `apt-get update --error-on=any`, served
+  as `os_patch_status` in `/readyz`.
+● **An Anchore policy fails only on a `STOP` row.** Find it before changing
+  a version; the advice text names packages whatever the real cause.
+
+## Logging: the platform standard
+
+`src/logging_standard.py` owns the format, `src/gunicorn_conf.py` routes the
+server's own loggers through it, and `tests/test_logging_config.py` ends by
+running real gunicorn. [0.19.1: what the 0.19.0 upload found] and
+[Status: shipped]
+
+● One JSON object per line on stdout. One handler, on the root logger, named
+  `udl-tactics-app-stdout`; never a second, and none on the audit logger.
+● gunicorn's error logger carries that handler with propagation off. **Never
+  name anything `logconfig` in `src/gunicorn_conf.py`**: gunicorn reads it as
+  a setting and stops starting.
+● Root stays at WARNING (httpx logs query strings at INFO). The audit logger
+  is pinned to INFO so `LOG_LEVEL` cannot silence a compliance record.
+● `RequestLogMiddleware` is outermost and pure ASGI. Every line written
+  during a request carries `url.path`, `http.request.method` and
+  `user_agent.original` (empty when absent), plus the request id and user
+  when sent. The request line adds the status and `event.outcome`. Never a
+  query string.
+● The ISO timestamp and the 400 failure threshold are INFERENCE.
+● Assert on what a real handler writes, never through `caplog`.
+
+## Decisions Ash has made: settled, do not relitigate
+
+● **No authentication** (10 September 2026). Reads, writes and UDL lookups
+  are open; the platform is the access control. `ALLOWED_ORIGIN` refuses `*`
+  unconditionally, the strict rate limiter is the only control on the UDL
+  budget, and tests fail if token machinery returns. Authentication, if ever
+  needed, takes identity from the platform. [There is no authentication]
+● **Unclassified, publicly available information only** (11 September).
+  `src/classification.py` holds the marking in Ash's words and `/version`
+  serves it; never invent a marking. An `internal_assessment` claim must
+  cite its public basis. [Unclassified, publicly available information only]
+● **Any DOK team member may sign off a family assessment** (14 September).
+  A sign-off records an assertion, it does not authenticate one; the
+  entitlement is stored beside the name; whitespace is refused.
+  [Who may sign off]
+● **Ranking is indicative and goes nowhere else** (14 September). Computed
+  for display, never stored, never in a briefing or comparison, never a
+  claim, inputs sourced. The guards read the store file on disk.
+  [The application may rank, and only indicatively]
+● **Only JCO HRR rank 0 to 3 is ever pulled** (6 September). If the feed
+  fails, the request fails: a gate that cannot be applied stops the pull.
+● **Relative mode anchors on the latest element set** (10 September).
+● **The COSMOS-2612 to -2614 NORAD correction** (68762, 68763, 68764) is the
+  one authorised change to the verbatim mirror (11 September), applied by a
+  named migration, never by a rule. [The SATCAT snapshot]
+● **The file-storage add-on is always present** (20 August); the
+  `/app/data` fallback is unreachable by design.
+● **The interface is the belt console** (Orbital Atlas merged), without the
+  Bluestaq navy ground. [The belt console]
+
+## The data: what must never be invented
+
+● **`src/seed_data.py` is the 49 systems mirrored verbatim** from the
+  spreadsheet. Never re-derive them. Seven candidates live apart in
+  `src/candidate_systems.py`, each citing its source and naming its
+  verifier; their catalogue numbers come only from the SATCAT snapshot and a
+  test holds each against it. [Candidate systems] and [The SATCAT snapshot]
+● **The SATCAT snapshot** (`reference/satcat_26195.dat`) is export-ignored;
+  `scripts/extract_satcat.py` distils `src/satcat_extract.json`, which
+  ships. `src/satcat_reconcile.py` checks the catalogue against it.
+● **The claim is the atom.** A FACT needs a citation, a TBC needs a named
+  owner, `asserted_by` is required, whitespace satisfies none of them, and
+  an edit re-validates the whole merged claim. Observability is not
+  confidence. A proximity mode names its counterpart. [The compendium layer]
+● **Archive, never delete. A write that changes nothing is an error**, not
+  a 200.
+● **Migrations are keyed on a natural key**, idempotent by construction,
+  never overwrite an edit, and skip what the store does not hold. The store
+  is at `schema_version` 6. Prove a migration by breaking it on purpose:
+  only calling the layer builder directly caught the second sabotage.
+● **An epoch is never more precise on screen than in the source**; an
+  instant has no end; a blank end reads "no end recorded", never
+  "ongoing". [Phase 3]
+● **Every graph edge comes from stored data and is sourced**, names the
+  field it came from, and is dropped if it points nowhere. A solo
+  behaviour is not a relationship. [Phase 4]
+● **A seeded assessment loads unvalidated**, single-source claims at
+  `moderate`, unknowns as TBC with an owner, speculation never promoted.
+  [Phase 5]
+● **A briefing carries every statement's marker, confidence and source**,
+  in house style enforced by `tests/test_briefing.py`. An empty comparison
+  cell says why. [Phase 6]
+
+## UDL
+
+[The elset call needs an epoch] and [The family movement charts]
+
+● **`/udl/elset` needs an `epoch` bound** or answers 400; the default window
+  is 168 hours and `get_elset` picks the newest epoch explicitly. Paths and
+  field names come from CONTEXT-001's verified register.
+● **Mean longitude is an approximation** (`RAAN + argOfPerigee + meanAnomaly
+  - GMST`) and the interface says so.
+● **A diagnostic never invents a value.** A successful probe reports no
+  status; the history probe calls the path raw through `UDLClient.probe`.
+● **UDL, CelesTrak and Space-Track are refused at this environment's
+  proxy.** Credentials would not change that.
+
+## The interface
+
+`src/static/index.html`, single file, vanilla JavaScript. [The belt console],
+[The family movement charts], [The dossier], [The theatre], [Triage]
+
+● **The eight-slot series palette identifies a satellite.** Validated
+  against `#0C121B`; never reorder it, never add a ninth, re-run
+  `validate_palette.js` before any change. It is never used for provenance,
+  graph nodes or chrome. Never colour alone: text carries every marker.
+● **One metric, one axis; colour follows the satellite** (`colour_index`
+  from launch order). Every message names the scope actually on screen.
+● **Vocabulary is served, never copied into the markup**: the legend, the
+  marking, the validation policy, the ranking label, category labels.
+● **Triage spends nothing from the UDL budget**; charts pause while it runs.
+● Traps: `const CSS` shadows `CSS.escape` (match on `dataset`); dialog
+  overlay styling belongs on `[open]`; a name declared twice kills the whole
+  module (a test catches it); markup the script binds to must come before it.
+
+## Reading the platform directly: the App Store MCP server
+
+`.claude/mcp/appstore-mcp.mjs` (0.14.2, reviewed before first run) is
+registered by `.mcp.json`, and both are export-ignored. It reads pipeline
+status, job logs, pod logs and the deployed app's endpoints.
+
+● Sign-in is Ash's: a Keycloak device code in a browser, lost when a cloud
+  container is reclaimed.
+● `NODE_USE_ENV_PROXY=1` is load-bearing in a cloud session: Node's `fetch`
+  ignores the proxy and could not resolve the deployed app's host.
+● Self-update is off, so an update is a new commit of the bundle.
+● **Never call upload, submit, resubmit, retry, add-on or environment
+  variable tools without Ash's instruction each time.**
+
+## Architecture
+
+● `src/app.py`: app factory, CORS, two-tier rate limiting.
+● `src/store.py`: atomic JSON store (deliberately not a database),
+  anti-shrink merges, archive not delete, backups, migrations.
+● `src/udl_client.py`, `src/udl_diagnostics.py`: UDL calls and the
+  diagnostics probe.
+● `src/orbits.py`, `src/family_elements.py`, `src/belt.py`, `src/cache.py`:
+  orbital derivations, chart series, the GEO belt, a small TTL cache.
+● `src/compendium_models.py`, `src/provenance.py`, `src/pol.py`,
+  `src/graph.py`, `src/theatre.py`, `src/dossier.py`, `src/attention.py`,
+  `src/comparison.py`, `src/briefing.py`: the compendium layers.
+● `src/routes/`: the API; `src/routes/object_lists.py` generates the
+  per-object CRUD and deliberately has no `from __future__ import
+  annotations`.
+● `src/logging_standard.py`, `src/gunicorn_conf.py`: logging.
+● `scripts/` is outside `ruff check src tests` on purpose (vendored Script
+  mode loader) but inside the Sonar mirrors.
+● Credentials: `UDL_USERNAME` and `UDL_PASSWORD` from the environment, or
+  `~/.config/phase_offset/credentials.ini` for local development only.
+
+## Working in this repository
 
 ```bash
 python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt          # includes test tooling, hash-locked
+pip install -r requirements.txt          # hash-locked, includes test tooling
 cp .env.example .env
 pytest --cov=src --cov-report=term-missing
 python -m src.main                        # :8080, UI at http://localhost:8080/
 ```
 
-Bumping the version (updates `src/VERSION`, prepends a `CHANGELOG.md`
-entry, commits, tags — one command, don't do these by hand separately):
-
-```bash
-./scripts/bump_version.sh 0.5.0 "what changed, in one line"
-```
-
-Building an upload package. Checks, then builds from the tag, then tests the
-extracted archive. It refuses rather than building something that will fail:
-
-```bash
-./scripts/package.sh            # or: ./scripts/package.sh v0.15.4
-```
-
-## Standing instructions
-
-- UK English, no em-dashes, lead with the point (Bluestaq house style).
-- Fact/inference/speculation discipline: never assert something as fact
-  that hasn't been verified against a live system. Mark an inference
-  explicitly (this file and `src/udl_client.py` do this already — keep it
-  up if you add new UDL behaviour).
-- Before claiming something works: run it. This project has a documented
-  history (see `HANDOFF.md`) of failures caused by asserting instead of
-  testing — a stale `.gitlab-ci.yml` fix that silently never applied, a
-  `requirements.txt`/`requirements-runtime.txt` split built backwards from
-  the actual platform contract. Both cost a full upload cycle to catch.
-  Verify against the real command, the real file, the real fresh install —
-  not the working directory's cached state.
+`requirements.txt` is what the platform's test stage installs;
+`requirements-runtime.txt` is what the image installs.
