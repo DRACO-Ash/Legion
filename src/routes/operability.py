@@ -26,6 +26,7 @@ from src.comparison import (
 )
 from src.dossier import build_dossier
 from src.graph import FAMILY_PREFIX, graph_from_store, neighbourhood
+from src.logging_standard import security_event
 from src.ranking_policy import policy as ranking_policy
 from src.store import FAMILY_ASSESSMENTS
 
@@ -254,4 +255,13 @@ def briefing(request: Request, ids: Ids = None):
         subjects.append(subject)
     if not subjects:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=WRONG_COUNT)
-    return build_briefing(build_comparison(subjects))
+    briefing_text = build_briefing(build_comparison(subjects))
+    # A briefing is a report that leaves the application, which the logging
+    # standard names as a security event of its own.
+    security_event(
+        "appstore.data.export",
+        "src.routes.operability.briefing",
+        "briefing exported",
+        extra={"legion.briefing.subjects": len(subjects)},
+    )
+    return briefing_text

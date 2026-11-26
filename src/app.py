@@ -24,7 +24,14 @@ from src.cache import TTLCache
 from src.candidate_systems import CANDIDATE_RECORDS
 from src.config import Settings, load_settings
 from src.family_elements import CACHE_TTL_SECONDS
-from src.logging_standard import HANDLER_NAME, JsonLineFormatter, RequestLogMiddleware
+from src.logging_standard import (
+    HANDLER_NAME,
+    SECURITY_LOGGER_NAME,
+    JsonLineFormatter,
+    RequestLogMiddleware,
+    install_exception_hooks,
+    security_event,
+)
 from src.pol_seed import SEED_SEGMENTS
 from src.routes import (
     claims,
@@ -50,6 +57,12 @@ from src.udl_client import UDLClient
 logger = logging.getLogger(APP_LOGGER_NAME)
 
 _STDOUT_HANDLER_NAME = HANDLER_NAME
+
+# The standard's names for the two security events this application handles
+# at start-up and shutdown, and the function that acts in each.
+APP_START = "appstore.app.start"
+APP_STOP = "appstore.app.stop"
+LIFESPAN_FUNCTION = "src.app.build_app.lifespan"
 
 
 def configure_logging(level: str | None = None) -> None:
@@ -97,6 +110,9 @@ def configure_logging(level: str | None = None) -> None:
     app_logger.setLevel(resolved)
     app_logger.propagate = True
     logging.getLogger(AUDIT_LOGGER_NAME).setLevel(logging.INFO)
+    # Security events are compliance records too: no LOG_LEVEL silences them.
+    logging.getLogger(SECURITY_LOGGER_NAME).setLevel(logging.INFO)
+    install_exception_hooks()
 
 
 # Two-tier rate limiting: a coarse global limit protects the process; the
@@ -143,8 +159,10 @@ def build_app(
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
+        security_event(APP_START, LIFESPAN_FUNCTION, "application started")
         yield
         await app.state.udl_client.aclose()
+        security_event(APP_STOP, LIFESPAN_FUNCTION, "application stopped")
 
     app = FastAPI(title="UDL Tactics App", version=__version__, lifespan=lifespan)
 

@@ -30488,10 +30488,16 @@ async function apiPost(path) {
   return await res.json();
 }
 async function apiPutJson(path, body) {
+  return apiSendJson("PUT", path, body);
+}
+async function apiPostJson(path, body) {
+  return apiSendJson("POST", path, body);
+}
+async function apiSendJson(method, path, body) {
   const token = await getAccessToken();
   const url2 = new URL(`${BASE_URL}${path}`);
   const res = await fetch(url2.toString(), {
-    method: "PUT",
+    method,
     headers: {
       Authorization: `Bearer ${token}`,
       "Content-Type": "application/json",
@@ -30843,6 +30849,19 @@ async function saveEnvVars(appId, envVars) {
 async function applyEnvVars(appId) {
   return apiPost(`/api/apps/${appId}/env-vars/apply`);
 }
+async function listBackups(appId) {
+  const [backups, latestRestore] = await Promise.all([
+    apiRequest(`/api/managed/${appId}/backups`),
+    apiRequest(`/api/managed/${appId}/backups/restores/latest`)
+  ]);
+  return { backups, latestRestore };
+}
+async function restoreBackup(appId, s3Key, confirmation) {
+  return apiPostJson(`/api/managed/${appId}/backups/restore`, {
+    s3Key,
+    confirmation
+  });
+}
 async function listDocs() {
   return apiRequest("/api/docs");
 }
@@ -31103,7 +31122,7 @@ async function apiUploadFiles(path, filePaths, fieldName, fields = {}, errorCont
   }
   return await res.json();
 }
-async function apiPostJson(path, body) {
+async function apiPostJson2(path, body) {
   const token = await getAccessToken();
   const res = await fetch(`${BASE_URL3}${path}`, {
     method: "POST",
@@ -31150,10 +31169,10 @@ async function uploadScreenshots(filePaths) {
   return await apiUploadFiles("/api/apps/upload/screenshots", filePaths, "files");
 }
 async function submitApp(input) {
-  return apiPostJson("/api/apps/submit", { ...input });
+  return apiPostJson2("/api/apps/submit", { ...input });
 }
 async function saveDraft(input) {
-  return apiPostJson("/api/apps/draft", { ...input });
+  return apiPostJson2("/api/apps/draft", { ...input });
 }
 
 // dist/download.js
@@ -31321,7 +31340,7 @@ var envVarEntrySchema = external_exports3.object({
 });
 var server = new McpServer({
   name: "appstore",
-  version: "0.14.2"
+  version: "0.14.3"
 });
 server.tool("list_my_apps", [
   "List apps you own or administer in the App Store.",
@@ -32096,6 +32115,61 @@ server.tool("download_source", [
 }, async ({ appId, destination }) => {
   try {
     const result = await downloadSource(appId, destination);
+    return {
+      content: [{ type: "text", text: JSON.stringify(result, null, 2) }]
+    };
+  } catch (error48) {
+    return {
+      content: [
+        {
+          type: "text",
+          text: `Error: ${error48 instanceof Error ? error48.message : String(error48)}`
+        }
+      ],
+      isError: true
+    };
+  }
+});
+server.tool("list_backups", [
+  "List an app's daily PostgreSQL backups, newest first, each graded for whether the running app can use its schema, and the app's latest restore. The same list the managed-app page's Database Backups panel shows.",
+  "**Returns:** {backups, latestRestore}. Each backup has {id, s3Key, sizeBytes, takenAt, compatibility, compatibilityReasons, restorable}. `compatibility` is COMPATIBLE (same schema, or only additions the app ignores), MIGRATES_FORWARD (an older schema the app's Flyway, Prisma or schema_migrations history brings forward when it starts), INCOMPATIBLE (lacks something the running app relies on; `restorable` is false) or UNKNOWN (no schema recorded, for example a backup from before schema checks). Each is compared with the newest backup, so a migration since then is not seen until the next one. `latestRestore` is {id, s3Key, status, message, createdAt, updatedAt, holdState} or null; status runs PENDING, STOPPING, READY, RUNNING, then COMPLETED or FAILED. `holdState` says what happened to the app: HELD while the restore keeps it stopped (and, after the outcome, until it is started again), RELEASED once it has been started again, ALREADY_STOPPED if it was stopped before the restore and stays stopped, NONE if the restore ended before stopping it.",
+  "**Use when:** The owner wants to see what can be restored, pick a backup for restore_backup, or follow a restore they started (call again every 10 to 30 seconds until latestRestore.status is COMPLETED or FAILED and holdState is not HELD).",
+  "**Don't use for:** Apps without the POSTGRESQL add-on, which have no backups. Taking a backup now: backups are daily and automatic.",
+  "**On error:** 404 means the appId is not in your access set \u2014 call whoami_for_app to verify; do not retry. 403 means you have a role but not OWNER. Auth errors mean call `login`."
+].join("\n"), {
+  appId: external_exports3.string().uuid().describe("The app UUID (from list_my_apps)")
+}, async ({ appId }) => {
+  try {
+    const result = await listBackups(appId);
+    return {
+      content: [{ type: "text", text: JSON.stringify(result, null, 2) }]
+    };
+  } catch (error48) {
+    return {
+      content: [
+        {
+          type: "text",
+          text: `Error: ${error48 instanceof Error ? error48.message : String(error48)}`
+        }
+      ],
+      isError: true
+    };
+  }
+});
+server.tool("restore_backup", [
+  "Restore an app's PostgreSQL database from one of its backups. DESTRUCTIVE: the live database is overwritten, and data written since the backup is lost. The same action as the Restore button on the managed-app page.",
+  "**Returns:** The queued restore: {id, s3Key, status: PENDING, ...}. The restore runs in the background: the App Store stops the app, restores the database, then starts the app again, whether or not the restore succeeds. An app that was already stopped stays stopped. Follow it with list_backups (`latestRestore`). Refused while another restore of the app is underway, including while the app is being started again after the last one.",
+  "**Use when:** The owner has explicitly asked to restore a specific backup, for example to recover from a bad migration or deleted data. Confirm the backup (its takenAt) and that the owner accepts losing newer data before calling.",
+  "**Don't use for:** Anything the owner did not ask for in so many words. A backup whose `restorable` is false in list_backups: its schema is incompatible with the running app and only a platform admin can restore it. Rolling back code: this restores data only.",
+  "**Confirmation:** `confirmation` must be the app name exactly (the `appName` from list_my_apps or get_app_details), as the page requires it to be typed.",
+  "**On error:** 409 means another restore of this app is still in progress, or the backup is incompatible; the message says which. 400 means the confirmation does not match the app name. 404 means the s3Key is not one of this app's backups, or the appId is not in your access set. 403 means you have a role but not OWNER. Do not retry a 409 or 400 unchanged."
+].join("\n"), {
+  appId: external_exports3.string().uuid().describe("The app UUID (from list_my_apps)"),
+  s3Key: external_exports3.string().min(1).describe("The backup to restore: its `s3Key` from list_backups"),
+  confirmation: external_exports3.string().min(1).describe("The app name, typed exactly, to confirm the overwrite")
+}, async ({ appId, s3Key, confirmation }) => {
+  try {
+    const result = await restoreBackup(appId, s3Key, confirmation);
     return {
       content: [{ type: "text", text: JSON.stringify(result, null, 2) }]
     };

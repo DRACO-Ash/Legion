@@ -20,6 +20,7 @@ import re
 import socket
 import subprocess
 import sys
+import threading
 import time
 import urllib.request
 
@@ -38,10 +39,11 @@ from src.logging_standard import (
 from src.logging_standard import (
     OUTCOME_ATTRIBUTE,
     REQUEST_ID_ATTRIBUTE,
-    REQUIRED_REQUEST_ATTRIBUTES,
+    ROUTE_ATTRIBUTE,
     STATUS_ATTRIBUTE,
     USER_AGENT_ATTRIBUTE,
     USER_EMAIL_ATTRIBUTE,
+    JsonLineFormatter,
     RequestLogMiddleware,
     outcome,
     server_logconfig,
@@ -157,7 +159,7 @@ def test_an_audit_line_is_written_once_with_its_fields(logging_state, monkeypatc
     lines = _lines(stream)
     assert len(lines) == 1
     assert lines[0]["body"] == "audit system_created"
-    assert lines[0]["attributes"]["audit.actor"] == "203.0.113.5"
+    assert lines[0]["attributes"]["legion.audit.actor"] == "203.0.113.5"
 
 
 def test_raising_log_level_never_silences_the_audit_trail(logging_state, monkeypatch):
@@ -214,8 +216,8 @@ def test_privileged_action_writes_one_parsable_audit_line(
     )
     audits = [r for r in _lines(stream) if r["body"].startswith("audit ")]
     assert len(audits) == 1
-    assert audits[0]["attributes"]["audit.event"] == "system_created"
-    assert audits[0]["attributes"]["audit.record_id"] == created["id"]
+    assert audits[0]["attributes"]["legion.audit.event"] == "system_created"
+    assert audits[0]["attributes"]["legion.audit.record_id"] == created["id"]
 
 
 def test_a_request_line_carries_the_request_id_and_never_the_query(
@@ -238,7 +240,7 @@ def test_a_request_line_carries_the_request_id_and_never_the_query(
     text = stream.getvalue()
     requests = [r for r in _lines(stream) if r["body"].startswith("GET ")]
     assert requests[-1]["body"] == "GET /api/systems 200"
-    assert requests[-1]["attributes"][REQUEST_ID_ATTRIBUTE] == "req-123"
+    assert requests[-1]["attributes"][REQUEST_ID_ATTRIBUTE] == ["req-123"]
     assert requests[-1]["attributes"][USER_EMAIL_ATTRIBUTE] == "analyst@example.org"
     for forbidden in ("secretquery", "Bearer", "shh"):
         assert forbidden not in text
@@ -260,7 +262,7 @@ def test_every_line_written_during_a_request_carries_its_id(
         )
     assert response.status_code == 200
     audits = [r for r in _lines(stream) if r["body"] == "audit system_updated"]
-    assert audits[0]["attributes"][REQUEST_ID_ATTRIBUTE] == "req-write"
+    assert audits[0]["attributes"][REQUEST_ID_ATTRIBUTE] == ["req-write"]
 
 
 def test_every_line_in_a_request_names_its_path_method_and_user_agent(
@@ -281,7 +283,7 @@ def test_every_line_in_a_request_names_its_path_method_and_user_agent(
     during = [
         r
         for r in _lines(stream)
-        if r["attributes"].get(REQUEST_ID_ATTRIBUTE) == "req-ua"
+        if r["attributes"].get(REQUEST_ID_ATTRIBUTE) == ["req-ua"]
     ]
     assert {r["body"] for r in during} >= {
         "audit system_updated",
@@ -312,20 +314,25 @@ def test_the_request_line_carries_status_and_outcome(
     assert ok[OUTCOME_ATTRIBUTE] == "success"
     assert missing[OUTCOME_ATTRIBUTE] == "failure"
     for attributes in (ok, missing):
-        assert set(REQUIRED_REQUEST_ATTRIBUTES) <= set(attributes)
+        assert {"url.path", "http.request.method", USER_AGENT_ATTRIBUTE} <= set(
+            attributes
+        )
+    assert ok[ROUTE_ATTRIBUTE] == "/healthz"
+    assert ROUTE_ATTRIBUTE not in missing or missing[ROUTE_ATTRIBUTE].startswith("/")
 
 
-def test_an_absent_user_agent_is_stated_as_empty_never_dropped(
-    logging_state, monkeypatch
-):
-    """The check names the key as required on every request line."""
+def test_an_absent_header_leaves_its_attribute_out(logging_state, monkeypatch):
+    """The standard: "Do not write null, an empty string or an empty array."
+    0.19.3 wrote an empty user agent, on a guess the standard contradicts."""
     stream = _capture(monkeypatch)
     app = Starlette(routes=[Route("/ok", _ok)])
     app.add_middleware(RequestLogMiddleware)
     with TestClient(app) as client:
         client.get("/ok", headers={"User-Agent": ""})
     request = next(r for r in _lines(stream) if r["body"] == "GET /ok 200")
-    assert request["attributes"][USER_AGENT_ATTRIBUTE] == ""
+    for absent in (USER_AGENT_ATTRIBUTE, REQUEST_ID_ATTRIBUTE, USER_EMAIL_ATTRIBUTE):
+        assert absent not in request["attributes"]
+    assert "" not in request["attributes"].values()
 
 
 def test_an_audit_line_states_its_outcome(logging_state, monkeypatch, tmp_path):
@@ -384,7 +391,7 @@ def test_an_unhandled_error_is_one_line_with_the_request_id(logging_state, monke
     errors = [r for r in _lines(stream) if r["severity_text"] == "ERROR"]
     assert len(errors) == 1
     assert errors[0]["attributes"]["exception.type"] == "RuntimeError"
-    assert errors[0]["attributes"][REQUEST_ID_ATTRIBUTE] == "req-err"
+    assert errors[0]["attributes"][REQUEST_ID_ATTRIBUTE] == ["req-err"]
 
 
 def test_gunicorn_routes_its_own_lines_to_the_standard_handler():
@@ -470,9 +477,248 @@ def test_real_gunicorn_writes_only_standard_lines_to_stdout(tmp_path):
     tagged = [
         line
         for line in lines
-        if line["attributes"].get(REQUEST_ID_ATTRIBUTE) == "gun-1"
+        if line["attributes"].get(REQUEST_ID_ATTRIBUTE) == ["gun-1"]
         and line["body"] == HEALTHZ_LINE
     ]
     assert tagged, "no request line carried the X-Request-Id"
     assert tagged[0]["attributes"][USER_AGENT_ATTRIBUTE] == "gun-probe/1.0"
     assert tagged[0]["attributes"][OUTCOME_ATTRIBUTE] == "success"
+    assert tagged[0]["attributes"][ROUTE_ATTRIBUTE] == "/healthz"
+
+
+# The rules below come from the App Store's "Logging requirements" page. Each
+# test names the rule it holds.
+
+KNOWN_KEYS = {
+    "http.request.header.x-request-id",
+    "http.request.method",
+    "http.request.method_original",
+    "http.response.status_code",
+    "http.route",
+    "url.path",
+    "user.email",
+    "user_agent.original",
+    "event.outcome",
+    "otel.event.name",
+    "code.function.name",
+    "exception.type",
+    "exception.message",
+    "exception.stacktrace",
+}
+
+
+def _record(message: str = "m", **extra) -> logging.LogRecord:
+    record = logging.LogRecord(
+        "udl_tactics_app", logging.INFO, __file__, 1, message, (), None
+    )
+    for key, value in extra.items():
+        setattr(record, key, value)
+    return record
+
+
+def _format(record: logging.LogRecord) -> dict:
+    return json.loads(JsonLineFormatter().format(record))
+
+
+def _app_lines(monkeypatch, tmp_path, call) -> list[dict]:
+    monkeypatch.setenv("STORAGE_MOUNT_PATH", str(tmp_path))
+    stream = _capture(monkeypatch)
+    app = build_app(settings=make_settings(), udl_client=FakeUDLClient())
+    with TestClient(app) as client:
+        call(client)
+    return _lines(stream)
+
+
+def test_the_request_line_names_the_route_that_matched(
+    logging_state, monkeypatch, tmp_path
+):
+    """`http.route` is the route template, never the path with its values."""
+
+    def call(client):
+        record_id = client.get("/api/systems").json()["systems"][0]["id"]
+        client.patch(f"/api/systems/{record_id}", json={"notes": "route"})
+
+    lines = _app_lines(monkeypatch, tmp_path, call)
+    patch = next(r for r in lines if r["body"].startswith("PATCH "))
+    route = patch["attributes"][ROUTE_ATTRIBUTE]
+    assert route.startswith("/api/systems/{")
+    assert route != patch["attributes"]["url.path"]
+
+
+def test_an_unknown_method_is_other_with_the_original_kept(logging_state, monkeypatch):
+    stream = _capture(monkeypatch)
+    app = Starlette(routes=[Route("/ok", _ok, methods=["PROPFIND"])])
+    app.add_middleware(RequestLogMiddleware)
+    with TestClient(app) as client:
+        client.request("PROPFIND", "/ok")
+    request = next(r for r in _lines(stream) if STATUS_ATTRIBUTE in r["attributes"])
+    assert request["attributes"]["http.request.method"] == "_OTHER"
+    assert request["attributes"]["http.request.method_original"] == "PROPFIND"
+
+
+async def _half_sent(scope, receive, send):
+    await send({"type": "http.response.start", "status": 200, "headers": []})
+    await send({"type": "http.response.body", "body": b"part", "more_body": True})
+    raise ConnectionResetError("client went away")
+
+
+def test_a_response_that_never_finished_has_outcome_unknown(logging_state, monkeypatch):
+    stream = _capture(monkeypatch)
+    # No `with`: that would run a lifespan this bare ASGI app does not speak.
+    TestClient(RequestLogMiddleware(_half_sent), raise_server_exceptions=False).get(
+        "/half"
+    )
+    request = next(r for r in _lines(stream) if STATUS_ATTRIBUTE in r["attributes"])
+    assert request["attributes"][OUTCOME_ATTRIBUTE] == "unknown"
+
+
+def test_long_values_are_cut_and_marked():
+    line = _format(
+        _record(
+            "b" * 2500,
+            attributes={"legion.note": "n" * 300, "legion.list": list("abcdef")},
+        )
+    )
+    attributes = line["attributes"]
+    assert line["body"] == "b" * 2000 + "[truncated]"
+    assert attributes["legion.note"] == "n" * 256 + "[truncated]"
+    assert attributes["legion.list"] == list("abcd")
+    assert attributes["appstore.log.truncated"] is True
+
+
+def test_a_short_line_is_not_marked_truncated():
+    assert "appstore.log.truncated" not in _format(_record("short"))["attributes"]
+
+
+def test_an_exception_is_bounded_and_fully_qualified():
+    try:
+        json.loads("{" + "x" * 1500)
+    except json.JSONDecodeError:
+        exc_info = sys.exc_info()
+    record = _record("failed")
+    record.exc_info = exc_info
+    record.exc_info = (exc_info[0], exc_info[0]("m" * 1500, "doc", 0), exc_info[2])
+    attributes = _format(record)["attributes"]
+    assert attributes["exception.type"] == "json.decoder.JSONDecodeError"
+    assert attributes["exception.message"].endswith("[truncated]")
+    assert len(attributes["exception.message"]) <= 1000 + len("[truncated]")
+
+
+def test_a_long_stacktrace_keeps_both_ends():
+    """Python puts the exception last, so the cut is in the middle."""
+    try:
+        raise ValueError("x" * 5000 + " the real cause")
+    except ValueError:
+        exc_info = sys.exc_info()
+    record = _record("failed")
+    record.exc_info = exc_info
+    trace = _format(record)["attributes"]["exception.stacktrace"]
+    assert "\n[truncated]\n" in trace
+    assert trace.startswith("Traceback")
+    assert trace.rstrip().endswith("the real cause")
+
+
+def test_an_uncaught_exception_is_a_fatal_contract_line(logging_state, monkeypatch):
+    monkeypatch.setattr(sys, "excepthook", sys.excepthook)
+    monkeypatch.setattr(threading, "excepthook", threading.excepthook)
+    stream = _capture(monkeypatch)
+    try:
+        raise RuntimeError("boom at the top")
+    except RuntimeError:
+        sys.excepthook(*sys.exc_info())
+    fatal = [r for r in _lines(stream) if r["severity_text"] == "FATAL"]
+    assert len(fatal) == 1
+    assert fatal[0]["attributes"]["exception.message"] == "boom at the top"
+
+
+def test_a_crashed_thread_is_an_error_line(logging_state, monkeypatch):
+    monkeypatch.setattr(sys, "excepthook", sys.excepthook)
+    monkeypatch.setattr(threading, "excepthook", threading.excepthook)
+    stream = _capture(monkeypatch)
+
+    def crash():
+        raise LookupError("thread failed")
+
+    thread = threading.Thread(target=crash)
+    thread.start()
+    thread.join()
+    errors = [r for r in _lines(stream) if r["severity_text"] == "ERROR"]
+    assert errors[0]["attributes"]["exception.type"] == "LookupError"
+
+
+def _events(lines: list[dict], name: str) -> list[dict]:
+    return [r for r in lines if r["attributes"].get("otel.event.name") == name]
+
+
+def test_start_and_stop_are_security_events_whatever_the_log_level(
+    logging_state, monkeypatch, tmp_path
+):
+    """LOG_LEVEL=WARNING must not silence a compliance record. Set in the
+    environment, because build_app configures logging again from it: a level
+    passed to configure_logging alone was reset to INFO and proved nothing."""
+    monkeypatch.setenv("STORAGE_MOUNT_PATH", str(tmp_path))
+    stream = _capture(monkeypatch)
+    monkeypatch.setenv("LOG_LEVEL", "WARNING")
+    app = build_app(settings=make_settings(), udl_client=FakeUDLClient())
+    with TestClient(app):
+        pass
+    lines = _lines(stream)
+    for name in ("appstore.app.start", "appstore.app.stop"):
+        event = _events(lines, name)
+        assert len(event) == 1, name
+        assert event[0]["attributes"]["event.outcome"] == "success"
+        assert event[0]["attributes"]["code.function.name"]
+        assert event[0]["severity_text"] == "INFO"
+
+
+def test_a_briefing_is_logged_as_an_export(logging_state, monkeypatch, tmp_path):
+    def call(client):
+        record_id = client.get("/api/systems").json()["systems"][0]["id"]
+        assert client.get(f"/api/briefing?ids={record_id}").status_code == 200
+
+    export = _events(_app_lines(monkeypatch, tmp_path, call), "appstore.data.export")
+    assert len(export) == 1
+    assert export[0]["attributes"]["legion.briefing.subjects"] == 1
+
+
+def test_every_key_is_a_standard_one_or_carries_the_app_prefix(
+    logging_state, monkeypatch, tmp_path
+):
+    """No key invented inside an OpenTelemetry namespace. 0.19.3 wrote
+    `audit.*`, `logger.name` and `http.server.request.duration_ms`."""
+
+    def call(client):
+        record_id = client.get("/api/systems").json()["systems"][0]["id"]
+        client.patch(
+            f"/api/systems/{record_id}",
+            json={"notes": "keys"},
+            headers={"X-Request-Id": "k", "X-Auth-Request-Email": "a@example.org"},
+        )
+        client.get(f"/api/briefing?ids={record_id}")
+
+    lines = _app_lines(monkeypatch, tmp_path, call)
+    keys = {key for line in lines for key in line["attributes"]}
+    assert any(key.startswith("legion.audit.") for key in keys), (
+        "no audit line was examined"
+    )
+    stray = sorted(
+        k
+        for k in keys
+        if k not in KNOWN_KEYS and not k.startswith(("legion.", "appstore."))
+    )
+    assert stray == []
+
+
+def test_ctrl_c_and_a_clean_thread_exit_are_not_crashes(
+    logging_state, monkeypatch, capsys
+):
+    """A stop and a thread that exits are not errors, so neither writes one."""
+    monkeypatch.setattr(sys, "excepthook", sys.excepthook)
+    monkeypatch.setattr(threading, "excepthook", threading.excepthook)
+    stream = _capture(monkeypatch)
+    sys.excepthook(KeyboardInterrupt, KeyboardInterrupt(), None)
+    thread = threading.Thread(target=sys.exit)
+    thread.start()
+    thread.join()
+    assert [r for r in _lines(stream) if r["severity_number"] >= 17] == []
+    assert "KeyboardInterrupt" in capsys.readouterr().err

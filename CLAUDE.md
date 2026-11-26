@@ -19,7 +19,9 @@ lives in `src/VERSION` only; everything else reads it.
 
 0.19.3 is deployed and healthy (26 November 2026, read from the platform):
 every stage passed, Logging and Container Scan included, and the deployed
-`/readyz` reports `os_patch_status` "patched". Still open:
+`/readyz` reports `os_patch_status` "patched". **Logging blocks a release
+from Monday 7 December 2026** (the App Store moved it from 1 December). Still
+open:
 
 ● The GitLab pipeline file itself is not visible from here (two-repository
   model, below).
@@ -139,8 +141,11 @@ reviewed (a person does that in SonarQube); and coverage measurable at all.
 
 `src/logging_standard.py` owns the format, `src/gunicorn_conf.py` routes the
 server's own loggers through it, and `tests/test_logging_config.py` ends by
-running real gunicorn. [0.19.1: what the 0.19.0 upload found] and
-[Status: shipped]
+running real gunicorn. **Every rule is FACT**, read from the App Store's
+"Logging requirements" page (`pipeline/logging`) on 27 November 2026; read it
+again before changing anything here. The automated check tests only a subset
+(two requests, no security events); the cyber review reads the rest.
+[0.19.1: what the 0.19.0 upload found] and [Status: shipped]
 
 ● One JSON object per line on stdout. One handler, on the root logger, named
   `udl-tactics-app-stdout`; never a second, and none on the audit logger.
@@ -150,11 +155,24 @@ running real gunicorn. [0.19.1: what the 0.19.0 upload found] and
 ● Root stays at WARNING (httpx logs query strings at INFO). The audit logger
   is pinned to INFO so `LOG_LEVEL` cannot silence a compliance record.
 ● `RequestLogMiddleware` is outermost and pure ASGI. Every line written
-  during a request carries `url.path`, `http.request.method` and
-  `user_agent.original` (empty when absent), plus the request id and user
-  when sent. The request line adds the status and `event.outcome`. Never a
-  query string.
-● The ISO timestamp and the 400 failure threshold are INFERENCE.
+  during a request carries `url.path` and `http.request.method` (`_OTHER`
+  plus `http.request.method_original` for an unknown method), and the request
+  id **as an array**, `user.email` and `user_agent.original` when sent. **A
+  missing header leaves its attribute out**, never an empty string: 0.19.3
+  guessed the opposite and was wrong. Never a query string, never
+  `client.address`.
+● The request line adds the status, `event.outcome` (`success` below 400,
+  `failure` from 400, `unknown` for a response that never finished) and
+  `http.route` when a route matched.
+● **Keys OpenTelemetry does not define start with `legion.`**; nothing is
+  invented inside `http.`, `user.` or another OpenTelemetry namespace.
+● Values are bounded (body 2,000, exception message 1,000, stack trace 4,000
+  keeping both ends, other strings 256, arrays 4), cuts marked `[truncated]`
+  with `appstore.log.truncated`. Uncaught errors are contract lines through
+  `sys.excepthook` and `threading.excepthook`.
+● **Security events**: `appstore.app.start` and `appstore.app.stop` from the
+  lifespan, `appstore.data.export` for a briefing. The security logger is
+  pinned to INFO like the audit logger.
 ● Assert on what a real handler writes, never through `caplog`.
 
 ## Decisions Ash has made: settled, do not relitigate
@@ -254,7 +272,8 @@ running real gunicorn. [0.19.1: what the 0.19.0 upload found] and
 
 ## Reading the platform directly: the App Store MCP server
 
-`.claude/mcp/appstore-mcp.mjs` (0.14.2, reviewed before first run) is
+`.claude/mcp/appstore-mcp.mjs` (0.14.3; each build's diff read before it is
+committed) is
 registered by `.mcp.json`, and both are export-ignored. It reads pipeline
 status, job logs, pod logs and the deployed app's endpoints.
 
@@ -263,8 +282,10 @@ status, job logs, pod logs and the deployed app's endpoints.
 ● `NODE_USE_ENV_PROXY=1` is load-bearing in a cloud session: Node's `fetch`
   ignores the proxy and could not resolve the deployed app's host.
 ● Self-update is off, so an update is a new commit of the bundle.
-● **Never call upload, submit, resubmit, retry, add-on or environment
-  variable tools without Ash's instruction each time.**
+● **Never call upload, submit, resubmit, retry, add-on, environment
+  variable or `restore_backup` tools without Ash's instruction each time.**
+  `restore_backup` (new in 0.14.3) overwrites a live PostgreSQL database;
+  Legion has none, so it should never be needed.
 
 ## Architecture
 
