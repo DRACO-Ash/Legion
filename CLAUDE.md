@@ -73,6 +73,40 @@ fixed in 0.19.3, a week before Logging blocks:
 
 Calibrated by six sabotages, all caught, including the real gunicorn run.
 
+**0.19.3 deployed, read from the platform itself on 26 November 2026**, through
+the App Store MCP server (see "Reading the platform directly" below), not from a
+screenshot. Pipeline 336953, 24 November: every stage event passed, Logging and
+Container Scan included, Semgrep 0 high, 0 medium, 0 low, and the platform lists
+no checks needing attention. The deployed `/readyz` answers `version` 0.19.3 and
+**`os_patch_status` "patched"**: the platform's builder reached a Debian mirror
+and the upgrade ran under `--error-on=any`, so the value cannot be a failed
+fetch reporting success. Container Scan passing on a patched image is
+consistent with Debian fixes clearing the 28 remaining rows; that is
+INFERENCE, since the scan's own findings were not read.
+
+## Reading the platform directly: the App Store MCP server
+
+`.claude/mcp/appstore-mcp.mjs` is the App Store's own MCP server (0.14.2,
+reviewed before it was first run), registered by `.mcp.json`, so pipeline
+status, job logs, pod logs and the deployed app's own endpoints are readable
+without a screenshot. Both paths are `export-ignore`d. Four things to know:
+
+● **Sign-in is the person's**, a Keycloak device code entered in their browser,
+  and a cloud container loses the token when it is reclaimed.
+● **`NODE_USE_ENV_PROXY=1` is load-bearing in a cloud session.** Node's built-in
+  `fetch` ignores `HTTPS_PROXY` and resolves DNS itself:
+  `appstore.bluestaq.com` resolved directly, `legion.appstore.bluestaq.com`
+  did not (ENOTFOUND), so every call to the deployed app failed while the
+  platform calls worked. With the flag both go through the proxy.
+● **Self-update is off** (`APPSTORE_MCP_NO_SELF_UPDATE=1`), because it would
+  rewrite a committed file. An update is a new commit of the bundle.
+● **The tools that change things are never called without Ash's instruction
+  each time**: upload, submit, resubmit, the three retries, the environment
+  variable and add-on writes. Submission stays with Ash.
+
+The environment allows three hosts for this: `appstore.bluestaq.com`,
+`keycloak.appstore.bluestaq.com` and `legion.appstore.bluestaq.com`.
+
 **Legion 0.4.6 passed all ten App Store stages and deployed on 28 August 2026.**
 Secret Detection, Dependencies, SAST, Dependency Scanning, Test, Code Quality,
 Dockerfile Lint, Container Build, Container Scan and Deploy are all green. The
@@ -163,11 +197,8 @@ keeps its version in step with `src/VERSION`; do not edit that line by hand.
 
 **Still not verified:**
 ● The GitLab pipeline itself, per the blocker above.
-● The `prep` stage's OS patch layer on the platform's builder. In this
-  sandbox the mirror is unreachable and, since 0.19.2, the image says so
-  ("unpatched"); before that, `apt-get update` exited 0 on total failure and
-  the image claimed "patched". Read `os_patch_status` from the deployed
-  `/readyz` to settle it.
+● ~~The `prep` stage's OS patch layer on the platform's builder.~~ **Settled
+  26 November 2026: the deployed 0.19.3 reports `os_patch_status` "patched".**
 
 ## The Code Quality gate has five conditions, not one
 

@@ -315,6 +315,11 @@ shows Container Scan **Passed**. Nothing in this repository changed between
 the two readings, so the difference is on the platform side, and its cause is
 not known here. The expected 28 rows remain unconfirmed either way.
 
+**Settled for 0.19.3, read from the platform on 26 November 2026.** Pipeline
+336953 passed Container Scan, and the deployed `/readyz` reports
+`os_patch_status` "patched", so the platform's build applied the Debian
+updates. The scan's findings themselves were not read.
+
 ## Code Quality, `code-quality-verify`, 9 September 2026
 
 **Container Scan passes on 0.8.2.** So do Secret Detection, Dependencies, SAST,

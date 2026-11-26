@@ -2,10 +2,13 @@
   "mcpServers": {
     "appstore": {
       "command": "node",
-      "args": ["${CLAUDE_PROJECT_DIR:-.}/.claude/mcp/appstore-mcp.mjs"],
+      "args": [
+        "${CLAUDE_PROJECT_DIR:-.}/.claude/mcp/appstore-mcp.mjs"
+      ],
       "env": {
         "APPSTORE_URL": "https://appstore.bluestaq.com",
-        "APPSTORE_MCP_NO_SELF_UPDATE": "1"
+        "APPSTORE_MCP_NO_SELF_UPDATE": "1",
+        "NODE_USE_ENV_PROXY": "1"
       }
     }
   }
