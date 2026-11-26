@@ -5,6 +5,11 @@ All notable changes to this project are documented here. Format follows
 [Semantic Versioning](https://semver.org/). Pre-1.0: minor bumps may include
 breaking changes, since nothing has shipped to the App Store yet.
 
+## [0.19.4] - 2026-11-26
+
+Logging meets the App Store standard as written: request id array, absent headers left out, http.route, legion.* keys, value limits, security events
+
+
 ## [0.19.3] - 2026-11-23
 
 Logging: every request line carries path, method and user agent, and the request line carries event.outcome
