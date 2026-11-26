@@ -1,0 +1,280 @@
+{
+ "config": {
+  "addons": [
+   "FILE_STORAGE:{\"STORAGE_MOUNT_PATH\": \"/data\"}"
+  ],
+  "blocking_jobs": [
+   "container-registry-push",
+   "cosign-sign",
+   "deploy-deployment"
+  ],
+  "deploy_stages": [
+   "deploy"
+  ],
+  "jobs": [
+   "code-quality-baseline",
+   "code-quality-publish",
+   "container-registry-push",
+   "container-scan-baseline",
+   "container-scan-baseline-report",
+   "cosign-sign",
+   "dast-baseline",
+   "dependency-runtime-scope",
+   "dependency-scan-python-dependency_scanning",
+   "deploy-deployment",
+   "dockerfile-lint",
+   "image-malware-scan-baseline",
+   "image-malware-scan-baseline-gate",
+   "image-sbom",
+   "pip-install",
+   "python-test",
+   "secret_detection",
+   "security-scan-sast"
+  ],
+  "mcp_published": "28951b3ee2d53e00b048e4a31638055cd489ad5ddba1202e6301d9be5a46cf68",
+  "mcp_vendored": "54e7a772c52ade8a6cd37973e1b66bf7f7d6953d524154d8b841366b049da778",
+  "service": {
+   "containerPort": 8080,
+   "healthCheckPath": "/healthz",
+   "resourceCpu": "2000m",
+   "resourceMemory": "2Gi"
+  },
+  "stages": [
+   "dependencies",
+   "sast",
+   "sast_check",
+   "dependency_scanning",
+   "test",
+   "code_quality",
+   "dockerfile_lint",
+   "container_build",
+   "dast",
+   "logging",
+   "container_scan"
+  ]
+ },
+ "docs": {
+  "addons/clamav": {
+   "chars": 5055,
+   "section": "Add-on services",
+   "sha": "2ae4ebfec6f4f01b9b8d40e19ff6de5cf589e2caca6da4910290de8f5cd1389a",
+   "title": "ClamAV"
+  },
+  "addons/file-storage": {
+   "chars": 4986,
+   "section": "Add-on services",
+   "sha": "93d8595800924275f41793db04747a299515be8b6f3eebbe124bd4d0c91c3654",
+   "title": "File storage (S3)"
+  },
+  "addons/odysseus": {
+   "chars": 3892,
+   "section": "Add-on services",
+   "sha": "71759058783bb51e4a10f17df7d0387acd3667f4f373357cf568dc3db2a4aedb",
+   "title": "Odysseus (platform SSO)"
+  },
+  "addons/overview": {
+   "chars": 6670,
+   "section": "Add-on services",
+   "sha": "4bf99a469fc60d0b833d09769ae708ef6557a29f8aae9fae7a3a5a8a24b1f049",
+   "title": "Overview"
+  },
+  "addons/postgresql": {
+   "chars": 7126,
+   "section": "Add-on services",
+   "sha": "e78b2d88f1aa91cb1812382e5ad78d4ad61a1cb7f1bfead694a1435e2f2594da",
+   "title": "PostgreSQL"
+  },
+  "addons/redis": {
+   "chars": 4382,
+   "section": "Add-on services",
+   "sha": "156d1fd7251825f609bf16769a3cc5e14a84fc1605b4670fd55852b7c83544cf",
+   "title": "Redis"
+  },
+  "api/calling": {
+   "chars": 5113,
+   "section": "Your app's API",
+   "sha": "07fb7bf76e119a7c17ab3acd32de1515df1b69e1ed2af721ce2d934de0ce62e2",
+   "title": "Calling an app's API"
+  },
+  "api/publishing": {
+   "chars": 11629,
+   "section": "Your app's API",
+   "sha": "2ba9387b801da384a14f95456ce46a2e73f0d821841f53b76c844e728a008f79",
+   "title": "Publishing your API"
+  },
+  "auth/headers": {
+   "chars": 3894,
+   "section": "Auth",
+   "sha": "8540837b72939f86b1262c1585545188300c31758a95eff4d327d178fff7cd1f",
+   "title": "Identity headers"
+  },
+  "auth/roles": {
+   "chars": 3823,
+   "section": "Auth",
+   "sha": "a21b1d41fd613d675cf93fcf898bdb585fdc9591de28396e3f403aabab9d72eb",
+   "title": "Roles"
+  },
+  "connections/overview": {
+   "chars": 1586,
+   "section": "App connections",
+   "sha": "e5458947cb33e90b35b67a030cb8aa810e64f76b03e64ce1cdd1f4508ac09052",
+   "title": "Overview"
+  },
+  "faq": {
+   "chars": 5929,
+   "section": "Reference",
+   "sha": "27fe0257d473287fd4f4c5158fbdd6cb41a996ef7471b5d7d440485f2b7df39e",
+   "title": "FAQ"
+  },
+  "getting-started": {
+   "chars": 5245,
+   "section": "Get started",
+   "sha": "eda7fb0dfc8cf10555b8b5cf6016d0eda763f4ec3cbf1e8aab114d4bc89a79e3",
+   "title": "Overview"
+  },
+  "glossary": {
+   "chars": 4406,
+   "section": "Reference",
+   "sha": "7480c4254ed31774b167fccf6d8f66bc4aaf3a9ea4e67138d227137e021fa47e",
+   "title": "Glossary"
+  },
+  "managing/backups": {
+   "chars": 4364,
+   "section": "Managing a deployed app",
+   "sha": "e03154d8783553f3870321db69c85d3fe28e9562e0911ef41ebdc796aaaec9aa",
+   "title": "Database backups"
+  },
+  "managing/env-vars": {
+   "chars": 5067,
+   "section": "Managing a deployed app",
+   "sha": "0c7d2622e1cee5bda56f8600c7a1155244cb53dde01de476ccd1e26cc3fef18d",
+   "title": "Environment variables"
+  },
+  "managing/logs-and-pods": {
+   "chars": 4822,
+   "section": "Managing a deployed app",
+   "sha": "b7bfac5df444a32b2b909434610b1a3a0b59c6ede4916b0d7ea4d3bc20a2eaab",
+   "title": "Logs and pods"
+  },
+  "managing/resubmit": {
+   "chars": 4568,
+   "section": "Managing a deployed app",
+   "sha": "2d848651c0a217f7569fa5147322f5e07d436c0d77372280646f53c16577a239",
+   "title": "Resubmit"
+  },
+  "managing/retry": {
+   "chars": 5264,
+   "section": "Managing a deployed app",
+   "sha": "a75021578a6e356f8dced0e76e0c11ff6efe56c5cfff7cdb92f74f6b12608610",
+   "title": "Retry"
+  },
+  "mcp/authentication": {
+   "chars": 3031,
+   "section": "MCP server",
+   "sha": "2b3237db884f61a54561d72fc8fc2607bd0702bc9e1225f4a8bfece4856f271f",
+   "title": "Authentication"
+  },
+  "mcp/install": {
+   "chars": 1877,
+   "section": "MCP server",
+   "sha": "128bb812842b3790cb5578770841ceb578e62f8fac851b5fb2b70bf8df0799b6",
+   "title": "Install"
+  },
+  "mcp/tools-reference": {
+   "chars": 16444,
+   "section": "MCP server",
+   "sha": "de74bb892b940be1091d8aefd61a6c0c89a022005e5c12c45342f4fda8c81edf",
+   "title": "Tools reference"
+  },
+  "pipeline/code-quality": {
+   "chars": 4916,
+   "section": "CI/CD pipeline",
+   "sha": "b9d2e4eb64f199efeeb74e39651cf3468220d8d4265d6d2f5a266a0d5becd2d6",
+   "title": "Code quality gate"
+  },
+  "pipeline/dast": {
+   "chars": 9421,
+   "section": "CI/CD pipeline",
+   "sha": "53b4d27d90b5824f89de9ff5a6b38cb6c3ef2a3cad1c59fafb72aa7c640e29ae",
+   "title": "Security scan (DAST)"
+  },
+  "pipeline/deploy": {
+   "chars": 1044,
+   "section": "CI/CD pipeline",
+   "sha": "48bfd06a65088ba3d8a4c3aa91b1f878e9f35ea813a1cac64f5d91dd37f141ae",
+   "title": "Deploy"
+  },
+  "pipeline/logging": {
+   "chars": 66912,
+   "section": "CI/CD pipeline",
+   "sha": "bd87262206fba8e0e73935da22342bdc00f41d1c252f4ec14bb64583823d9e69",
+   "title": "Logging requirements"
+  },
+  "pipeline/multi-language": {
+   "chars": 10075,
+   "section": "CI/CD pipeline",
+   "sha": "65b8e7993d3d5ba837ce51d77aba94dfffc83e0aa1da87d058f6c6be133f1805",
+   "title": "More than one language"
+  },
+  "pipeline/overview": {
+   "chars": 6892,
+   "section": "CI/CD pipeline",
+   "sha": "2004e7876acb12826a0e92eeb7e67f5a79628967feda27055be6f2a8e5632475",
+   "title": "Overview"
+  },
+  "pipeline/templates": {
+   "chars": 9555,
+   "section": "CI/CD pipeline",
+   "sha": "848ab83c82a16118a0564872d7cd28685774dca024933bca5e0c1bdd210c73a6",
+   "title": "Templates"
+  },
+  "pipeline/tests": {
+   "chars": 5309,
+   "section": "CI/CD pipeline",
+   "sha": "e901bbeab94943248ba5c85159b467cbfed10f8b9d8c1028f60439d9e4debd61",
+   "title": "Tests"
+  },
+  "submitting/overview": {
+   "chars": 6348,
+   "section": "Submitting an app",
+   "sha": "fe053b95e349857a2587f86c41be96a62883c34b57ce7ac2b2eae2b76fa59dce",
+   "title": "Overview"
+  },
+  "submitting/package-requirements": {
+   "chars": 2537,
+   "section": "Submitting an app",
+   "sha": "1b3ec0fc1da156c1dc40a4d8b1a3b7376f76087cd4418497784ffa3c36959ce0",
+   "title": "Package requirements"
+  },
+  "submitting/upload-wizard": {
+   "chars": 12142,
+   "section": "Submitting an app",
+   "sha": "c630ace04f98dcbaa8e1458dd5290455c6bee66f2ff71faa30e1af950a5ee2d0",
+   "title": "Upload wizard"
+  },
+  "troubleshooting/auth-issues": {
+   "chars": 3502,
+   "section": "Troubleshooting",
+   "sha": "4fcfc7c1466c46d61b923080fe55644fa1bf4d9b7d5bf4a20ea4d9351074bea7",
+   "title": "Auth issues"
+  },
+  "troubleshooting/deploy-failures": {
+   "chars": 6696,
+   "section": "Troubleshooting",
+   "sha": "21bb2c466b2d73c405ebd73a26c1ccf17699c802c4bd9bfe8ba058e6f0d29dcc",
+   "title": "Deploy failures"
+  },
+  "troubleshooting/pipeline-failures": {
+   "chars": 12663,
+   "section": "Troubleshooting",
+   "sha": "d60a37c68d20e5fcf5ea77213f58c5034ec03ef09471a99124596bf4b0e7cd12",
+   "title": "Pipeline failures"
+  },
+  "troubleshooting/pitfalls": {
+   "chars": 7158,
+   "section": "Troubleshooting",
+   "sha": "28bc5c49a621f093263256bc392b4998ec3b9ac8bd9830031ed622715909b77f",
+   "title": "Common pitfalls"
+  }
+ }
+}
