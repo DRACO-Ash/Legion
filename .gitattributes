@@ -7,10 +7,12 @@
 # package is inert at best and misleading to the next person at worst. The copy
 # stays in this repository for reference and history.
 #
-# .claude/ and .ruff.toml: tooling for this repository, not part of the
-# deployable artifact.
+# .claude/, .mcp.json and .ruff.toml: tooling for this repository, not part
+# of the deployable artifact. .claude/mcp/ holds the App Store MCP bundle,
+# 1.2 MB of vendored JavaScript the SonarQube analysis must never see.
 .gitlab-ci.yml export-ignore
 .claude/ export-ignore
+.mcp.json export-ignore
 .ruff.toml export-ignore
 
 # reference/: the CelesTrak SATCAT snapshot, 9 MB. Held here as the reference
